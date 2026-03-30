@@ -1,130 +1,130 @@
-# PRD — Renkei : Package Manager pour Workflows Agentiques
+# PRD — Renkei: Package Manager for Agentic Workflows
 
 ## Problem Statement
 
-Les développeurs et équipes qui utilisent des outils IA (Claude Code, Cursor, Codex, etc.) produisent des workflows agentiques complexes : skills, hooks, agents spécialisés, configurations MCP, scripts. Ces artefacts sont aujourd'hui :
+Developers and teams using AI tools (Claude Code, Cursor, Codex, etc.) produce complex agentic workflows: skills, hooks, specialized agents, MCP configurations, scripts. These artifacts are currently:
 
-- **non versionnés** : pas de suivi des versions, impossible de savoir quelle version tourne en production ;
-- **non partageables** simplement : copier-coller manuel entre machines, Slack, email, drive ;
-- **non portables** : chaque développeur reconfigure à la main pour chaque outil IA ;
-- **invisibles** : pas de liste des workflows installés, pas de diagnostic de l'état de santé ;
-- **fragiles** : une modification locale d'un skill rompt silencieusement le workflow.
+- **unversioned**: no version tracking, impossible to know which version is running in production;
+- **not easily shareable**: manual copy-paste between machines, Slack, email, drive;
+- **not portable**: each developer manually reconfigures for each AI tool;
+- **invisible**: no list of installed workflows, no health diagnostics;
+- **fragile**: a local modification to a skill silently breaks the workflow.
 
-Il n'existe pas de primitive standard pour distribuer un "workflow complet" (skill + hook + agent + config MCP) comme on distribue un package npm ou un plugin homebrew.
+There is no standard primitive for distributing a "complete workflow" (skill + hook + agent + MCP config) the way you distribute an npm package or a homebrew plugin.
 
 ---
 
 ## Solution
 
-**Renkei** est un package manager CLI (`rk`) écrit en Rust qui permet d'installer, versionner et partager des workflows agentiques. Un workflow est un **package** : un dossier avec un manifeste `renkei.json` décrivant ses artefacts. La CLI déploie chaque artefact au bon emplacement selon le backend détecté (Claude Code, Cursor…), sans configuration manuelle.
+**Renkei** is a CLI package manager (`rk`) written in Rust that lets you install, version, and share agentic workflows. A workflow is a **package**: a folder with a `renkei.json` manifest describing its artifacts. The CLI deploys each artifact to the correct location based on the detected backend (Claude Code, Cursor...), with no manual configuration.
 
 ```
 rk install git@github.com:meryll/mr-review
-rk install ./mon-workflow/
+rk install ./my-workflow/
 rk list
 rk doctor
 ```
 
-Renkei est **agnostique au contenu** des packages — il ne les exécute pas, il les distribue.
+Renkei is **content-agnostic** — it doesn't execute packages, it distributes them.
 
 ---
 
 ## User Stories
 
-### Installation et déploiement
+### Installation and deployment
 
-1. En tant que développeur, je veux installer un workflow depuis un repo Git (SSH) afin de l'utiliser immédiatement dans mon outil IA sans configuration manuelle.
-2. En tant que développeur, je veux installer un workflow depuis un repo Git (HTTPS) afin de pouvoir le faire depuis un environnement sans clé SSH.
-3. En tant que développeur, je veux installer une version spécifique d'un workflow via un tag Git (`--tag v1.2.0`) afin de garantir la reproductibilité de mon environnement.
-4. En tant que développeur, je veux installer un workflow depuis un dossier local (chemin relatif ou absolu) afin de tester un package en cours de développement sans le publier.
-5. En tant que développeur, je veux que `rk install` valide le manifeste `renkei.json` avant tout déploiement afin d'échouer tôt sur une configuration invalide.
-6. En tant que développeur, je veux que `rk install` détecte automatiquement le backend installé (Claude Code, Cursor) afin de ne déployer que là où c'est pertinent.
-7. En tant que développeur, je veux être prévenu si le package ne supporte pas mon backend avant l'installation afin d'éviter un déploiement partiel ou incohérent.
-8. En tant que développeur, je veux pouvoir forcer l'installation d'un package incompatible avec mon backend via `--force` afin de l'installer malgré l'incompatibilité déclarée, en connaissance de cause.
-9. En tant que développeur, je veux que les skills soient déployés sous `~/.claude/skills/renkei-<name>/` afin qu'ils soient isolés des skills natifs et facilement identifiables.
-10. En tant que développeur, je veux que les hooks soient mergés dans `~/.claude/settings.json` afin qu'ils s'activent automatiquement dans Claude Code.
-11. En tant que développeur, je veux que les agents soient déployés dans `~/.claude/agents/` afin d'être disponibles directement depuis Claude Code.
-12. En tant que développeur, je veux que les configurations MCP déclarées dans `renkei.json` soient enregistrées dans `~/.claude.json` afin d'activer les serveurs MCP requis automatiquement.
-13. En tant que développeur, je veux voir la liste des variables d'environnement requises manquantes après installation afin de les configurer sans chercher dans la documentation.
-14. En tant que développeur, je veux pouvoir relancer `rk install` sur un package déjà installé afin de mettre à jour les artefacts déployés vers la nouvelle version.
+1. As a developer, I want to install a workflow from a Git repo (SSH) so I can use it immediately in my AI tool without manual configuration.
+2. As a developer, I want to install a workflow from a Git repo (HTTPS) so I can do it from an environment without SSH keys.
+3. As a developer, I want to install a specific version of a workflow via a Git tag (`--tag v1.2.0`) to guarantee reproducibility of my environment.
+4. As a developer, I want to install a workflow from a local folder (relative or absolute path) to test a package in development without publishing it.
+5. As a developer, I want `rk install` to validate the `renkei.json` manifest before any deployment so it fails early on invalid configuration.
+6. As a developer, I want `rk install` to automatically detect the installed backend (Claude Code, Cursor) so it only deploys where relevant.
+7. As a developer, I want to be warned if the package doesn't support my backend before installation to avoid partial or inconsistent deployment.
+8. As a developer, I want to force-install an incompatible package via `--force` to install it despite the declared incompatibility, at my own risk.
+9. As a developer, I want skills to be deployed under `~/.claude/skills/renkei-<name>/` so they are isolated from native skills and easily identifiable.
+10. As a developer, I want hooks to be merged into `~/.claude/settings.json` so they activate automatically in Claude Code.
+11. As a developer, I want agents to be deployed in `~/.claude/agents/` so they are available directly from Claude Code.
+12. As a developer, I want MCP configurations declared in `renkei.json` to be registered in `~/.claude.json` to automatically activate the required MCP servers.
+13. As a developer, I want to see the list of missing required environment variables after installation so I can configure them without digging through documentation.
+14. As a developer, I want to re-run `rk install` on an already-installed package to update the deployed artifacts to the new version.
 
-### Gestion des conflits
+### Conflict management
 
-15. En tant que développeur, je veux être alerté si deux packages déploient un skill avec le même nom afin d'éviter des écrasements silencieux.
-16. En tant que développeur, je veux pouvoir renommer un skill en conflit via un prompt interactif afin de conserver les deux packages côte à côte.
-17. En tant que développeur, je veux que le renommage mette à jour le `name` dans le frontmatter du skill afin que la référence reste cohérente.
-18. En tant que développeur, je veux que le mapping nom-original → nom-déployé soit persisté dans le cache local afin que les commandes `doctor` et `list` restent exactes après renommage.
+15. As a developer, I want to be alerted if two packages deploy a skill with the same name to avoid silent overwrites.
+16. As a developer, I want to rename a conflicting skill via an interactive prompt to keep both packages side by side.
+17. As a developer, I want the rename to update the `name` field in the skill's frontmatter so the reference stays consistent.
+18. As a developer, I want the original-name → deployed-name mapping to be persisted in the local cache so `doctor` and `list` commands remain accurate after renaming.
 
-### Listing et visibilité
+### Listing and visibility
 
-19. En tant que développeur, je veux lister tous les packages installés avec leurs versions et sources (`rk list`) afin d'avoir une vue d'ensemble de mon environnement.
-20. En tant que développeur, je veux distinguer les packages installés depuis Git de ceux installés depuis un chemin local dans `rk list` afin de savoir lesquels peuvent être mis à jour automatiquement.
+19. As a developer, I want to list all installed packages with their versions and sources (`rk list`) to get an overview of my environment.
+20. As a developer, I want to distinguish Git-installed packages from locally-installed ones in `rk list` to know which can be updated automatically.
 
-### Diagnostic
+### Diagnostics
 
-21. En tant que développeur, je veux diagnostiquer l'état de mes packages installés (`rk doctor`) afin de détecter les problèmes sans inspecter les fichiers manuellement.
-22. En tant que développeur, je veux que `rk doctor` signale les skills modifiés localement afin de savoir lesquels ont divergé de l'original.
-23. En tant que développeur, je veux que `rk doctor` liste les variables d'environnement manquantes par package afin de corriger rapidement les gaps de configuration.
-24. En tant que développeur, je veux que `rk doctor` vérifie la présence des backends (Claude Code, Cursor) afin de confirmer que les artefacts ont bien un runtime.
-25. En tant que développeur, je veux un code de sortie non-nul quand `rk doctor` détecte des problèmes afin de pouvoir l'intégrer dans des scripts CI.
+21. As a developer, I want to diagnose the state of my installed packages (`rk doctor`) to detect problems without manually inspecting files.
+22. As a developer, I want `rk doctor` to flag locally modified skills so I know which ones have diverged from the original.
+23. As a developer, I want `rk doctor` to list missing required environment variables per package so I can quickly fix configuration gaps.
+24. As a developer, I want `rk doctor` to check for the presence of backends (Claude Code, Cursor) to confirm that artifacts have a runtime.
+25. As a developer, I want a non-zero exit code when `rk doctor` detects problems so I can integrate it into CI scripts.
 
-### Création de packages
+### Package creation
 
-26. En tant que créateur de workflow, je veux valider que tous les fichiers déclarés dans `renkei.json` existent (`rk package`) afin d'éviter de distribuer un package cassé.
-27. En tant que créateur de workflow, je veux générer une archive `<name>-<version>.tar.gz` de mon package afin de le distribuer facilement.
-28. En tant que créateur de workflow, je veux bumper automatiquement la version (patch / minor / major) via `--bump` afin de suivre semver sans éditer manuellement le manifeste.
-29. En tant que créateur de workflow, je veux voir un résumé des fichiers inclus et la taille de l'archive après `rk package` afin de vérifier le contenu avant distribution.
+26. As a package creator, I want to validate that all files declared in `renkei.json` exist (`rk package`) to avoid distributing a broken package.
+27. As a package creator, I want to generate a `<name>-<version>.tar.gz` archive of my package for easy distribution.
+28. As a package creator, I want to auto-bump the version (patch / minor / major) via `--bump` to follow semver without manually editing the manifest.
+29. As a package creator, I want to see a summary of included files and archive size after `rk package` to verify the contents before distribution.
 
 ### Lockfile
 
-30. En tant que développeur, je veux qu'un lockfile `rk.lock` soit généré automatiquement à la racine du projet après chaque installation afin de figer les versions exactes installées dans ce contexte projet.
-31. En tant que membre d'une équipe, je veux commiter `rk.lock` dans le repo projet afin que tous le reste de l'équipe travaillent avec les mêmes versions de workflows.
-32. En tant que nouveau membre d'une équipe, je veux cloner le projet et lancer `rk install` (sans arguments) afin d'obtenir immédiatement les mêmes workflows que le reste de l'équipe, sans aucune configuration supplémentaire.
-33. En tant que développeur, je veux que `rk install` sans arguments lise `rk.lock` et installe les versions exactes déclarées afin de reproduire l'environnement à l'identique.
-34. En tant que développeur, je veux que le lockfile inclue l'intégrité (hash SHA-256) de chaque package afin de détecter toute corruption ou altération.
+30. As a developer, I want a `rk.lock` lockfile to be automatically generated at the project root after each installation to pin the exact installed versions in this project context.
+31. As a team member, I want to commit `rk.lock` to the project repo so the rest of the team works with the same workflow versions.
+32. As a new team member, I want to clone the project and run `rk install` (no arguments) to immediately get the same workflows as the rest of the team, with no additional configuration.
+33. As a developer, I want `rk install` without arguments to read `rk.lock` and install the exact declared versions to reproduce the environment identically.
+34. As a developer, I want the lockfile to include integrity (SHA-256 hash) of each package to detect any corruption or tampering.
 
-### Phase 1 — Livraison et migration
+### Phase 1 — Delivery and migration
 
-35. En tant que mainteneur du projet, je veux que la CLI soit compilée en binaires natifs pour Linux / macOS / Windows et publiée automatiquement via GitHub Actions à chaque release afin que les utilisateurs puissent l'installer sans dépendance.
-36. En tant que créateur de workflow, je veux migrer les workflows existants (renkei-old) en packages Renkei valides afin de valider le format `renkei.json` sur des cas réels dès la v1.
+35. As a project maintainer, I want the CLI to be compiled into native binaries for Linux / macOS / Windows and automatically published via GitHub Actions on each release so users can install it without dependencies.
+36. As a package creator, I want to migrate existing workflows (renkei-old) into valid Renkei packages to validate the `renkei.json` format on real cases from v1.
 
-### Phase 2 — Registry et commandes avancées
+### Phase 2 — Registry and advanced commands
 
-37. En tant que créateur de workflow, je veux publier mon package dans un registry centralisé (`rk publish`) afin de le rendre découvrable par d'autres équipes.
-38. En tant que développeur, je veux rechercher des packages dans le registry (`rk search <query>`) afin de trouver des workflows existants sans parcourir des repos manuellement.
-39. En tant que développeur, je veux installer un package par son nom scopé (`rk install @scope/name`) afin de ne pas avoir à connaître l'URL Git.
-40. En tant que développeur, je veux mettre à jour un package vers sa dernière version compatible (`rk update`) afin de bénéficier des améliorations sans reinstaller manuellement.
-41. En tant que développeur, je veux désinstaller un package et nettoyer tous ses artefacts déployés (`rk uninstall`) afin de ne pas laisser de résidus.
-42. En tant que développeur, je veux obtenir les détails d'un package (description, auteur, versions, dépendances) via `rk info` afin de l'évaluer avant installation.
-43. En tant que créateur de workflow, je veux scaffolder interactivement un nouveau package (`rk init`) afin de démarrer avec une structure valide sans l'écrire de zéro.
-44. En tant que développeur, je veux voir le diff entre les artefacts déployés et l'archive originale (`rk diff`) afin d'auditer mes modifications locales.
-45. En tant que développeur, je veux restaurer les artefacts d'un package depuis l'archive originale (`rk reset`) afin d'annuler mes modifications locales.
-46. En tant que créateur de workflow, je veux forker un package existant sous mon scope (`rk fork --scope <s>`) afin de créer une variante indépendante sans modifier l'original.
-47. En tant qu'utilisateur, je veux m'authentifier auprès du registry (`rk login` / `rk logout`) afin de publier sous mon scope.
-48. En tant que développeur, je veux que les packages Cursor soient déployés dans `.cursor/skills/<name>/` afin d'utiliser mes workflows dans Cursor sans configuration.
-49. En tant que créateur de workflow, je veux déclarer un scope organisationnel (`@acme-corp/`) afin d'éviter les collisions de noms entre équipes.
+37. As a package creator, I want to publish my package to a centralized registry (`rk publish`) to make it discoverable by other teams.
+38. As a developer, I want to search for packages in the registry (`rk search <query>`) to find existing workflows without manually browsing repos.
+39. As a developer, I want to install a package by its scoped name (`rk install @scope/name`) without needing to know the Git URL.
+40. As a developer, I want to update a package to its latest compatible version (`rk update`) to benefit from improvements without reinstalling manually.
+41. As a developer, I want to uninstall a package and clean up all its deployed artifacts (`rk uninstall`) to leave no residuals.
+42. As a developer, I want to get package details (description, author, versions, dependencies) via `rk info` to evaluate it before installation.
+43. As a package creator, I want to interactively scaffold a new package (`rk init`) to start with a valid structure without writing it from scratch.
+44. As a developer, I want to see the diff between deployed artifacts and the original archive (`rk diff`) to audit my local modifications.
+45. As a developer, I want to restore a package's artifacts from the original archive (`rk reset`) to undo my local modifications.
+46. As a package creator, I want to fork an existing package under my scope (`rk fork --scope <s>`) to create an independent variant without modifying the original.
+47. As a user, I want to authenticate with the registry (`rk login` / `rk logout`) to publish under my scope.
+48. As a developer, I want Cursor packages to be deployed in `.cursor/skills/<name>/` to use my workflows in Cursor without configuration.
+49. As a package creator, I want to declare an organizational scope (`@acme-corp/`) to avoid name collisions between teams.
 
-### Phase 3 — Écosystème
+### Phase 3 — Ecosystem
 
-50. En tant que développeur, je veux naviguer les packages disponibles sur un site web public afin de découvrir des workflows sans CLI.
-51. En tant que créateur de workflow, je veux un profil public affichant mes packages publiés afin de construire ma réputation dans l'écosystème.
-52. En tant qu'organisation, je veux un registry privé sous mon scope afin de distribuer des workflows internes sans les exposer publiquement.
-53. En tant que développeur, je veux mettre à jour la CLI automatiquement (`rk self-update`) afin de toujours disposer des dernières corrections.
-54. En tant qu'administrateur, je veux accéder aux statistiques d'installation de mes packages afin de mesurer leur adoption.
+50. As a developer, I want to browse available packages on a public website to discover workflows without the CLI.
+51. As a package creator, I want a public profile displaying my published packages to build my reputation in the ecosystem.
+52. As an organization, I want a private registry under my scope to distribute internal workflows without exposing them publicly.
+53. As a developer, I want to auto-update the CLI (`rk self-update`) to always have the latest fixes.
+54. As an admin, I want access to installation statistics for my packages to measure their adoption.
 
 ---
 
 ## Implementation Decisions
 
-### Langage et distribution
-- CLI écrite en **Rust** : binaire natif, zero-dépendance à l'exécution.
-- Compilation croisée pour Linux / macOS / Windows via GitHub Actions.
-- Distribution via **GitHub Releases** — un seul fichier exécutable.
-- Licence open source pour la CLI ; le site web registry sera closed source.
+### Language and distribution
+- CLI written in **Rust**: native binary, zero runtime dependencies.
+- Cross-compilation for Linux / macOS / Windows via GitHub Actions.
+- Distribution via **GitHub Releases** — a single executable file.
+- Open source license for the CLI; the registry website will be closed source.
 
 ### Workspace
 
-Un repo Git peut contenir plusieurs packages (workspace). Chaque sous-package est dans un dossier à la racine (`./mr-review/`, `./auto-test/`). Un `renkei.json` racine déclare les membres via un champ `workspace` :
+A Git repo can contain multiple packages (workspace). Each sub-package lives in a folder at the root (`./mr-review/`, `./auto-test/`). A root `renkei.json` declares members via a `workspace` field:
 
 ```json
 {
@@ -132,22 +132,22 @@ Un repo Git peut contenir plusieurs packages (workspace). Chaque sous-package es
 }
 ```
 
-Chaque sous-dossier contient son propre `renkei.json` complet et ses dossiers conventionnés.
+Each subfolder contains its own complete `renkei.json` and its conventional directories.
 
-Pour un repo sans workspace (package simple), les dossiers conventionnés (`skills/`, `hooks/`, `agents/`) sont directement à la racine.
+For a repo without a workspace (single package), the conventional directories (`skills/`, `hooks/`, `agents/`) are directly at the root.
 
-### Manifeste `renkei.json`
-- Champs obligatoires : `name` (scopé `@scope/nom`, **obligatoire dès v1**), `version` (semver), `description`, `author`, `license`, `backends`.
-- Champs optionnels : `keywords`, `mcp`, `requiredEnv`, `workspace`.
-- **Pas de champ `artifacts`** : convention pure. Les dossiers `skills/`, `hooks/`, `agents/` sont la source de vérité. Tout fichier présent dans ces dossiers est un artefact déployé.
-- `mcp` déclare les configurations MCP au format natif `command`/`args`/`env` (standard entre Claude et Cursor, pas d'abstraction supplémentaire).
-- `requiredEnv` liste les variables d'environnement avec leur description.
+### Manifest `renkei.json`
+- Required fields: `name` (scoped `@scope/name`, **required from v1**), `version` (semver), `description`, `author`, `license`, `backends`.
+- Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`.
+- **No `artifacts` field**: pure convention. The `skills/`, `hooks/`, `agents/` directories are the source of truth. Any file present in these directories is a deployed artifact.
+- `mcp` declares MCP configurations in the native `command`/`args`/`env` format (standard between Claude and Cursor, no extra abstraction).
+- `requiredEnv` lists environment variables with their descriptions.
 
 ```json
 {
   "name": "@meryll/mr-review",
   "version": "1.2.0",
-  "description": "Review automatique de code",
+  "description": "Automated code review",
   "author": "meryll",
   "license": "MIT",
   "backends": ["claude"],
@@ -164,13 +164,13 @@ Pour un repo sans workspace (package simple), les dossiers conventionnés (`skil
 }
 ```
 
-### Format neutre des artefacts
+### Neutral artifact format
 
-Tous les artefacts sont écrits dans un format neutre Renkei que chaque backend traduit :
+All artifacts are written in a neutral Renkei format that each backend translates:
 
-- **Skills et agents** : format markdown + frontmatter (style Claude Code). Ce format est le format neutre Renkei — les autres backends traduisent depuis ce format.
-- **Hooks** : format Renkei abstrait avec événements normalisés (voir section Hooks ci-dessous).
-- **MCP** : format natif `command`/`args`/`env` directement dans le manifeste (déjà portable entre backends).
+- **Skills and agents**: markdown + frontmatter format (Claude Code style). This format is the Renkei neutral format — other backends translate from it.
+- **Hooks**: abstract Renkei format with normalized events (see Hooks section below).
+- **MCP**: native `command`/`args`/`env` format directly in the manifest (already portable across backends).
 
 ```markdown
 ---
@@ -180,9 +180,9 @@ description: Review code changes
 Review the code...
 ```
 
-### Hooks : format et événements
+### Hooks: format and events
 
-Les fichiers `hooks/*.json` utilisent un format Renkei abstrait avec des événements normalisés. Chaque backend mappe ces événements vers ses propres événements natifs.
+Files in `hooks/*.json` use an abstract Renkei format with normalized events. Each backend maps these events to its own native events.
 
 ```json
 [
@@ -195,9 +195,9 @@ Les fichiers `hooks/*.json` utilisent un format Renkei abstrait avec des événe
 ]
 ```
 
-**Mapping des événements Renkei → Claude Code :**
+**Renkei → Claude Code event mapping:**
 
-| Event Renkei | Claude Code |
+| Renkei Event | Claude Code |
 |-------------|-------------|
 | `before_tool` | `PreToolUse` |
 | `after_tool` | `PostToolUse` |
@@ -211,83 +211,83 @@ Les fichiers `hooks/*.json` utilisent un format Renkei abstrait avec des événe
 | `on_subagent_stop` | `SubagentStop` |
 | `on_elicitation` | `Elicitation` |
 
-Ce mapping est maintenu dans `ClaudeBackend`. Les autres backends définiront leur propre mapping.
+This mapping is maintained in `ClaudeBackend`. Other backends will define their own mapping.
 
-**Tracking** : les hooks déployés sont tracés dans `~/.renkei/install-cache.json`, pas dans le JSON du backend. Le JSON du backend (`settings.json`, etc.) reste 100% natif, sans champs customs. À la désinstallation, Renkei compare avec son cache pour retirer les bonnes entrées.
+**Tracking**: deployed hooks are tracked in `~/.renkei/install-cache.json`, not in the backend's JSON. The backend JSON (`settings.json`, etc.) stays 100% native with no custom fields. On uninstall, Renkei compares with its cache to remove the right entries.
 
-### Interface Backend
-- Un trait `Backend` définit les opérations : `name`, `detect_installed`, `deploy_skill`, `deploy_hook`, `deploy_agent`, `register_mcp`.
-- **Tout ce qui est spécifique à un backend doit être abstrait** derrière cette interface.
-- `ClaudeBackend` est la seule implémentation en v1. `CursorBackend` sera ajouté en v2 sans refactoring.
-- **Détection** : un backend est considéré installé si son dossier de config existe (`~/.claude/` pour Claude, `.cursor/` pour Cursor). Pas de vérification du binaire dans le PATH.
+### Backend interface
+- A `Backend` trait defines operations: `name`, `detect_installed`, `deploy_skill`, `deploy_hook`, `deploy_agent`, `register_mcp`.
+- **Everything backend-specific must be abstracted** behind this interface.
+- `ClaudeBackend` is the only implementation in v1. `CursorBackend` will be added in v2 without refactoring.
+- **Detection**: a backend is considered installed if its config directory exists (`~/.claude/` for Claude, `.cursor/` for Cursor). No binary check in PATH.
 
-### Matrice de support multi-backend
+### Multi-backend support matrix
 
-| Artefact   | Claude Code              | Cursor               | Codex      | Gemini |
+| Artifact   | Claude Code              | Cursor               | Codex      | Gemini |
 |------------|--------------------------|----------------------|------------|--------|
 | Skills     | `SKILL.md`               | Skills               | `AGENTS.md`| ?      |
 | Hooks      | `settings.json` events   | N/A                  | N/A        | N/A    |
 | Agents     | `agents/*.md`            | N/A                  | N/A        | N/A    |
 | MCP config | `~/.claude.json`         | `.cursor/mcp.json`   | ?          | ?      |
 
-Codex et Gemini sont dans le radar mais non planifiés. Le format d'artefact varie selon le backend (`AGENTS.md` pour Codex vs `agents/*.md` pour Claude).
+Codex and Gemini are on the radar but not planned. Artifact format varies by backend (`AGENTS.md` for Codex vs `agents/*.md` for Claude).
 
-### Conventions de déploiement (hardcodées, pas configurables)
+### Deployment conventions (hardcoded, not configurable)
 
-| Artefact  | Claude Code                              | Cursor                       |
+| Artifact  | Claude Code                              | Cursor                       |
 |-----------|------------------------------------------|------------------------------|
 | Skills    | `~/.claude/skills/renkei-<name>/SKILL.md` | `.cursor/skills/<name>/`     |
-| Hooks     | Merge dans `~/.claude/settings.json`     | N/A                          |
+| Hooks     | Merge into `~/.claude/settings.json`     | N/A                          |
 | Agents    | `~/.claude/agents/<name>.md`             | N/A                          |
-| MCP config| Merge dans `~/.claude.json`              | Merge dans `.cursor/mcp.json` |
+| MCP config| Merge into `~/.claude.json`              | Merge into `.cursor/mcp.json` |
 
-Le préfixe `renkei-` sur les skills crée un namespace clair et évite les collisions avec les skills natifs.
+The `renkei-` prefix on skills creates a clear namespace and avoids collisions with native skills.
 
-### Installation : Git
+### Installation: Git
 
-1. `git clone --depth 1` dans un dossier temporaire (`/tmp/rk-xxx/`)
-2. Validation du manifeste `renkei.json`
-3. Création de l'archive `.tar.gz` dans `~/.renkei/cache/@scope/name/<version>.tar.gz`
-4. Déploiement des artefacts depuis l'archive
-5. Suppression du clone temporaire
+1. `git clone --depth 1` into a temp directory (`/tmp/rk-xxx/`)
+2. Validate the `renkei.json` manifest
+3. Create the `.tar.gz` archive in `~/.renkei/cache/@scope/name/<version>.tar.gz`
+4. Deploy artifacts from the archive
+5. Delete the temp clone
 
-Sans `--tag` ni `--branch`, HEAD de la branche par défaut est utilisé. Le SHA du commit est enregistré dans le lockfile pour la reproductibilité. La version dans `renkei.json` fait foi (trust the manifest) — pas de vérification de cohérence avec les tags Git.
+Without `--tag` or `--branch`, HEAD of the default branch is used. The commit SHA is recorded in the lockfile for reproducibility. The version in `renkei.json` is authoritative (trust the manifest) — no consistency check against Git tags.
 
-### Installation : locale
+### Installation: local
 
-- `rk install ./mon-workflow/` crée une **copie** (snapshot archive dans le cache), comme pour Git.
-- `rk install --link ./mon-workflow/` crée des **symlinks** pour le développement (modèle `npm link` / `pip install -e`). Les changements dans les fichiers sources sont immédiatement reflétés.
+- `rk install ./my-workflow/` creates a **copy** (snapshot archive in cache), same as Git.
+- `rk install --link ./my-workflow/` creates **symlinks** for development (`npm link` / `pip install -e` model). Changes in source files are immediately reflected.
 
-### Installation : sans arguments
+### Installation: no arguments
 
-- Si `rk.lock` existe dans le répertoire courant → installe les versions exactes du lockfile.
-- Si pas de lockfile mais workspace détecté → erreur explicite : "workspace détecté, utilisez `rk install --link .` pour dev".
+- If `rk.lock` exists in the current directory → installs the exact versions from the lockfile.
+- If no lockfile but workspace detected → explicit error: "workspace detected, use `rk install --link .` for dev".
 
-### Gestion des erreurs : fail-fast + rollback
+### Error handling: fail-fast + rollback
 
-À la première erreur pendant l'installation, arrêt immédiat et rollback de tous les artefacts déjà déployés. Atomicité garantie : soit tout passe, soit rien ne change.
+On the first error during installation, immediate stop and rollback of all already-deployed artifacts. Guaranteed atomicity: either everything succeeds, or nothing changes.
 
-### Gestion des conflits
-- Détection via `install-cache.json` avant tout déploiement.
-- **TTY (interactif)** : prompt pour renommer l'artefact en conflit. Le renommage met à jour le champ `name` dans le frontmatter du skill.
-- **Non-TTY (CI)** : erreur avec exit code 1.
-- **`--force`** : le dernier installé écrase silencieusement.
-- Le mapping nom-original → nom-déployé est persisté dans `install-cache.json`.
+### Conflict management
+- Detection via `install-cache.json` before any deployment.
+- **TTY (interactive)**: prompt to rename the conflicting artifact. Renaming updates the `name` field in the skill's frontmatter.
+- **Non-TTY (CI)**: error with exit code 1.
+- **`--force`**: last installed silently overwrites.
+- The original-name → deployed-name mapping is persisted in `install-cache.json`.
 
-### Variables d'environnement
+### Environment variables
 
-Les variables d'environnement requises manquantes déclenchent un **warning** après installation, pas un blocage. `rk doctor` les re-vérifie. L'utilisateur configure après installation.
+Missing required environment variables trigger a **warning** after installation, not a blocker. `rk doctor` re-checks them. The user configures after installation.
 
-### Stockage local
-- `~/.renkei/cache/@scope/name/<version>.tar.gz` — archives immutables par version.
-- `~/.renkei/install-cache.json` — mapping package → artefacts déployés + hooks tracés + renommages.
-- `~/.renkei/config.json` — configuration locale (registries, préférences).
-- `rk.lock` à la racine du projet — lockfile commitable par projet.
+### Local storage
+- `~/.renkei/cache/@scope/name/<version>.tar.gz` — immutable archives per version.
+- `~/.renkei/install-cache.json` — mapping of packages → deployed artifacts + tracked hooks + renames.
+- `~/.renkei/config.json` — local configuration (registries, preferences).
+- `rk.lock` at the project root — committable lockfile per project.
 
 ### Lockfile
-- Format JSON versionné (`lockfileVersion: 1`).
-- Chaque entrée : `version`, `source`, `tag` (optionnel), `resolved` (commit SHA), `integrity` (sha256).
-- Généré automatiquement par `rk install`, commitable dans le repo.
+- Versioned JSON format (`lockfileVersion: 1`).
+- Each entry: `version`, `source`, `tag` (optional), `resolved` (commit SHA), `integrity` (sha256).
+- Automatically generated by `rk install`, committable to the repo.
 
 ```json
 {
@@ -304,97 +304,97 @@ Les variables d'environnement requises manquantes déclenchent un **warning** ap
 }
 ```
 
-### Diagnostic (`rk doctor`)
+### Diagnostics (`rk doctor`)
 
-Checks en v1 :
-- Backends installés (dossier de config existe)
-- Fichiers déployés existent toujours
-- Variables d'environnement requises présentes
-- Skills modifiés localement (hash diff avec archive)
-- Hooks toujours présents dans le fichier de config du backend
-- MCP configs toujours enregistrées
+v1 checks:
+- Installed backends (config directory exists)
+- Deployed files still exist
+- Required environment variables present
+- Locally modified skills (SHA-256 hash diff against cached archive)
+- Hooks still present in the backend's config file
+- MCP configs still registered
 
-Pas de check de version distante (registry v2). Code de sortie 0 si tout passe, non-0 sinon.
+No remote version check (registry v2). Exit code 0 if everything passes, non-0 otherwise.
 
 ### Archive (`rk package`)
 
-L'archive `.tar.gz` contient uniquement :
+The `.tar.gz` archive contains only:
 - `renkei.json`
 - `skills/`
 - `hooks/`
 - `agents/`
 - `scripts/`
 
-Tout le reste (tests, docs, README, etc.) est exclu.
+Everything else (tests, docs, README, etc.) is excluded.
 
 ### Registry v2
-- Service HTTP : index `@scope/name` → URL source + metadata.
-- `rk publish` envoie l'archive + met à jour l'index.
-- Scopes : `@renkei/` réservé aux packages officiels, les autres sont enregistrés à la première publication.
-- Auth par token API.
+- HTTP service: index `@scope/name` → source URL + metadata.
+- `rk publish` sends the archive + updates the index.
+- Scopes: `@renkei/` reserved for official packages, others are registered on first publish.
+- Auth via API token.
 
 ---
 
 ## Testing Decisions
 
-**Principe** : tester uniquement les comportements observables depuis l'extérieur, pas les détails d'implémentation internes. Un bon test vérifie ce que la CLI fait (fichiers créés, contenu correct, code de sortie, messages affichés) — pas comment elle le fait.
+**Principle**: only test externally observable behavior, not internal implementation details. A good test verifies what the CLI does (files created, correct content, exit code, displayed messages) — not how it does it.
 
-**Modules à tester :**
+**Modules to test:**
 
-- **Parsing du manifeste** : valider que `renkei.json` valide est accepté, que les champs manquants obligatoires provoquent une erreur descriptive, que les types incorrects sont rejetés, que le scope `@scope/name` est requis.
-- **Découverte des artefacts par convention** : vérifier que les fichiers dans `skills/`, `hooks/`, `agents/` sont correctement détectés comme artefacts.
-- **Déploiement des artefacts** (`ClaudeBackend`) : vérifier que les fichiers sont copiés aux bons chemins après `rk install`, que le merge dans `settings.json` et `~/.claude.json` est correct, que le préfixe `renkei-` est appliqué.
-- **Traduction des hooks** : vérifier que le format Renkei abstrait (`before_tool`, etc.) est correctement traduit en événements Claude Code natifs (`PreToolUse`, etc.).
-- **Tracking des hooks** : vérifier que les hooks déployés sont enregistrés dans `install-cache.json` et que le rollback les retire correctement.
-- **Lockfile** : vérifier que `rk.lock` est créé avec les bonnes versions et hashes, que `rk install` sans arguments installe les versions exactes du lockfile.
-- **Détection de backend** : vérifier que `ClaudeBackend::detect_installed` retourne vrai quand Claude Code est présent.
-- **Gestion des conflits** : vérifier la détection de collision et le renommage dans `install-cache.json`.
-- **`rk doctor`** : vérifier les codes de sortie (0 = sain, non-0 = problèmes), la détection de skills modifiés, les env vars manquantes.
-- **`rk package`** : vérifier la création de l'archive, le bump de version dans `renkei.json`, le rejet si des artefacts déclarés sont absents.
+- **Manifest parsing**: validate that a valid `renkei.json` is accepted, that missing required fields produce a descriptive error, that incorrect types are rejected, that the `@scope/name` scope is required.
+- **Convention-based artifact discovery**: verify that files in `skills/`, `hooks/`, `agents/` are correctly detected as artifacts.
+- **Artifact deployment** (`ClaudeBackend`): verify that files are copied to the correct paths after `rk install`, that the merge into `settings.json` and `~/.claude.json` is correct, that the `renkei-` prefix is applied.
+- **Hook translation**: verify that the abstract Renkei format (`before_tool`, etc.) is correctly translated into native Claude Code events (`PreToolUse`, etc.).
+- **Hook tracking**: verify that deployed hooks are recorded in `install-cache.json` and that rollback removes them correctly.
+- **Lockfile**: verify that `rk.lock` is created with the correct versions and hashes, that `rk install` without arguments installs the exact lockfile versions.
+- **Backend detection**: verify that `ClaudeBackend::detect_installed` returns true when Claude Code is present.
+- **Conflict management**: verify collision detection and renaming in `install-cache.json`.
+- **`rk doctor`**: verify exit codes (0 = healthy, non-0 = problems), detection of modified skills, missing env vars.
+- **`rk package`**: verify archive creation, version bump in `renkei.json`, rejection when declared artifacts are missing.
 
 ---
 
 ## Out of Scope
 
-- **Workflow runtime / executor** : Renkei distribue des workflows, il ne les exécute pas.
-- **Orchestrateur MCP** : la gestion du cycle de vie des serveurs MCP est laissée à l'outil IA.
-- **Pattern library / framework de patterns agentiques** : Renkei est agnostique au contenu.
-- **Compilateur workflow → skill** : pas de transformation du contenu des packages.
-- **Système de dépendances inter-workflows** : un package ne peut pas déclarer de dépendances vers d'autres packages (v1).
-- **Observabilité / métriques d'exécution** : hors périmètre.
-- **Interface graphique locale** : la CLI est le seul point d'entrée.
+- **Workflow runtime / executor**: Renkei distributes workflows, it doesn't execute them.
+- **MCP orchestrator**: MCP server lifecycle management is left to the AI tool.
+- **Pattern library / agentic pattern framework**: Renkei is content-agnostic.
+- **Workflow → skill compiler**: no transformation of package contents.
+- **Inter-workflow dependency system**: a package cannot declare dependencies on other packages (v1).
+- **Observability / execution metrics**: out of scope.
+- **Local GUI**: the CLI is the only entry point.
 
 ---
 
 ## Risks
 
-| Risque | Sévérité | Mitigation |
-|--------|----------|------------|
-| **Sur-ingénierie** | Haute | Scope minimal en v1. Chaque feature justifiée par un besoin concret. |
-| **Adoption nulle** | Haute | Valider avec les premiers utilisateurs (utilisateurs l'équipe) avant d'investir dans le registry. |
-| **Évolution rapide des outils IA** | Moyenne | L'interface `Backend` isole du changement. Un seul point d'adaptation par outil. |
-| **Format skills instable** | Moyenne | Surveiller les changelogs Claude Code / Cursor. Adapter rapidement. |
-| **Rust learning curve** | Faible | Le scope de la CLI est bien défini. Pas de concurrence, pas d'async complexe. |
-| **Compétition native** | Faible | Renkei est multi-outils et orienté workflow, pas composant. Complémentaire aux stores natifs. |
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| **Over-engineering** | High | Minimal scope in v1. Every feature justified by a concrete need. |
+| **Zero adoption** | High | Validate with early users (team members) before investing in the registry. |
+| **Rapid evolution of AI tools** | Medium | The `Backend` interface isolates from change. A single adaptation point per tool. |
+| **Unstable skill format** | Medium | Monitor Claude Code / Cursor changelogs. Adapt quickly. |
+| **Rust learning curve** | Low | The CLI scope is well-defined. No concurrency, no complex async. |
+| **Native competition** | Low | Renkei is multi-tool and workflow-oriented, not component-oriented. Complementary to native stores. |
 
 ---
 
 ## Licensing
 
-| Composant | Licence |
+| Component | License |
 |-----------|---------|
 | CLI `rk` | Open source |
-| Site web registry | Closed source |
-| Packages individuels | Au choix du créateur |
-| Scope `@renkei/` | Réservé aux packages officiels |
+| Registry website | Closed source |
+| Individual packages | Creator's choice |
+| `@renkei/` scope | Reserved for official packages |
 
 ---
 
 ## Further Notes
 
-- **Clean break** : le codebase existant (`renkei-old`) sert de référence mais le nouveau Renkei repart de zéro en Rust. Les workflows existants seront packagés en packages Renkei une fois la CLI v1 fonctionnelle — c'est un livrable de Phase 1.
-- **Convention over config** : les destinations de déploiement sont hardcodées. L'ajout d'un champ `destination` dans le manifeste est explicitement rejeté — moins de surface d'erreur, moins de décisions pour le créateur de package.
-- **Claude-first** : en v1, seul `ClaudeBackend` est implémenté. L'interface `Backend` est la seule concession à la flexibilité future.
-- **Validation par les premiers utilisateurs** : avant d'investir dans le registry (v2), valider l'adoption avec les utilisateurs . Si personne n'installe de packages, le registry est prématuré.
-- **Le site web (v3) ne doit être construit que si l'écosystème le justifie** — pas de build spéculatif.
-- **Scripts dans les packages** : la structure d'un package peut inclure un dossier `scripts/` avec des scripts arbitraires. Ces scripts ne sont pas un type d'artefact nommé dans `artifacts` — ils sont inclus dans l'archive mais leur déploiement n'est pas géré nativement par `rk`. Ce comportement devra être clarifié lors de l'implémentation de `rk package`.
+- **Clean break**: the existing codebase (`renkei-old`) serves as reference but the new Renkei starts from scratch in Rust. Existing workflows will be packaged as Renkei packages once the CLI v1 is functional — this is a Phase 1 deliverable.
+- **Convention over config**: deployment destinations are hardcoded. Adding a `destination` field to the manifest is explicitly rejected — less error surface, fewer decisions for the package creator.
+- **Claude-first**: in v1, only `ClaudeBackend` is implemented. The `Backend` interface is the only concession to future flexibility.
+- **Early user validation**: before investing in the registry (v2), validate adoption with users. If nobody installs packages, the registry is premature.
+- **The website (v3) should only be built if the ecosystem justifies it** — no speculative builds.
+- **Scripts in packages**: the package structure can include a `scripts/` directory with arbitrary scripts. These scripts are not a named artifact type in `artifacts` — they are included in the archive but their deployment is not natively managed by `rk`. This behavior will need to be clarified during `rk package` implementation.

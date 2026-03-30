@@ -1,304 +1,304 @@
-# Plan : Renkei CLI (`rk`)
+# Plan: Renkei CLI (`rk`)
 
-> Source PRD : `./PRD.md` — Package Manager pour Workflows Agentiques
+> Source PRD: `./PRD.md` — Package Manager for Agentic Workflows
 
-## Decisions architecturales
+## Architectural decisions
 
-Decisions durables qui s'appliquent a toutes les phases :
+Durable decisions that apply across all phases:
 
-- **Langage** : Rust, binaire unique `rk`
-- **Trait Backend** : `Backend` avec methodes `name()`, `detect_installed()`, `deploy_skill()`, `deploy_hook()`, `deploy_agent()`, `register_mcp()`. Seul `ClaudeBackend` en v1.
-- **Manifeste** : `renkei.json` — champs obligatoires : `name` (scope `@scope/nom`), `version` (semver), `description`, `author`, `license`, `backends`. Optionnels : `keywords`, `mcp`, `requiredEnv`, `workspace`.
-- **Convention over config** : artefacts decouverts depuis `skills/`, `hooks/`, `agents/`. Pas de champ `artifacts` dans le manifeste.
-- **Chemins de deploiement (hardcodes)** :
+- **Language**: Rust, single binary `rk`
+- **Backend trait**: `Backend` with methods `name()`, `detect_installed()`, `deploy_skill()`, `deploy_hook()`, `deploy_agent()`, `register_mcp()`. Only `ClaudeBackend` in v1.
+- **Manifest**: `renkei.json` — required fields: `name` (scoped `@scope/name`), `version` (semver), `description`, `author`, `license`, `backends`. Optional: `keywords`, `mcp`, `requiredEnv`, `workspace`.
+- **Convention over config**: artifacts discovered from `skills/`, `hooks/`, `agents/`. No `artifacts` field in the manifest.
+- **Deployment paths (hardcoded)**:
   - Skills → `~/.claude/skills/renkei-<name>/SKILL.md`
-  - Hooks → merge dans `~/.claude/settings.json`
+  - Hooks → merge into `~/.claude/settings.json`
   - Agents → `~/.claude/agents/<name>.md`
-  - MCP → merge dans `~/.claude.json`
-- **Stockage local** :
-  - `~/.renkei/cache/@scope/name/<version>.tar.gz` (archives immutables)
-  - `~/.renkei/install-cache.json` (mapping packages → artefacts deployes)
-  - `rk.lock` a la racine du projet (lockfile commitable)
-- **Home directory injectable** : toute fonction lisant/ecrivant `~/.claude/` ou `~/.renkei/` accepte un chemin de base configurable (struct `Config` avec `home_dir: PathBuf`) pour permettre les tests en tempdir.
-- **Hooks tracking** : dans `install-cache.json`, jamais dans le JSON du backend. Le JSON backend reste 100% natif.
-- **Fail-fast + rollback** : chaque installation est atomique. Collecte des ecritures dans un `Vec`, rollback en ordre inverse sur erreur.
-- **Crates principaux** : `clap` (derive), `serde` + `serde_json`, `semver`, `tar` + `flate2`, `sha2`, `tempfile`, `thiserror`, `dialoguer`, `colored`, `dirs`. Dev : `assert_cmd`, `predicates`.
+  - MCP → merge into `~/.claude.json`
+- **Local storage**:
+  - `~/.renkei/cache/@scope/name/<version>.tar.gz` (immutable archives)
+  - `~/.renkei/install-cache.json` (mapping of packages → deployed artifacts)
+  - `rk.lock` at the project root (committable lockfile)
+- **Injectable home directory**: every function reading/writing `~/.claude/` or `~/.renkei/` accepts a configurable base path (`Config` struct with `home_dir: PathBuf`) to enable testing in a tempdir.
+- **Hook tracking**: in `install-cache.json`, never in the backend's JSON. The backend JSON stays 100% native.
+- **Fail-fast + rollback**: every installation is atomic. Writes are collected in a `Vec`, rolled back in reverse order on error.
+- **Main crates**: `clap` (derive), `serde` + `serde_json`, `semver`, `tar` + `flate2`, `sha2`, `tempfile`, `thiserror`, `dialoguer`, `colored`, `dirs`. Dev: `assert_cmd`, `predicates`.
 
 ---
 
-## Phase 1 : Squelette CLI + Manifest + Deploiement local de skills
+## Phase 1: CLI skeleton + Manifest + Local skill deployment
 
-**User stories** : 4, 5, 9
+**User stories**: 4, 5, 9
 
 ### What to build
 
-Le plus fin tracer bullet possible : `rk install ./chemin-local/` deploie un skill unique depuis un dossier local vers Claude Code.
+The thinnest possible tracer bullet: `rk install ./local-path/` deploys a single skill from a local folder to Claude Code.
 
-Couvre de bout en bout : parsing CLI (clap) → lecture et validation du manifeste `renkei.json` → decouverte des skills par convention (`skills/`) → creation de l'archive `.tar.gz` dans le cache → deploiement du skill vers `~/.claude/skills/renkei-<name>/SKILL.md` → ecriture de `install-cache.json`.
+Covers end-to-end: CLI parsing (clap) → reading and validating the `renkei.json` manifest → discovering skills by convention (`skills/`) → creating the `.tar.gz` archive in cache → deploying the skill to `~/.claude/skills/renkei-<name>/SKILL.md` → writing `install-cache.json`.
 
-Structure du projet Rust creee from scratch : `Cargo.toml`, `src/main.rs`, modules pour manifest, artifact, backend, cache, install, error.
+Rust project structure created from scratch: `Cargo.toml`, `src/main.rs`, modules for manifest, artifact, backend, cache, install, error.
 
 ### Acceptance criteria
 
-- [ ] `cargo build` produit un binaire `rk`
-- [ ] `rk install ./fixture/` avec un `renkei.json` valide et `skills/review.md` deploie le fichier vers `~/.claude/skills/renkei-review/SKILL.md`
-- [ ] `rk install ./fixture/` avec un manifeste invalide (champ manquant, scope incorrect, semver invalide) echoue avec un message d'erreur descriptif
-- [ ] L'archive `~/.renkei/cache/@scope/name/<version>.tar.gz` est creee
-- [ ] `install-cache.json` contient l'entree du package avec les chemins deployes
-- [ ] Tests unitaires : parsing manifeste (valide, champs manquants, mauvais scope, mauvais semver), decouverte artefacts, deploiement skill
-- [ ] Test d'integration : `rk install ./fixture/` end-to-end en tempdir
+- [ ] `cargo build` produces an `rk` binary
+- [ ] `rk install ./fixture/` with a valid `renkei.json` and `skills/review.md` deploys the file to `~/.claude/skills/renkei-review/SKILL.md`
+- [ ] `rk install ./fixture/` with an invalid manifest (missing field, incorrect scope, invalid semver) fails with a descriptive error message
+- [ ] The archive `~/.renkei/cache/@scope/name/<version>.tar.gz` is created
+- [ ] `install-cache.json` contains the package entry with deployed paths
+- [ ] Unit tests: manifest parsing (valid, missing fields, bad scope, bad semver), artifact discovery, skill deployment
+- [ ] Integration test: `rk install ./fixture/` end-to-end in a tempdir
 
 ---
 
-## Phase 2 : Rollback + Agents + Reinstall
+## Phase 2: Rollback + Agents + Reinstall
 
-**User stories** : 11, 14
+**User stories**: 11, 14
 
 ### What to build
 
-Ajout du mecanisme de rollback atomique : pendant l'installation, chaque ecriture filesystem est enregistree. Sur erreur, toutes les ecritures sont annulees en ordre inverse.
+Add atomic rollback mechanism: during installation, every filesystem write is recorded. On error, all writes are undone in reverse order.
 
-Support des agents : decouverte depuis `agents/`, deploiement vers `~/.claude/agents/<name>.md`.
+Agent support: discovery from `agents/`, deployment to `~/.claude/agents/<name>.md`.
 
-Support du reinstall : si un package est deja dans `install-cache.json`, ses anciens artefacts sont supprimes avant de redeployer la nouvelle version.
+Reinstall support: if a package is already in `install-cache.json`, its old artifacts are removed before redeploying the new version.
 
 ### Acceptance criteria
 
-- [ ] Installation d'un package avec 2 skills et 1 agent deploie les 3 fichiers aux bons chemins
-- [ ] Si un artefact echoue pendant le deploiement, tous les artefacts deja deployes sont supprimes (rollback)
-- [ ] `rk install` sur un package deja installe supprime les anciens artefacts et deploie les nouveaux
-- [ ] `install-cache.json` est mis a jour correctement apres reinstall
-- [ ] Tests : rollback (deploy 2/3, erreur sur le 3e, assert les 2 premiers supprimes), multi-skill, agent deploy, reinstall
+- [ ] Installing a package with 2 skills and 1 agent deploys all 3 files to the correct paths
+- [ ] If an artifact fails during deployment, all already-deployed artifacts are removed (rollback)
+- [ ] `rk install` on an already-installed package removes old artifacts and deploys new ones
+- [ ] `install-cache.json` is updated correctly after reinstall
+- [ ] Tests: rollback (deploy 2/3, error on 3rd, assert first 2 removed), multi-skill, agent deploy, reinstall
 
 ---
 
-## Phase 3 : Hooks — deploiement + traduction d'evenements
+## Phase 3: Hooks — deployment + event translation
 
-**User stories** : 10
+**User stories**: 10
 
 ### What to build
 
-Deploiement des hooks : decouverte depuis `hooks/*.json`, parsing du format Renkei abstrait (`event`, `matcher`, `command`, `timeout`), traduction vers les evenements natifs Claude Code (`before_tool` → `PreToolUse`, etc.), merge dans `~/.claude/settings.json`.
+Hook deployment: discovery from `hooks/*.json`, parsing the abstract Renkei format (`event`, `matcher`, `command`, `timeout`), translation to native Claude Code events (`before_tool` → `PreToolUse`, etc.), merge into `~/.claude/settings.json`.
 
-Le merge dans `settings.json` doit respecter la structure reelle : chaque cle d'evenement mappe vers un tableau d'objets `[{ "matcher": "...", "hooks": [{ "type": "command", "command": "...", "timeout": N }] }]`. Le merge append sans ecraser les hooks existants.
+The merge into `settings.json` must respect the actual structure: each event key maps to an array of objects `[{ "matcher": "...", "hooks": [{ "type": "command", "command": "...", "timeout": N }] }]`. The merge appends without overwriting existing hooks.
 
-Tracking des hooks dans `install-cache.json`. Rollback etendu pour supprimer les hooks du settings.json en cas d'erreur.
+Hook tracking in `install-cache.json`. Extended rollback to remove hooks from settings.json on error.
 
 ### Acceptance criteria
 
-- [ ] Les 11 evenements Renkei sont traduits correctement (`before_tool` → `PreToolUse`, `after_tool` → `PostToolUse`, etc.)
-- [ ] `rk install` d'un package avec hooks merge les entrees dans `settings.json`
-- [ ] Les hooks existants dans `settings.json` ne sont pas ecrases
-- [ ] Le rollback retire uniquement les hooks du package en echec
-- [ ] `install-cache.json` trace quels hooks appartiennent a quel package
-- [ ] Tests : traduction des 11 evenements, parsing hooks JSON, merge settings.json (vide, existant, append), rollback hooks
+- [ ] All 11 Renkei events are correctly translated (`before_tool` → `PreToolUse`, `after_tool` → `PostToolUse`, etc.)
+- [ ] `rk install` of a package with hooks merges entries into `settings.json`
+- [ ] Existing hooks in `settings.json` are not overwritten
+- [ ] Rollback removes only the failing package's hooks
+- [ ] `install-cache.json` tracks which hooks belong to which package
+- [ ] Tests: translation of all 11 events, hook JSON parsing, settings.json merge (empty, existing, append), hook rollback
 
 ---
 
-## Phase 4 : MCP + Warnings variables d'environnement
+## Phase 4: MCP + Environment variable warnings
 
-**User stories** : 12, 13
+**User stories**: 12, 13
 
 ### What to build
 
-Enregistrement MCP : lecture du champ `mcp` du manifeste, merge dans `~/.claude.json` (section `mcpServers`). Tracking dans `install-cache.json`. Rollback MCP.
+MCP registration: read the `mcp` field from the manifest, merge into `~/.claude.json` (`mcpServers` section). Track in `install-cache.json`. MCP rollback.
 
-Verification des variables d'environnement : apres installation reussie, chaque variable de `requiredEnv` est verifiee. Warning affiche (pas bloquant) pour les variables manquantes.
+Environment variable checking: after successful installation, each variable from `requiredEnv` is checked. Warning displayed (not blocking) for missing variables.
 
 ### Acceptance criteria
 
-- [ ] `rk install` d'un package avec `mcp` enregistre les serveurs dans `~/.claude.json`
-- [ ] Les serveurs MCP existants ne sont pas ecrases
-- [ ] Les variables d'environnement manquantes declenchent un warning (pas une erreur)
-- [ ] Les variables presentes ne generent pas de warning
-- [ ] Rollback retire les serveurs MCP du package en echec
-- [ ] Tests : merge claude.json, tracking MCP, verification env vars
+- [ ] `rk install` of a package with `mcp` registers the servers in `~/.claude.json`
+- [ ] Existing MCP servers are not overwritten
+- [ ] Missing environment variables trigger a warning (not an error)
+- [ ] Present variables do not generate a warning
+- [ ] Rollback removes MCP servers from the failing package
+- [ ] Tests: claude.json merge, MCP tracking, env var checking
 
 ---
 
-## Phase 5 : Installation Git (SSH, HTTPS, tags) + Detection backend
+## Phase 5: Git installation (SSH, HTTPS, tags) + Backend detection
 
-**User stories** : 1, 2, 3, 6, 7, 8
+**User stories**: 1, 2, 3, 6, 7, 8
 
 ### What to build
 
-Parsing de la source : distinguer chemin local vs Git SSH (`git@...`) vs Git HTTPS (`https://...`). Execution de `git clone --depth 1` dans un tempdir, avec support `--tag` / `--branch`. Apres clone, delegation au pipeline d'installation existant. Nettoyage du tempdir dans tous les cas.
+Source parsing: distinguish local path vs Git SSH (`git@...`) vs Git HTTPS (`https://...`). Run `git clone --depth 1` in a tempdir, with `--tag` / `--branch` support. After cloning, delegate to the existing installation pipeline. Clean up the tempdir in all cases.
 
-Detection de backend : `ClaudeBackend::detect_installed()` verifie l'existence de `~/.claude/`. Avant installation, verification que les `backends` du package correspondent aux backends detectes. Erreur si incompatible, sauf avec `--force`.
+Backend detection: `ClaudeBackend::detect_installed()` checks for the existence of `~/.claude/`. Before installation, verify that the package's `backends` match the detected backends. Error if incompatible, unless `--force` is used.
 
-Extraction du SHA du commit clone pour usage futur (lockfile).
+Extract the commit SHA from the clone for future use (lockfile).
 
 ### Acceptance criteria
 
-- [ ] `rk install git@github.com:user/repo` clone et installe
-- [ ] `rk install https://github.com/user/repo` clone et installe
-- [ ] `rk install git@... --tag v1.0.0` clone le tag specifique
-- [ ] Le tempdir est nettoye apres installation (succes ou echec)
-- [ ] Un package avec `backends: ["cursor"]` sur une machine sans Cursor echoue avec message clair
-- [ ] `--force` permet d'installer malgre l'incompatibilite backend
-- [ ] Le SHA du commit est extrait et stocke
-- [ ] Tests : parsing source (SSH, HTTPS, local), detection backend, compatibilite, force override
+- [ ] `rk install git@github.com:user/repo` clones and installs
+- [ ] `rk install https://github.com/user/repo` clones and installs
+- [ ] `rk install git@... --tag v1.0.0` clones the specific tag
+- [ ] The tempdir is cleaned up after installation (success or failure)
+- [ ] A package with `backends: ["cursor"]` on a machine without Cursor fails with a clear message
+- [ ] `--force` allows installation despite backend incompatibility
+- [ ] The commit SHA is extracted and stored
+- [ ] Tests: source parsing (SSH, HTTPS, local), backend detection, compatibility, force override
 
 ---
 
-## Phase 6 : Gestion des conflits + Renommage interactif
+## Phase 6: Conflict management + Interactive renaming
 
-**User stories** : 15, 16, 17, 18
+**User stories**: 15, 16, 17, 18
 
 ### What to build
 
-Avant chaque deploiement de skill, verification dans `install-cache.json` si un autre package possede deja un skill du meme nom.
+Before each skill deployment, check `install-cache.json` for whether another package already owns a skill with the same name.
 
-Comportements selon le contexte :
-- **TTY** : prompt interactif (`dialoguer`) pour choisir un nouveau nom
-- **Non-TTY** : erreur avec exit code 1
-- **`--force`** : ecrasement silencieux
+Behavior by context:
+- **TTY**: interactive prompt (`dialoguer`) to choose a new name
+- **Non-TTY**: error with exit code 1
+- **`--force`**: silent overwrite
 
-Sur renommage : deployer sous le nouveau nom (`renkei-<nouveau>/SKILL.md`), mettre a jour le champ `name` dans le frontmatter du skill, persister le mapping `nom-original → nom-deploye` dans `install-cache.json`.
+On rename: deploy under the new name (`renkei-<new>/SKILL.md`), update the `name` field in the skill's frontmatter, persist the `original-name → deployed-name` mapping in `install-cache.json`.
 
 ### Acceptance criteria
 
-- [ ] Installation de 2 packages avec un skill du meme nom declenche la detection de conflit
-- [ ] En mode TTY, le prompt propose un renommage et deploie sous le nouveau nom
-- [ ] En mode non-TTY, erreur avec exit code 1
-- [ ] Avec `--force`, le dernier installe ecrase le premier
-- [ ] Le frontmatter du skill renomme contient le nouveau nom
-- [ ] `install-cache.json` contient le mapping de renommage
-- [ ] Tests : detection conflit, renommage frontmatter, mapping persistance
+- [ ] Installing 2 packages with a skill of the same name triggers conflict detection
+- [ ] In TTY mode, the prompt offers renaming and deploys under the new name
+- [ ] In non-TTY mode, error with exit code 1
+- [ ] With `--force`, last installed overwrites first
+- [ ] The renamed skill's frontmatter contains the new name
+- [ ] `install-cache.json` contains the rename mapping
+- [ ] Tests: conflict detection, frontmatter rename, mapping persistence
 
 ---
 
-## Phase 7 : `rk list`
+## Phase 7: `rk list`
 
-**User stories** : 19, 20
+**User stories**: 19, 20
 
 ### What to build
 
-Commande `rk list` : lecture de `install-cache.json`, affichage tabulaire de tous les packages installes avec nom, version, source, types d'artefacts.
+`rk list` command: read `install-cache.json`, display a table of all installed packages with name, version, source, and artifact types.
 
-Distinction visuelle entre sources Git (`[git]`) et locales (`[local]`). Gestion du cas vide ("No packages installed").
+Visual distinction between Git sources (`[git]`) and local sources (`[local]`). Handle the empty case ("No packages installed").
 
 ### Acceptance criteria
 
-- [ ] `rk list` affiche tous les packages installes avec nom, version, source
-- [ ] Les packages Git et locaux sont distingues visuellement
-- [ ] Sans packages installes, message explicite
-- [ ] Exit code 0 dans tous les cas
-- [ ] Tests : formatage sortie, cas vide, sources mixtes
+- [ ] `rk list` displays all installed packages with name, version, source
+- [ ] Git and local packages are visually distinguished
+- [ ] With no installed packages, explicit message
+- [ ] Exit code 0 in all cases
+- [ ] Tests: output formatting, empty case, mixed sources
 
 ---
 
-## Phase 8 : `rk doctor`
+## Phase 8: `rk doctor`
 
-**User stories** : 21, 22, 23, 24, 25
+**User stories**: 21, 22, 23, 24, 25
 
 ### What to build
 
-Commande `rk doctor` executant une serie de checks de sante :
+`rk doctor` command running a series of health checks:
 
-1. Backends installes (dossier de config existe)
-2. Fichiers deployes existent toujours
-3. Variables d'environnement requises presentes
-4. Skills modifies localement (hash SHA-256 vs archive en cache)
-5. Hooks toujours presents dans `settings.json`
-6. MCP configs toujours dans `~/.claude.json`
+1. Installed backends (config directory exists)
+2. Deployed files still exist
+3. Required environment variables present
+4. Locally modified skills (SHA-256 hash vs cached archive)
+5. Hooks still present in `settings.json`
+6. MCP configs still in `~/.claude.json`
 
-Sortie : checkmark/croix par check, groupes par package. Exit code 0 si tout sain, 1 si probleme.
+Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1 if problems found.
 
 ### Acceptance criteria
 
-- [ ] `rk doctor` sur un environnement sain retourne exit code 0
-- [ ] Fichier deploye supprime → signale, exit code 1
-- [ ] Skill modifie localement → signale la modification
-- [ ] Variable d'environnement manquante → signale
-- [ ] Hook manquant dans settings.json → signale
-- [ ] MCP manquant dans claude.json → signale
-- [ ] Tests : chaque check individuellement, exit codes, formatage
+- [ ] `rk doctor` on a healthy environment returns exit code 0
+- [ ] Deleted deployed file → flagged, exit code 1
+- [ ] Locally modified skill → flags the modification
+- [ ] Missing environment variable → flagged
+- [ ] Missing hook in settings.json → flagged
+- [ ] Missing MCP in claude.json → flagged
+- [ ] Tests: each check individually, exit codes, formatting
 
 ---
 
-## Phase 9 : Lockfile
+## Phase 9: Lockfile
 
-**User stories** : 30, 31, 32, 33, 34
+**User stories**: 30, 31, 32, 33, 34
 
 ### What to build
 
-Apres chaque `rk install <source>`, generation/mise a jour de `rk.lock` dans le repertoire courant. Format JSON : `lockfileVersion: 1`, packages avec `version`, `source`, `tag` (optionnel), `resolved` (SHA commit), `integrity` (SHA-256 de l'archive).
+After each `rk install <source>`, generate/update `rk.lock` in the current directory. JSON format: `lockfileVersion: 1`, packages with `version`, `source`, `tag` (optional), `resolved` (commit SHA), `integrity` (SHA-256 of the archive).
 
-`rk install` sans arguments : detection de `rk.lock` dans le cwd, lecture, reinstallation de chaque package depuis le cache ou re-clone au commit exact. Verification d'integrite : hash de l'archive cache vs hash du lockfile.
+`rk install` without arguments: detect `rk.lock` in the cwd, read it, reinstall each package from cache or re-clone at the exact commit. Integrity check: hash of the cached archive vs lockfile hash.
 
 ### Acceptance criteria
 
-- [ ] `rk install <source>` genere/met a jour `rk.lock` dans le cwd
-- [ ] Le lockfile contient version, source, tag, resolved (SHA), integrity (SHA-256)
-- [ ] `rk install` (sans args) avec `rk.lock` installe les versions exactes
-- [ ] Archive corrompue dans le cache → erreur d'integrite
-- [ ] `rk install` sans args et sans `rk.lock` → erreur explicite
-- [ ] Tests : serialisation/deserialisation lockfile, calcul SHA-256, round-trip install → lockfile → clean → install-from-lockfile, verification integrite
+- [ ] `rk install <source>` generates/updates `rk.lock` in the cwd
+- [ ] The lockfile contains version, source, tag, resolved (SHA), integrity (SHA-256)
+- [ ] `rk install` (no args) with `rk.lock` installs the exact versions
+- [ ] Corrupted archive in cache → integrity error
+- [ ] `rk install` without args and without `rk.lock` → explicit error
+- [ ] Tests: lockfile serialization/deserialization, SHA-256 computation, round-trip install → lockfile → clean → install-from-lockfile, integrity check
 
 ---
 
-## Phase 10 : `rk package`
+## Phase 10: `rk package`
 
-**User stories** : 26, 27, 28, 29
+**User stories**: 26, 27, 28, 29
 
 ### What to build
 
-Commande `rk package` executee depuis un dossier package : validation du manifeste, scan des dossiers conventionnes, creation d'une archive `<name>-<version>.tar.gz` contenant uniquement `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`.
+`rk package` command run from a package directory: validate the manifest, scan conventional directories, create a `<name>-<version>.tar.gz` archive containing only `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`.
 
-Flag `--bump patch|minor|major` : increment de version dans `renkei.json` avant archivage, reecriture du manifeste.
+`--bump patch|minor|major` flag: increment the version in `renkei.json` before archiving, rewrite the manifest.
 
-Affichage resume : liste des fichiers inclus, nombre, taille de l'archive.
+Display summary: list of included files, count, archive size.
 
 ### Acceptance criteria
 
-- [ ] `rk package` cree `<name>-<version>.tar.gz` avec le bon contenu
-- [ ] L'archive exclut tout sauf `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`
-- [ ] `rk package --bump minor` incremente la version minor dans `renkei.json`
-- [ ] `rk package` dans un dossier sans `renkei.json` → erreur
-- [ ] Resume affiche avec liste des fichiers et taille
-- [ ] Tests : contenu archive, bump version (patch/minor/major), validation, resume
+- [ ] `rk package` creates `<name>-<version>.tar.gz` with the correct contents
+- [ ] The archive excludes everything except `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`
+- [ ] `rk package --bump minor` increments the minor version in `renkei.json`
+- [ ] `rk package` in a directory without `renkei.json` → error
+- [ ] Summary displayed with file list and size
+- [ ] Tests: archive contents, version bump (patch/minor/major), validation, summary
 
 ---
 
-## Phase 11 : Workspace
+## Phase 11: Workspace
 
-**User stories** : support workspace (PRD section "Workspace")
+**User stories**: workspace support (PRD "Workspace" section)
 
 ### What to build
 
-Detection de workspace : un `renkei.json` racine avec champ `workspace` listant les sous-dossiers membres. Chaque membre a son propre `renkei.json` et ses dossiers conventionnes.
+Workspace detection: a root `renkei.json` with a `workspace` field listing member subdirectories. Each member has its own `renkei.json` and conventional directories.
 
-`rk install ./workspace/` installe chaque membre independamment. Chaque membre est cache, deploye et tracke separement.
+`rk install ./workspace/` installs each member independently. Each member is cached, deployed, and tracked separately.
 
-`rk install` sans arguments dans un contexte workspace sans `rk.lock` → erreur avec message guidant vers `rk install --link .`.
+`rk install` without arguments in a workspace context without `rk.lock` → error with a message guiding toward `rk install --link .`.
 
 ### Acceptance criteria
 
-- [ ] `rk install ./workspace/` installe tous les membres listes dans le champ `workspace`
-- [ ] Chaque membre apparait independamment dans `rk list`
-- [ ] Chaque membre a sa propre entree dans le lockfile
-- [ ] `rk install` sans args dans un workspace sans lockfile → erreur avec guidance
-- [ ] Tests : detection workspace, enumeration membres, installation independante, message d'erreur
+- [ ] `rk install ./workspace/` installs all members listed in the `workspace` field
+- [ ] Each member appears independently in `rk list`
+- [ ] Each member has its own lockfile entry
+- [ ] `rk install` without args in a workspace without lockfile → error with guidance
+- [ ] Tests: workspace detection, member enumeration, independent installation, error message
 
 ---
 
-## Phase 12 : CI/CD + Migration
+## Phase 12: CI/CD + Migration
 
-**User stories** : 35, 36
+**User stories**: 35, 36
 
 ### What to build
 
-GitHub Actions : workflow de release sur tag push — matrice de compilation croisee (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64). Publication des binaires en GitHub Release.
+GitHub Actions: release workflow on tag push — cross-compilation matrix (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64). Publish binaries as GitHub Releases.
 
-Workflow CI : tests + clippy + fmt sur chaque PR.
+CI workflow: tests + clippy + fmt on each PR.
 
-Commande `rk migrate <path>` : scan d'une structure renkei-old existante, generation d'un `renkei.json` valide, reorganisation des fichiers dans les dossiers conventionnes.
+`rk migrate <path>` command: scan an existing renkei-old structure, generate a valid `renkei.json`, reorganize files into conventional directories.
 
 ### Acceptance criteria
 
-- [ ] Workflow release produit des binaires pour les 5 targets
-- [ ] Workflow CI execute tests, clippy, fmt
-- [ ] `rk migrate` genere un `renkei.json` valide depuis l'ancien format
-- [ ] Le package migre passe `rk package` sans erreur
-- [ ] Tests : migration ancien format → nouveau format valide
+- [ ] Release workflow produces binaries for all 5 targets
+- [ ] CI workflow runs tests, clippy, fmt
+- [ ] `rk migrate` generates a valid `renkei.json` from the old format
+- [ ] The migrated package passes `rk package` without errors
+- [ ] Tests: old format → valid new format migration
