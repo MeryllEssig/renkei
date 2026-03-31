@@ -157,4 +157,99 @@ mod tests {
             "# Review\nReview the code."
         );
     }
+
+    #[test]
+    fn test_deploy_hook_creates_settings() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        let hooks_dir = pkg.path().join("hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        let source = hooks_dir.join("lint.json");
+        fs::write(
+            &source,
+            r#"[{"event":"before_tool","matcher":"bash","command":"lint.sh","timeout":5}]"#,
+        )
+        .unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let artifact = Artifact {
+            kind: ArtifactKind::Hook,
+            name: "lint".to_string(),
+            source_path: source,
+        };
+
+        let backend = ClaudeBackend;
+        let result = backend.deploy_hook(&artifact, &config).unwrap();
+
+        assert_eq!(result.artifact_kind, ArtifactKind::Hook);
+        assert_eq!(result.deployed_hooks.len(), 1);
+        assert_eq!(result.deployed_hooks[0].event, "PreToolUse");
+        assert_eq!(result.deployed_hooks[0].command, "lint.sh");
+
+        let settings_path = home.path().join(".claude/settings.json");
+        assert!(settings_path.exists());
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert_eq!(settings["hooks"]["PreToolUse"][0]["matcher"], "bash");
+        assert_eq!(settings["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"], 5);
+    }
+
+    #[test]
+    fn test_deploy_hook_merges_into_existing() {
+        let home = tempdir().unwrap();
+        let claude_dir = home.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"language":"French","hooks":{"Stop":[{"hooks":[{"type":"command","command":"existing.sh"}]}]}}"#,
+        )
+        .unwrap();
+
+        let pkg = tempdir().unwrap();
+        let hooks_dir = pkg.path().join("hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        fs::write(
+            hooks_dir.join("safety.json"),
+            r#"[{"event":"before_tool","matcher":"bash","command":"check.sh"}]"#,
+        )
+        .unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let artifact = Artifact {
+            kind: ArtifactKind::Hook,
+            name: "safety".to_string(),
+            source_path: hooks_dir.join("safety.json"),
+        };
+
+        let backend = ClaudeBackend;
+        backend.deploy_hook(&artifact, &config).unwrap();
+
+        let settings: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(settings["language"], "French");
+        assert!(settings["hooks"]["Stop"].is_array());
+        assert!(settings["hooks"]["PreToolUse"].is_array());
+    }
+
+    #[test]
+    fn test_deploy_hook_invalid_file() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+        let hooks_dir = pkg.path().join("hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        fs::write(hooks_dir.join("bad.json"), "not json").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let artifact = Artifact {
+            kind: ArtifactKind::Hook,
+            name: "bad".to_string(),
+            source_path: hooks_dir.join("bad.json"),
+        };
+
+        let backend = ClaudeBackend;
+        assert!(backend.deploy_hook(&artifact, &config).is_err());
+    }
 }
