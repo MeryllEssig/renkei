@@ -10,6 +10,20 @@ use crate::error::{RenkeiError, Result};
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::Manifest;
 
+fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache) {
+    if let Some(entry) = install_cache.packages.get(full_name) {
+        for artifact in &entry.deployed_artifacts {
+            let path = std::path::PathBuf::from(&artifact.deployed_path);
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::remove_dir(parent);
+            }
+        }
+    }
+}
+
 fn rollback(deployed: &[DeployedArtifact]) {
     for artifact in deployed.iter().rev() {
         let path = &artifact.deployed_path;
@@ -43,6 +57,9 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         return Err(RenkeiError::NoArtifactsFound(package_dir));
     }
 
+    let mut install_cache = InstallCache::load(config)?;
+    cleanup_previous_installation(&manifest.full_name, &install_cache);
+
     let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
 
     let mut deployed = Vec::new();
@@ -60,8 +77,6 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
             }
         }
     }
-
-    let mut install_cache = InstallCache::load(config)?;
     let deployed_entries: Vec<DeployedArtifactEntry> = deployed
         .iter()
         .map(|d| DeployedArtifactEntry {
@@ -102,6 +117,78 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
+
+    use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
+    use std::collections::HashMap;
+
+    fn make_cache_with_artifacts(artifacts: Vec<(&str, &str, &str)>) -> InstallCache {
+        let deployed: Vec<DeployedArtifactEntry> = artifacts
+            .into_iter()
+            .map(|(atype, name, path)| DeployedArtifactEntry {
+                artifact_type: atype.to_string(),
+                name: name.to_string(),
+                deployed_path: path.to_string(),
+            })
+            .collect();
+        let mut packages = HashMap::new();
+        packages.insert(
+            "@test/pkg".to_string(),
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: deployed,
+            },
+        );
+        InstallCache {
+            version: 1,
+            packages,
+        }
+    }
+
+    #[test]
+    fn test_cleanup_removes_old_artifacts() {
+        let dir = tempdir().unwrap();
+        let skill_dir = dir.path().join("renkei-review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        let file1 = skill_dir.join("SKILL.md");
+        let file2 = dir.path().join("agent.md");
+        fs::write(&file1, "old skill").unwrap();
+        fs::write(&file2, "old agent").unwrap();
+
+        let cache = make_cache_with_artifacts(vec![
+            ("skill", "review", file1.to_str().unwrap()),
+            ("agent", "deploy", file2.to_str().unwrap()),
+        ]);
+
+        cleanup_previous_installation("@test/pkg", &cache);
+        assert!(!file1.exists());
+        assert!(!file2.exists());
+        assert!(!skill_dir.exists());
+    }
+
+    #[test]
+    fn test_cleanup_noop_on_missing_package() {
+        let cache = InstallCache {
+            version: 1,
+            packages: HashMap::new(),
+        };
+        // Should not panic
+        cleanup_previous_installation("@test/nonexistent", &cache);
+    }
+
+    #[test]
+    fn test_cleanup_tolerates_already_missing_file() {
+        let cache = make_cache_with_artifacts(vec![(
+            "skill",
+            "gone",
+            "/tmp/nonexistent/SKILL.md",
+        )]);
+        // Should not panic
+        cleanup_previous_installation("@test/pkg", &cache);
+    }
 
     #[test]
     fn test_rollback_removes_deployed_files() {
