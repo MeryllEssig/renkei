@@ -86,12 +86,12 @@ Hook tracking in `install-cache.json`. Extended rollback to remove hooks from se
 
 ### Acceptance criteria
 
-- [ ] All 11 Renkei events are correctly translated (`before_tool` → `PreToolUse`, `after_tool` → `PostToolUse`, etc.)
-- [ ] `rk install` of a package with hooks merges entries into `settings.json`
-- [ ] Existing hooks in `settings.json` are not overwritten
-- [ ] Rollback removes only the failing package's hooks
-- [ ] `install-cache.json` tracks which hooks belong to which package
-- [ ] Tests: translation of all 11 events, hook JSON parsing, settings.json merge (empty, existing, append), hook rollback
+- [x] All 11 Renkei events are correctly translated (`before_tool` → `PreToolUse`, `after_tool` → `PostToolUse`, etc.)
+- [x] `rk install` of a package with hooks merges entries into `settings.json`
+- [x] Existing hooks in `settings.json` are not overwritten
+- [x] Rollback removes only the failing package's hooks
+- [x] `install-cache.json` tracks which hooks belong to which package
+- [x] Tests: translation of all 11 events, hook JSON parsing, settings.json merge (empty, existing, append), hook rollback
 
 ---
 
