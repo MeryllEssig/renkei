@@ -17,5 +17,8 @@ pub enum Commands {
     Install {
         /// Path to a local package directory, or a git URL
         source: String,
+        /// Install globally (to ~/.claude/) instead of project-locally
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
 }
