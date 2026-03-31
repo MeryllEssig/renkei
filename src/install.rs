@@ -249,4 +249,83 @@ mod tests {
         // Should not panic
         rollback(&deployed);
     }
+
+    use crate::artifact::{Artifact, ArtifactKind};
+    use crate::backend::claude::ClaudeBackend;
+    use std::cell::Cell;
+
+    struct FailingBackend {
+        fail_on: usize,
+        call_count: Cell<usize>,
+    }
+
+    impl Backend for FailingBackend {
+        fn name(&self) -> &str {
+            "failing"
+        }
+
+        fn detect_installed(&self, _config: &Config) -> bool {
+            true
+        }
+
+        fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            let count = self.call_count.get();
+            self.call_count.set(count + 1);
+            if count >= self.fail_on {
+                return Err(RenkeiError::DeploymentFailed("simulated failure".into()));
+            }
+            ClaudeBackend.deploy_skill(artifact, config)
+        }
+
+        fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            let count = self.call_count.get();
+            self.call_count.set(count + 1);
+            if count >= self.fail_on {
+                return Err(RenkeiError::DeploymentFailed("simulated failure".into()));
+            }
+            ClaudeBackend.deploy_agent(artifact, config)
+        }
+    }
+
+    #[test]
+    fn test_rollback_cleans_partial_deploy() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        // Create a package with 2 skills + 1 agent
+        fs::write(
+            pkg.path().join("renkei.json"),
+            r#"{"name":"@test/rollback","version":"1.0.0","description":"test","author":"t","license":"MIT","backends":["claude"]}"#,
+        )
+        .unwrap();
+
+        let skills_dir = pkg.path().join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+        fs::write(skills_dir.join("lint.md"), "# Lint").unwrap();
+        fs::write(skills_dir.join("review.md"), "# Review").unwrap();
+
+        let agents_dir = pkg.path().join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        fs::write(agents_dir.join("deploy.md"), "# Deploy").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        // Fail on the 3rd artifact (sorted: deploy(agent), lint(skill), review(skill))
+        // deploy is first (alphabetical), lint second, review third
+        let backend = FailingBackend {
+            fail_on: 2,
+            call_count: Cell::new(0),
+        };
+
+        let result = install_local(pkg.path(), &config, &backend);
+        assert!(result.is_err());
+
+        // First two deployed files should have been rolled back
+        assert!(!home.path().join(".claude/agents/deploy.md").exists());
+        assert!(!home
+            .path()
+            .join(".claude/skills/renkei-lint/SKILL.md")
+            .exists());
+        // The parent dir for lint should also be cleaned
+        assert!(!home.path().join(".claude/skills/renkei-lint").exists());
+    }
 }
