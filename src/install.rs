@@ -37,12 +37,14 @@ pub fn install_local(package_dir: &Path, config: &Config) -> Result<()> {
     let mut deployed = Vec::new();
 
     for art in &artifacts {
-        match art.kind {
-            ArtifactKind::Skill => {
-                let result = backend.deploy_skill(art, config)?;
-                deployed.push(result);
+        let result = match art.kind {
+            ArtifactKind::Skill => backend.deploy_skill(art, config)?,
+            ArtifactKind::Agent => {
+                // Agent deployment will be implemented in Step 3-4
+                continue;
             }
-        }
+        };
+        deployed.push(result);
     }
 
     let mut install_cache = InstallCache::load(config)?;

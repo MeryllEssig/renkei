@@ -5,6 +5,7 @@ use crate::error::Result;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArtifactKind {
     Skill,
+    Agent,
 }
 
 #[derive(Debug, Clone)]
@@ -17,22 +18,29 @@ pub struct Artifact {
 pub fn discover_artifacts(package_dir: &Path) -> Result<Vec<Artifact>> {
     let mut artifacts = Vec::new();
 
-    let skills_dir = package_dir.join("skills");
-    if skills_dir.is_dir() {
-        for entry in std::fs::read_dir(&skills_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "md") {
-                let name = path
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                artifacts.push(Artifact {
-                    kind: ArtifactKind::Skill,
-                    name,
-                    source_path: path,
-                });
+    let scan_dirs = [
+        ("skills", ArtifactKind::Skill),
+        ("agents", ArtifactKind::Agent),
+    ];
+
+    for (dir_name, kind) in &scan_dirs {
+        let dir = package_dir.join(dir_name);
+        if dir.is_dir() {
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "md") {
+                    let name = path
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    artifacts.push(Artifact {
+                        kind: kind.clone(),
+                        name,
+                        source_path: path,
+                    });
+                }
             }
         }
     }
@@ -84,6 +92,58 @@ mod tests {
     fn test_discover_empty_skills_dir() {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("skills")).unwrap();
+        let artifacts = discover_artifacts(dir.path()).unwrap();
+        assert!(artifacts.is_empty());
+    }
+
+    #[test]
+    fn test_discover_single_agent() {
+        let dir = tempdir().unwrap();
+        let agents = dir.path().join("agents");
+        std::fs::create_dir_all(&agents).unwrap();
+        std::fs::write(agents.join("deploy.md"), "# Deploy").unwrap();
+
+        let artifacts = discover_artifacts(dir.path()).unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, "deploy");
+        assert_eq!(artifacts[0].kind, ArtifactKind::Agent);
+    }
+
+    #[test]
+    fn test_discover_skill_and_agent() {
+        let dir = tempdir().unwrap();
+        let skills = dir.path().join("skills");
+        let agents = dir.path().join("agents");
+        std::fs::create_dir_all(&skills).unwrap();
+        std::fs::create_dir_all(&agents).unwrap();
+        std::fs::write(skills.join("review.md"), "# Review").unwrap();
+        std::fs::write(agents.join("deploy.md"), "# Deploy").unwrap();
+
+        let artifacts = discover_artifacts(dir.path()).unwrap();
+        assert_eq!(artifacts.len(), 2);
+        assert_eq!(artifacts[0].name, "deploy");
+        assert_eq!(artifacts[0].kind, ArtifactKind::Agent);
+        assert_eq!(artifacts[1].name, "review");
+        assert_eq!(artifacts[1].kind, ArtifactKind::Skill);
+    }
+
+    #[test]
+    fn test_discover_agents_ignores_non_md() {
+        let dir = tempdir().unwrap();
+        let agents = dir.path().join("agents");
+        std::fs::create_dir_all(&agents).unwrap();
+        std::fs::write(agents.join("notes.txt"), "not an agent").unwrap();
+        std::fs::write(agents.join("deploy.md"), "# Deploy").unwrap();
+
+        let artifacts = discover_artifacts(dir.path()).unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, "deploy");
+    }
+
+    #[test]
+    fn test_discover_empty_agents_dir() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("agents")).unwrap();
         let artifacts = discover_artifacts(dir.path()).unwrap();
         assert!(artifacts.is_empty());
     }
