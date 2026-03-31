@@ -144,18 +144,18 @@ Add support for two installation scopes: **project** (default) and **global** (`
 
 ### Acceptance criteria
 
-- [ ] `rk install ./fixture/` deploys skills/agents to `.claude/` at the project root
-- [ ] `rk install ./fixture/` deploys hooks/MCP to `~/.claude/` (global) even in project scope
-- [ ] `rk install -g ./fixture/` deploys everything to `~/.claude/`
-- [ ] Project install-cache is written to `~/.renkei/projects/<slug>/install-cache.json`
-- [ ] Global install-cache is written to `~/.renkei/install-cache.json`
-- [ ] `rk install` outside a git repo (without `-g`) → error with guidance message
-- [ ] Manifest with `scope: "global"` + `rk install` (no `-g`) → error
-- [ ] Manifest with `scope: "project"` + `rk install -g` → error
-- [ ] Manifest with `scope: "any"` works with both `-g` and without
-- [ ] `~/.renkei/cache/` renamed to `~/.renkei/archives/` — all archive operations use the new path
-- [ ] Reinstall in project scope correctly cleans up old project-scoped artifacts
-- [ ] Tests: Config::for_project paths, scope validation matrix, project root detection (git / no git), slug generation, dual install-cache (project + global), storage path migration, end-to-end project-scope install, end-to-end global install
+- [x] `rk install ./fixture/` deploys skills/agents to `.claude/` at the project root
+- [x] `rk install ./fixture/` deploys hooks/MCP to `~/.claude/` (global) even in project scope
+- [x] `rk install -g ./fixture/` deploys everything to `~/.claude/`
+- [x] Project install-cache is written to `~/.renkei/projects/<slug>/install-cache.json`
+- [x] Global install-cache is written to `~/.renkei/install-cache.json`
+- [x] `rk install` outside a git repo (without `-g`) → error with guidance message
+- [x] Manifest with `scope: "global"` + `rk install` (no `-g`) → error
+- [x] Manifest with `scope: "project"` + `rk install -g` → error
+- [x] Manifest with `scope: "any"` works with both `-g` and without
+- [x] `~/.renkei/cache/` renamed to `~/.renkei/archives/` — all archive operations use the new path
+- [x] Reinstall in project scope correctly cleans up old project-scoped artifacts
+- [x] Tests: Config::for_project paths, scope validation matrix, project root detection (git / no git), slug generation, dual install-cache (project + global), storage path migration, end-to-end project-scope install, end-to-end global install
 
 ---
 
