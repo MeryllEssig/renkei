@@ -247,7 +247,99 @@ mod tests {
         let loaded = InstallCache::load(&config).unwrap();
         let entry = &loaded.packages["@test/mcp-pkg"];
         assert_eq!(entry.deployed_mcp_servers.len(), 2);
-        assert!(entry.deployed_mcp_servers.contains(&"test-server".to_string()));
-        assert!(entry.deployed_mcp_servers.contains(&"api-server".to_string()));
+        assert!(entry
+            .deployed_mcp_servers
+            .contains(&"test-server".to_string()));
+        assert!(entry
+            .deployed_mcp_servers
+            .contains(&"api-server".to_string()));
+    }
+
+    #[test]
+    fn test_project_scope_save_and_load_roundtrip() {
+        let home = tempdir().unwrap();
+        let config = Config::for_project(
+            home.path().to_path_buf(),
+            std::path::PathBuf::from("/Users/test/Projects/foo"),
+        );
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/project-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
+            },
+        );
+        cache.save(&config).unwrap();
+
+        // Verify file is at the project-specific path
+        let expected_path = home
+            .path()
+            .join(".renkei/projects/Users-test-Projects-foo/install-cache.json");
+        assert!(expected_path.exists());
+
+        // Roundtrip
+        let loaded = InstallCache::load(&config).unwrap();
+        assert_eq!(loaded.packages.len(), 1);
+        assert_eq!(loaded.packages["@test/project-pkg"].version, "1.0.0");
+    }
+
+    #[test]
+    fn test_project_and_global_caches_independent() {
+        let home = tempdir().unwrap();
+        let global_config = Config::with_home_dir(home.path().to_path_buf());
+        let project_config = Config::for_project(
+            home.path().to_path_buf(),
+            std::path::PathBuf::from("/Users/test/myproject"),
+        );
+
+        // Save to global cache
+        let mut global_cache = InstallCache::load(&global_config).unwrap();
+        global_cache.upsert_package(
+            "@test/global-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/g".to_string(),
+                integrity: "aaa".to_string(),
+                archive_path: "/tmp/g.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
+            },
+        );
+        global_cache.save(&global_config).unwrap();
+
+        // Save to project cache
+        let mut project_cache = InstallCache::load(&project_config).unwrap();
+        project_cache.upsert_package(
+            "@test/project-pkg",
+            PackageEntry {
+                version: "2.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/p".to_string(),
+                integrity: "bbb".to_string(),
+                archive_path: "/tmp/p.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
+            },
+        );
+        project_cache.save(&project_config).unwrap();
+
+        // Load each independently — they don't contaminate each other
+        let loaded_global = InstallCache::load(&global_config).unwrap();
+        assert_eq!(loaded_global.packages.len(), 1);
+        assert!(loaded_global.packages.contains_key("@test/global-pkg"));
+        assert!(!loaded_global.packages.contains_key("@test/project-pkg"));
+
+        let loaded_project = InstallCache::load(&project_config).unwrap();
+        assert_eq!(loaded_project.packages.len(), 1);
+        assert!(loaded_project.packages.contains_key("@test/project-pkg"));
+        assert!(!loaded_project.packages.contains_key("@test/global-pkg"));
     }
 }

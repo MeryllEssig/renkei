@@ -97,7 +97,9 @@ mod tests {
 
         let (archive_path, hash) = create_archive(pkg.path(), &manifest, &config).unwrap();
 
-        let expected_path = home.path().join(".renkei/archives/@test/sample/0.1.0.tar.gz");
+        let expected_path = home
+            .path()
+            .join(".renkei/archives/@test/sample/0.1.0.tar.gz");
         assert_eq!(archive_path, expected_path);
         assert!(archive_path.exists());
         assert_eq!(hash.len(), 64);

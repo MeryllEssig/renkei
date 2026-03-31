@@ -9,6 +9,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let home_dir = std::env::var("HOME")
             .map(PathBuf::from)
@@ -107,10 +108,8 @@ mod tests {
 
     #[test]
     fn test_for_project_skills_dir() {
-        let config = Config::for_project(
-            PathBuf::from("/home/user"),
-            PathBuf::from("/projects/foo"),
-        );
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
         assert_eq!(
             config.claude_skills_dir(),
             PathBuf::from("/projects/foo/.claude/skills")
@@ -119,10 +118,8 @@ mod tests {
 
     #[test]
     fn test_for_project_agents_dir() {
-        let config = Config::for_project(
-            PathBuf::from("/home/user"),
-            PathBuf::from("/projects/foo"),
-        );
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
         assert_eq!(
             config.claude_agents_dir(),
             PathBuf::from("/projects/foo/.claude/agents")
@@ -131,10 +128,8 @@ mod tests {
 
     #[test]
     fn test_for_project_settings_path_stays_global() {
-        let config = Config::for_project(
-            PathBuf::from("/home/user"),
-            PathBuf::from("/projects/foo"),
-        );
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
         assert_eq!(
             config.claude_settings_path(),
             PathBuf::from("/home/user/.claude/settings.json")
@@ -143,10 +138,8 @@ mod tests {
 
     #[test]
     fn test_for_project_config_path_stays_global() {
-        let config = Config::for_project(
-            PathBuf::from("/home/user"),
-            PathBuf::from("/projects/foo"),
-        );
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
         assert_eq!(
             config.claude_config_path(),
             PathBuf::from("/home/user/.claude.json")
@@ -201,7 +194,9 @@ mod tests {
         );
         assert_eq!(
             config.install_cache_path(),
-            PathBuf::from("/home/user/.renkei/projects/Users-meryll-Projects-foo/install-cache.json")
+            PathBuf::from(
+                "/home/user/.renkei/projects/Users-meryll-Projects-foo/install-cache.json"
+            )
         );
     }
 }

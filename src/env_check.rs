@@ -24,10 +24,7 @@ pub fn check_required_env(required_env: &serde_json::Value) -> Vec<MissingEnvVar
 }
 
 pub fn print_env_warnings(missing: &[MissingEnvVar]) {
-    println!(
-        "\n{}",
-        "Missing environment variables:".yellow().bold()
-    );
+    println!("\n{}", "Missing environment variables:".yellow().bold());
     for var in missing {
         println!(
             "  {} {}: {}",

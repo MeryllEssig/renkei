@@ -594,10 +594,9 @@ fn test_install_mcp_preserves_existing_servers() {
         .assert()
         .success();
 
-    let claude_json: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(home.path().join(".claude.json")).unwrap(),
-    )
-    .unwrap();
+    let claude_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(home.path().join(".claude.json")).unwrap())
+            .unwrap();
     // Both servers present
     assert_eq!(
         claude_json["mcpServers"]["existing-server"]["command"],
@@ -654,10 +653,9 @@ fn test_reinstall_mcp_no_duplication() {
         .success();
 
     // Verify only one MCP server entry
-    let claude_json: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(home.path().join(".claude.json")).unwrap(),
-    )
-    .unwrap();
+    let claude_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(home.path().join(".claude.json")).unwrap())
+            .unwrap();
     let servers = claude_json["mcpServers"].as_object().unwrap();
     assert_eq!(servers.len(), 1);
     assert!(servers.contains_key("test-server"));
@@ -789,9 +787,7 @@ fn test_install_project_scope_deploys_to_project_root() {
         .stdout(predicate::str::contains("Done."));
 
     // Skills deployed to project/.claude/skills/
-    let skill_path = project
-        .path()
-        .join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = project.path().join(".claude/skills/renkei-review/SKILL.md");
     assert!(
         skill_path.exists(),
         "Skill should be at project root: {:?}",

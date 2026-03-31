@@ -4,18 +4,13 @@ use std::path::Path;
 
 use crate::error::{RenkeiError, Result};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ManifestScope {
+    #[default]
     Any,
     Global,
     Project,
-}
-
-impl Default for ManifestScope {
-    fn default() -> Self {
-        ManifestScope::Any
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

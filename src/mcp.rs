@@ -15,9 +15,9 @@ pub fn merge_mcp_into_config(
     config_path: &Path,
     mcp_config: &serde_json::Value,
 ) -> Result<Vec<DeployedMcpEntry>> {
-    let servers = mcp_config.as_object().ok_or_else(|| {
-        RenkeiError::InvalidManifest("mcp field must be a JSON object".into())
-    })?;
+    let servers = mcp_config
+        .as_object()
+        .ok_or_else(|| RenkeiError::InvalidManifest("mcp field must be a JSON object".into()))?;
 
     let mut config = json_file::read_json_or_empty(config_path)?;
 
