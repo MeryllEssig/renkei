@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::artifact::ArtifactKind;
 use crate::config::Config;
 use crate::error::Result;
+use crate::hook::DeployedHookEntry;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstallCache {
@@ -26,6 +27,8 @@ pub struct DeployedArtifactEntry {
     pub artifact_type: ArtifactKind,
     pub name: String,
     pub deployed_path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deployed_hooks: Vec<DeployedHookEntry>,
 }
 
 impl InstallCache {
@@ -89,6 +92,7 @@ mod tests {
                     artifact_type: ArtifactKind::Skill,
                     name: "review".to_string(),
                     deployed_path: "/home/.claude/skills/renkei-review/SKILL.md".to_string(),
+                    deployed_hooks: vec![],
                 }],
             },
         );
@@ -136,5 +140,71 @@ mod tests {
         );
         assert_eq!(cache.packages.len(), 1);
         assert_eq!(cache.packages["@test/pkg"].version, "2.0.0");
+    }
+
+    #[test]
+    fn test_save_and_load_with_hooks() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/hook-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![DeployedArtifactEntry {
+                    artifact_type: ArtifactKind::Hook,
+                    name: "lint".to_string(),
+                    deployed_path: "/home/.claude/settings.json".to_string(),
+                    deployed_hooks: vec![DeployedHookEntry {
+                        event: "PreToolUse".to_string(),
+                        matcher: Some("bash".to_string()),
+                        command: "lint.sh".to_string(),
+                    }],
+                }],
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/hook-pkg"];
+        assert_eq!(entry.deployed_artifacts[0].artifact_type, ArtifactKind::Hook);
+        assert_eq!(entry.deployed_artifacts[0].deployed_hooks.len(), 1);
+        assert_eq!(entry.deployed_artifacts[0].deployed_hooks[0].event, "PreToolUse");
+        assert_eq!(entry.deployed_artifacts[0].deployed_hooks[0].command, "lint.sh");
+    }
+
+    #[test]
+    fn test_load_legacy_cache_without_hooks_field() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        // Write a cache entry without deployed_hooks field (legacy format)
+        let legacy_json = r#"{
+            "version": 1,
+            "packages": {
+                "@test/legacy": {
+                    "version": "1.0.0",
+                    "source": "local",
+                    "source_path": "/tmp",
+                    "integrity": "abc",
+                    "archive_path": "/tmp/a.tar.gz",
+                    "deployed_artifacts": [
+                        {"artifact_type": "skill", "name": "review", "deployed_path": "/p"}
+                    ]
+                }
+            }
+        }"#;
+        let cache_path = config.install_cache_path();
+        std::fs::create_dir_all(cache_path.parent().unwrap()).unwrap();
+        std::fs::write(&cache_path, legacy_json).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/legacy"];
+        assert_eq!(entry.deployed_artifacts[0].deployed_hooks.len(), 0);
     }
 }

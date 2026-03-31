@@ -78,6 +78,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
             artifact_type: d.artifact_kind.clone(),
             name: d.artifact_name.clone(),
             deployed_path: d.deployed_path.to_string_lossy().to_string(),
+            deployed_hooks: d.deployed_hooks.clone(),
         })
         .collect();
 
@@ -124,6 +125,7 @@ mod tests {
                 artifact_type: kind,
                 name: name.to_string(),
                 deployed_path: path.to_string(),
+                deployed_hooks: vec![],
             })
             .collect();
         let mut packages = HashMap::new();
