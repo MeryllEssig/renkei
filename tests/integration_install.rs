@@ -169,3 +169,137 @@ fn test_install_nonexistent_path() {
         .failure()
         .stderr(predicate::str::contains("Manifest not found"));
 }
+
+#[test]
+fn test_install_mixed_package() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mixed-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("3 artifact(s)"));
+
+    // Verify skills deployed
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
+
+    // Verify agent deployed (no renkei- prefix, no subdirectory)
+    assert!(home.path().join(".claude/agents/deploy.md").exists());
+
+    // Verify install-cache.json
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache_content = fs::read_to_string(&cache_path).unwrap();
+    let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
+    let artifacts = &cache["packages"]["@test/mixed"]["deployed_artifacts"];
+    assert_eq!(artifacts.as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn test_install_agent_deploy_path() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mixed-package"))
+        .assert()
+        .success();
+
+    let deployed = fs::read_to_string(home.path().join(".claude/agents/deploy.md")).unwrap();
+    let source = fs::read_to_string(
+        std::env::current_dir()
+            .unwrap()
+            .join("tests/fixtures/mixed-package/agents/deploy.md"),
+    )
+    .unwrap();
+    assert_eq!(deployed, source);
+}
+
+#[test]
+fn test_reinstall_replaces_artifacts() {
+    let home = tempdir().unwrap();
+
+    // First install
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mixed-package"))
+        .assert()
+        .success();
+
+    // Second install (reinstall)
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mixed-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("3 artifact(s)"));
+
+    // Verify still exactly 1 cache entry with 3 artifacts
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache_content = fs::read_to_string(&cache_path).unwrap();
+    let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
+    let packages = cache["packages"].as_object().unwrap();
+    assert_eq!(packages.len(), 1);
+    let artifacts = &packages["@test/mixed"]["deployed_artifacts"];
+    assert_eq!(artifacts.as_array().unwrap().len(), 3);
+
+    // Verify all files still exist after reinstall
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
+    assert!(home.path().join(".claude/agents/deploy.md").exists());
+}
+
+#[test]
+fn test_reinstall_updates_cache() {
+    let home = tempdir().unwrap();
+
+    // Install valid-package first
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success();
+
+    // Reinstall same package
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success();
+
+    // Cache should have exactly 1 entry
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache_content = fs::read_to_string(&cache_path).unwrap();
+    let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
+    let packages = cache["packages"].as_object().unwrap();
+    assert_eq!(packages.len(), 1);
+    assert_eq!(
+        packages["@test/sample-workflow"]["version"],
+        "0.1.0"
+    );
+}
