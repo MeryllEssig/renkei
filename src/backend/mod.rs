@@ -12,6 +12,7 @@ pub struct DeployedArtifact {
     pub deployed_path: PathBuf,
 }
 
+#[allow(dead_code)]
 pub trait Backend {
     fn name(&self) -> &str;
     fn detect_installed(&self, config: &Config) -> bool;

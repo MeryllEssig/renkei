@@ -25,10 +25,12 @@ fn test_install_valid_local_package() {
         .stdout(predicate::str::contains("Done."));
 
     // Verify skill deployed
-    let skill_path = home
-        .path()
-        .join(".claude/skills/renkei-review/SKILL.md");
-    assert!(skill_path.exists(), "SKILL.md should exist at {:?}", skill_path);
+    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    assert!(
+        skill_path.exists(),
+        "SKILL.md should exist at {:?}",
+        skill_path
+    );
 
     // Verify content matches source
     let deployed = fs::read_to_string(&skill_path).unwrap();
@@ -74,8 +76,14 @@ fn test_install_multi_skill_package() {
         .success()
         .stdout(predicate::str::contains("2 artifact(s)"));
 
-    assert!(home.path().join(".claude/skills/renkei-review/SKILL.md").exists());
-    assert!(home.path().join(".claude/skills/renkei-lint/SKILL.md").exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
 }
 
 #[test]

@@ -1,7 +1,11 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "rk", version, about = "Package manager for AI agentic workflows")]
+#[command(
+    name = "rk",
+    version,
+    about = "Package manager for AI agentic workflows"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

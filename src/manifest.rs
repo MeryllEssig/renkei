@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::error::{RenkeiError, Result};
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct Manifest {
     pub name: String,
     pub version: String,
@@ -23,6 +24,7 @@ pub struct Manifest {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ValidatedManifest {
     pub scope: String,
     pub short_name: String,
@@ -88,8 +90,10 @@ fn parse_scoped_name(name: &str) -> Result<(String, String)> {
     let scope = parts[0];
     let short_name = parts[1];
 
-    let valid_chars =
-        |s: &str| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let valid_chars = |s: &str| {
+        s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    };
     if !valid_chars(scope) || !valid_chars(short_name) {
         return Err(RenkeiError::InvalidScope {
             name: name.to_string(),
@@ -148,8 +152,7 @@ mod tests {
 
     #[test]
     fn test_missing_description_fails() {
-        let json =
-            r#"{"name":"@t/n","version":"1.0.0","author":"a","license":"MIT","backends":["claude"]}"#;
+        let json = r#"{"name":"@t/n","version":"1.0.0","author":"a","license":"MIT","backends":["claude"]}"#;
         let result: std::result::Result<Manifest, _> = serde_json::from_str(json);
         assert!(result.is_err());
     }

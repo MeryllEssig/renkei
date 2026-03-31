@@ -7,11 +7,13 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
-        let home_dir =
-            std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/tmp"));
+        let home_dir = std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/tmp"));
         Self { home_dir }
     }
 
+    #[allow(dead_code)]
     pub fn with_home_dir(home_dir: PathBuf) -> Self {
         Self { home_dir }
     }
