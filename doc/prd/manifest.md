@@ -17,10 +17,11 @@ For a repo without a workspace (single package), the conventional directories (`
 ## Manifest `renkei.json`
 
 - Required fields: `name` (scoped `@scope/name`, **required from v1**), `version` (semver), `description`, `author`, `license`, `backends`.
-- Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`.
+- Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`.
 - **No `artifacts` field**: pure convention. The `skills/`, `hooks/`, `agents/` directories are the source of truth. Any file present in these directories is a deployed artifact.
 - `mcp` declares MCP configurations in the native `command`/`args`/`env` format (standard between Claude and Cursor, no extra abstraction).
 - `requiredEnv` lists environment variables with their descriptions.
+- `scope` controls where the package can be installed: `"any"` (default, both global and project), `"global"` (only with `-g`), or `"project"` (only without `-g`). See [Scope](./scope.md).
 
 ```json
 {
@@ -30,6 +31,7 @@ For a repo without a workspace (single package), the conventional directories (`
   "author": "meryll",
   "license": "MIT",
   "backends": ["claude"],
+  "scope": "any",
   "mcp": {
     "my-server": {
       "command": "node",

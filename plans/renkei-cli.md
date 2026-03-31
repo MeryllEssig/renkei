@@ -8,18 +8,22 @@ Durable decisions that apply across all phases:
 
 - **Language**: Rust, single binary `rk`
 - **Backend trait**: `Backend` with methods `name()`, `detect_installed()`, `deploy_skill()`, `deploy_hook()`, `deploy_agent()`, `register_mcp()`. Only `ClaudeBackend` in v1.
-- **Manifest**: `renkei.json` — required fields: `name` (scoped `@scope/name`), `version` (semver), `description`, `author`, `license`, `backends`. Optional: `keywords`, `mcp`, `requiredEnv`, `workspace`.
+- **Manifest**: `renkei.json` — required fields: `name` (scoped `@scope/name`), `version` (semver), `description`, `author`, `license`, `backends`. Optional: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`.
+- **Scope field**: `scope` in `renkei.json` — `"any"` (default), `"global"` (only `-g`), `"project"` (only without `-g`). Controls where a package can be installed.
+- **Installation scope**: project scope by default (`rk install`), global scope with `-g` (`rk install -g`). In project scope, skills/agents deploy to `.claude/` at the project root; hooks/MCP always deploy globally to `~/.claude/`. The `Config` struct absorbs the scope — the backend is agnostic.
 - **Convention over config**: artifacts discovered from `skills/`, `hooks/`, `agents/`. No `artifacts` field in the manifest.
 - **Deployment paths (hardcoded)**:
-  - Skills → `~/.claude/skills/renkei-<name>/SKILL.md`
-  - Hooks → merge into `~/.claude/settings.json`
-  - Agents → `~/.claude/agents/<name>.md`
-  - MCP → merge into `~/.claude.json`
+  - Skills → `~/.claude/skills/renkei-<name>/SKILL.md` (global) or `.claude/skills/renkei-<name>/SKILL.md` (project)
+  - Hooks → merge into `~/.claude/settings.json` (always global)
+  - Agents → `~/.claude/agents/<name>.md` (global) or `.claude/agents/<name>.md` (project)
+  - MCP → merge into `~/.claude.json` (always global)
 - **Local storage**:
-  - `~/.renkei/cache/@scope/name/<version>.tar.gz` (immutable archives)
-  - `~/.renkei/install-cache.json` (mapping of packages → deployed artifacts)
-  - `rk.lock` at the project root (committable lockfile)
-- **Injectable home directory**: every function reading/writing `~/.claude/` or `~/.renkei/` accepts a configurable base path (`Config` struct with `home_dir: PathBuf`) to enable testing in a tempdir.
+  - `~/.renkei/archives/@scope/name/<version>.tar.gz` (immutable archives)
+  - `~/.renkei/install-cache.json` (global install-cache: packages installed with `-g`)
+  - `~/.renkei/projects/<slug>/install-cache.json` (per-project install-cache, slug = slugified absolute path)
+  - `~/.renkei/rk.lock` (global lockfile)
+  - `rk.lock` at the project root (committable project lockfile)
+- **Injectable home directory**: every function reading/writing `~/.claude/` or `~/.renkei/` accepts a configurable base path (`Config` struct with `home_dir: PathBuf`) to enable testing in a tempdir. `Config::for_project(project_root)` redirects skill/agent paths to the project's `.claude/`.
 - **Hook tracking**: in `install-cache.json`, never in the backend's JSON. The backend JSON stays 100% native.
 - **Fail-fast + rollback**: every installation is atomic. Writes are collected in a `Vec`, rolled back in reverse order on error.
 - **Main crates**: `clap` (derive), `serde` + `serde_json`, `semver`, `tar` + `flate2`, `sha2`, `tempfile`, `thiserror`, `inquire`, `owo-colors`, `etcetera`. Dev: `assert_cmd`, `predicates`. If you need to install another crate, please make sure it's well supported. Don't add too much crates if you can do otherwise.
@@ -116,7 +120,44 @@ Environment variable checking: after successful installation, each variable from
 
 ---
 
-## Phase 5: Git installation (SSH, HTTPS, tags) + Backend detection
+## Phase 5: Installation scope (global vs project)
+
+**User stories**: 14b, 14c, 14d, 14e, 14f, 14g
+
+### What to build
+
+Add support for two installation scopes: **project** (default) and **global** (`-g` / `--global`).
+
+**Scope in the manifest**: parse the optional `scope` field from `renkei.json` (`"any"` default, `"global"`, `"project"`). Validate scope compatibility at install time — error if the manifest's scope conflicts with the requested install scope (see validation matrix in PRD [scope.md](../doc/prd/scope.md)).
+
+**Project root detection**: detect the git root via `git rev-parse --show-toplevel`. If not inside a git repo and `-g` not specified → error with guidance.
+
+**Config adaptation**: add `Config::for_project(project_root: PathBuf)` that redirects skill/agent deployment paths to `<project_root>/.claude/` while keeping hook/MCP paths pointing to `~/.claude/`. The existing `Config::with_home_dir()` continues to serve global scope. The backend trait methods remain unchanged — they follow the paths from `Config`.
+
+**Dual install-cache**: the global install-cache stays at `~/.renkei/install-cache.json`. Per-project install-caches are stored at `~/.renkei/projects/<slug>/install-cache.json` where `<slug>` is the slugified absolute path of the project root (e.g., `/Users/meryll/Projects/foo` → `Users-meryll-Projects-foo`).
+
+**Storage migration**: rename `~/.renkei/cache/` to `~/.renkei/archives/`. Update all code referencing the old path.
+
+**CLI flag**: add `-g` / `--global` flag to `rk install`. Default is project scope.
+
+### Acceptance criteria
+
+- [ ] `rk install ./fixture/` deploys skills/agents to `.claude/` at the project root
+- [ ] `rk install ./fixture/` deploys hooks/MCP to `~/.claude/` (global) even in project scope
+- [ ] `rk install -g ./fixture/` deploys everything to `~/.claude/`
+- [ ] Project install-cache is written to `~/.renkei/projects/<slug>/install-cache.json`
+- [ ] Global install-cache is written to `~/.renkei/install-cache.json`
+- [ ] `rk install` outside a git repo (without `-g`) → error with guidance message
+- [ ] Manifest with `scope: "global"` + `rk install` (no `-g`) → error
+- [ ] Manifest with `scope: "project"` + `rk install -g` → error
+- [ ] Manifest with `scope: "any"` works with both `-g` and without
+- [ ] `~/.renkei/cache/` renamed to `~/.renkei/archives/` — all archive operations use the new path
+- [ ] Reinstall in project scope correctly cleans up old project-scoped artifacts
+- [ ] Tests: Config::for_project paths, scope validation matrix, project root detection (git / no git), slug generation, dual install-cache (project + global), storage path migration, end-to-end project-scope install, end-to-end global install
+
+---
+
+## Phase 6: Git installation (SSH, HTTPS, tags) + Backend detection
 
 **User stories**: 1, 2, 3, 6, 7, 8
 
@@ -141,13 +182,13 @@ Extract the commit SHA from the clone for future use (lockfile).
 
 ---
 
-## Phase 6: Conflict management + Interactive renaming
+## Phase 7: Conflict management + Interactive renaming
 
 **User stories**: 15, 16, 17, 18
 
 ### What to build
 
-Before each skill deployment, check `install-cache.json` for whether another package already owns a skill with the same name.
+Before each skill deployment, check `install-cache.json` for whether another package already owns a skill with the same name. In project scope, check the project install-cache; in global scope, check the global install-cache.
 
 Behavior by context:
 - **TTY**: interactive prompt (`dialoguer`) to choose a new name
@@ -168,27 +209,28 @@ On rename: deploy under the new name (`renkei-<new>/SKILL.md`), update the `name
 
 ---
 
-## Phase 7: `rk list`
+## Phase 8: `rk list`
 
 **User stories**: 19, 20
 
 ### What to build
 
-`rk list` command: read `install-cache.json`, display a table of all installed packages with name, version, source, and artifact types.
+`rk list` command: read the project install-cache (default) or global install-cache (`-g`), display a table of all installed packages with name, version, source, scope, and artifact types.
 
 Visual distinction between Git sources (`[git]`) and local sources (`[local]`). Handle the empty case ("No packages installed").
 
 ### Acceptance criteria
 
-- [ ] `rk list` displays all installed packages with name, version, source
+- [ ] `rk list` displays project-scoped installed packages
+- [ ] `rk list -g` displays globally installed packages
 - [ ] Git and local packages are visually distinguished
 - [ ] With no installed packages, explicit message
 - [ ] Exit code 0 in all cases
-- [ ] Tests: output formatting, empty case, mixed sources
+- [ ] Tests: output formatting, empty case, mixed sources, scope filtering
 
 ---
 
-## Phase 8: `rk doctor`
+## Phase 9: `rk doctor`
 
 **User stories**: 21, 22, 23, 24, 25
 
@@ -197,13 +239,13 @@ Visual distinction between Git sources (`[git]`) and local sources (`[local]`). 
 `rk doctor` command running a series of health checks:
 
 1. Installed backends (config directory exists)
-2. Deployed files still exist
+2. Deployed files still exist (check both project and global paths)
 3. Required environment variables present
 4. Locally modified skills (SHA-256 hash vs cached archive)
 5. Hooks still present in `settings.json`
 6. MCP configs still in `~/.claude.json`
 
-Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1 if problems found.
+Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1 if problems found. By default checks project scope; `-g` checks global scope.
 
 ### Acceptance criteria
 
@@ -217,28 +259,41 @@ Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1
 
 ---
 
-## Phase 9: Lockfile
+## Phase 10: Lockfile
 
 **User stories**: 30, 31, 32, 33, 34
 
 ### What to build
 
-After each `rk install <source>`, generate/update `rk.lock` in the current directory. JSON format: `lockfileVersion: 1`, packages with `version`, `source`, `tag` (optional), `resolved` (commit SHA), `integrity` (SHA-256 of the archive).
+After each `rk install <source>`, generate/update the lockfile. The lockfile location depends on the scope:
+- **Project scope** (`rk install <source>`): write/update `rk.lock` at the project root (detected via git root). This lockfile is committable to the repo for team reproducibility.
+- **Global scope** (`rk install -g <source>`): write/update `~/.renkei/rk.lock`.
 
-`rk install` without arguments: detect `rk.lock` in the cwd, read it, reinstall each package from cache or re-clone at the exact commit. Integrity check: hash of the cached archive vs lockfile hash.
+Both lockfiles use the same JSON format: `lockfileVersion: 1`, packages with `version`, `source`, `tag` (optional), `resolved` (commit SHA), `integrity` (SHA-256 of the archive).
+
+**No-argument install from lockfile**:
+- `rk install` (no args): detect `rk.lock` at the project root, read it, reinstall each package in project scope (skills/agents to `.claude/`, hooks/MCP to `~/.claude/`). Use cached archives when available, re-clone at the exact commit otherwise.
+- `rk install -g` (no args): detect `~/.renkei/rk.lock`, read it, reinstall each package in global scope.
+- No lockfile found → explicit error: "No rk.lock found. Use `rk install <source>` to install a package."
+
+Integrity check: hash of the cached archive vs lockfile hash.
+
+**Important**: a package installed in project scope that includes hooks/MCP (which deploy globally) is still tracked in the project `rk.lock`. The lockfile records *what was installed in this scope*, not *where each artifact physically lives*. When replaying from lockfile, the install pipeline handles routing hooks/MCP to global paths automatically via `Config::for_project`.
 
 ### Acceptance criteria
 
-- [ ] `rk install <source>` generates/updates `rk.lock` in the cwd
+- [ ] `rk install <source>` generates/updates `rk.lock` at the project root
+- [ ] `rk install -g <source>` generates/updates `~/.renkei/rk.lock`
 - [ ] The lockfile contains version, source, tag, resolved (SHA), integrity (SHA-256)
-- [ ] `rk install` (no args) with `rk.lock` installs the exact versions
+- [ ] `rk install` (no args) with project `rk.lock` installs in project scope
+- [ ] `rk install -g` (no args) with global `rk.lock` installs in global scope
 - [ ] Corrupted archive in cache → integrity error
 - [ ] `rk install` without args and without `rk.lock` → explicit error
-- [ ] Tests: lockfile serialization/deserialization, SHA-256 computation, round-trip install → lockfile → clean → install-from-lockfile, integrity check
+- [ ] Tests: lockfile serialization/deserialization, SHA-256 computation, round-trip install → lockfile → clean → install-from-lockfile (both scopes), integrity check
 
 ---
 
-## Phase 10: `rk package`
+## Phase 11: `rk package`
 
 **User stories**: 26, 27, 28, 29
 
@@ -261,7 +316,7 @@ Display summary: list of included files, count, archive size.
 
 ---
 
-## Phase 11: Workspace
+## Phase 12: Workspace
 
 **User stories**: workspace support (PRD "Workspace" section)
 
@@ -283,7 +338,7 @@ Workspace detection: a root `renkei.json` with a `workspace` field listing membe
 
 ---
 
-## Phase 12: CI/CD + Migration
+## Phase 13: CI/CD + Migration
 
 **User stories**: 35, 36
 

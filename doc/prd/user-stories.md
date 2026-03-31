@@ -17,6 +17,15 @@
 13. As a developer, I want to see the list of missing required environment variables after installation so I can configure them without digging through documentation.
 14. As a developer, I want to re-run `rk install` on an already-installed package to update the deployed artifacts to the new version.
 
+## Installation scope
+
+14b. As a developer, I want `rk install` to deploy skills and agents at the project level by default (`.claude/`) so that different projects can have different workflows without interference.
+14c. As a developer, I want to install a package globally with `-g` so that the workflow is available across all my projects.
+14d. As a developer, I want hooks and MCP servers to always be deployed globally (even in project scope) since they are inherently global resources.
+14e. As a package creator, I want to tag my package as `global`-only or `project`-only via the `scope` field so that it cannot be installed in an inappropriate context.
+14f. As a developer, I want `rk install` outside a git repository (without `-g`) to fail with a clear error so I don't accidentally deploy to the wrong location.
+14g. As a developer, I want `rk uninstall` to mirror `rk install` scoping so that project packages are removed from the project and global packages from the global scope, with no cross-scope fallback.
+
 ## Conflict management
 
 15. As a developer, I want to be alerted if two packages deploy a skill with the same name to avoid silent overwrites.

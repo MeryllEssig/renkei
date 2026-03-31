@@ -1,11 +1,33 @@
 # Installation
 
+## Installation scope
+
+By default, `rk install` operates in **project scope**: skills and agents are deployed to the project's local backend directory (`.claude/`), while hooks and MCP servers go to the global backend directory (`~/.claude/`) since they are inherently global resources. The package is tracked in the project's `rk.lock` and install-cache.
+
+Use `-g` / `--global` to install in **global scope**: all artifacts deploy to `~/.claude/`, tracked in `~/.renkei/rk.lock` and `~/.renkei/install-cache.json`.
+
+See [Scope](./scope.md) for the full scope specification.
+
+### Scope validation
+
+Before installation, the manifest's `scope` field is checked against the requested scope:
+
+| Manifest `scope` | `rk install` (project) | `rk install -g` (global) |
+|---|---|---|
+| `any` (default) | OK | OK |
+| `global` | Error: "This package is global-only, use -g" | OK |
+| `project` | OK | Error: "This package is project-only, remove -g" |
+
+### Project root detection
+
+Without `-g`, the project root is detected via `git rev-parse --show-toplevel`. If not inside a git repository, `rk install` fails with an explicit error suggesting `-g`.
+
 ## Git installation
 
 1. `git clone --depth 1` into a temp directory (`/tmp/rk-xxx/`)
 2. Validate the `renkei.json` manifest
-3. Create the `.tar.gz` archive in `~/.renkei/cache/@scope/name/<version>.tar.gz`
-4. Deploy artifacts from the archive
+3. Create the `.tar.gz` archive in `~/.renkei/archives/@scope/name/<version>.tar.gz`
+4. Deploy artifacts from the archive (respecting the installation scope)
 5. Delete the temp clone
 
 Without `--tag` or `--branch`, HEAD of the default branch is used. The commit SHA is recorded in the lockfile for reproducibility. The version in `renkei.json` is authoritative (trust the manifest) — no consistency check against Git tags.
@@ -17,7 +39,9 @@ Without `--tag` or `--branch`, HEAD of the default branch is used. The commit SH
 
 ## No-argument installation
 
-- If `rk.lock` exists in the current directory → installs the exact versions from the lockfile.
+- `rk install` → if `rk.lock` exists in the project root → installs the exact versions from the lockfile in project scope.
+- `rk install -g` → if `~/.renkei/rk.lock` exists → installs the exact versions from the global lockfile in global scope.
+- If no lockfile found in the expected location → explicit error: "No rk.lock found. Use `rk install <source>` to install a package."
 - If no lockfile but workspace detected → explicit error: "workspace detected, use `rk install --link .` for dev".
 
 ## Error handling: fail-fast + rollback

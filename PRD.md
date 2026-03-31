@@ -27,9 +27,13 @@ All user stories organized by theme and phase:
 
 `Backend` trait interface, multi-backend support matrix (Claude Code, Cursor, Codex, Gemini), and hardcoded deployment conventions (paths, prefixes, merge targets).
 
+## [Installation Scope](./doc/prd/scope.md)
+
+Global vs project installation scope. Project scope (default) deploys skills/agents locally, global scope (`-g`) deploys everything to `~/`. Scope field in manifest (`any`, `global`, `project`), project root detection, Config adaptation, uninstall mirroring.
+
 ## [Installation](./doc/prd/installation.md)
 
-Git and local installation flows, no-argument lockfile install, fail-fast + rollback strategy, conflict management (TTY/non-TTY/force), and environment variable handling.
+Git and local installation flows, no-argument lockfile install, scope validation, fail-fast + rollback strategy, conflict management (TTY/non-TTY/force), and environment variable handling.
 
 ## [Hooks](./doc/prd/hooks.md)
 
