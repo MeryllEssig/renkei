@@ -37,4 +37,8 @@ impl Config {
     pub fn claude_skills_dir(&self) -> PathBuf {
         self.claude_dir().join("skills")
     }
+
+    pub fn claude_agents_dir(&self) -> PathBuf {
+        self.claude_dir().join("agents")
+    }
 }
