@@ -40,13 +40,13 @@ Rust project structure created from scratch: `Cargo.toml`, `src/main.rs`, module
 
 ### Acceptance criteria
 
-- [ ] `cargo build` produces an `rk` binary
-- [ ] `rk install ./fixture/` with a valid `renkei.json` and `skills/review.md` deploys the file to `~/.claude/skills/renkei-review/SKILL.md`
-- [ ] `rk install ./fixture/` with an invalid manifest (missing field, incorrect scope, invalid semver) fails with a descriptive error message
-- [ ] The archive `~/.renkei/cache/@scope/name/<version>.tar.gz` is created
-- [ ] `install-cache.json` contains the package entry with deployed paths
-- [ ] Unit tests: manifest parsing (valid, missing fields, bad scope, bad semver), artifact discovery, skill deployment
-- [ ] Integration test: `rk install ./fixture/` end-to-end in a tempdir
+- [x] `cargo build` produces an `rk` binary
+- [x] `rk install ./fixture/` with a valid `renkei.json` and `skills/review.md` deploys the file to `~/.claude/skills/renkei-review/SKILL.md`
+- [x] `rk install ./fixture/` with an invalid manifest (missing field, incorrect scope, invalid semver) fails with a descriptive error message
+- [x] The archive `~/.renkei/cache/@scope/name/<version>.tar.gz` is created
+- [x] `install-cache.json` contains the package entry with deployed paths
+- [x] Unit tests: manifest parsing (valid, missing fields, bad scope, bad semver), artifact discovery, skill deployment
+- [x] Integration test: `rk install ./fixture/` end-to-end in a tempdir
 
 ---
 
