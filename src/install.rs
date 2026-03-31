@@ -10,7 +10,7 @@ use crate::env_check;
 use crate::error::{RenkeiError, Result};
 use crate::hook;
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
-use crate::manifest::Manifest;
+use crate::manifest::{self, Manifest, RequestedScope};
 use crate::mcp;
 
 fn remove_artifact_file(path: &Path) {
@@ -68,13 +68,19 @@ fn rollback(deployed: &[DeployedArtifact], config: &Config) {
     }
 }
 
-pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend) -> Result<()> {
+pub fn install_local(
+    package_dir: &Path,
+    config: &Config,
+    backend: &dyn Backend,
+    requested_scope: RequestedScope,
+) -> Result<()> {
     let package_dir = package_dir
         .canonicalize()
         .map_err(|_| RenkeiError::ManifestNotFound(package_dir.to_path_buf()))?;
 
     let raw_manifest = Manifest::from_path(&package_dir)?;
     let manifest = raw_manifest.validate()?;
+    manifest::validate_scope(&manifest.install_scope, requested_scope)?;
 
     println!(
         "{} {} v{}",
@@ -396,7 +402,7 @@ mod tests {
             call_count: Cell::new(0),
         };
 
-        let result = install_local(pkg.path(), &config, &backend);
+        let result = install_local(pkg.path(), &config, &backend, RequestedScope::Global);
         assert!(result.is_err());
 
         assert!(!home.path().join(".claude/agents/deploy.md").exists());
