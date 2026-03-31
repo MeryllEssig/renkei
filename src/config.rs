@@ -22,8 +22,8 @@ impl Config {
         self.home_dir.join(".renkei")
     }
 
-    pub fn cache_dir(&self) -> PathBuf {
-        self.renkei_dir().join("cache")
+    pub fn archives_dir(&self) -> PathBuf {
+        self.renkei_dir().join("archives")
     }
 
     pub fn install_cache_path(&self) -> PathBuf {

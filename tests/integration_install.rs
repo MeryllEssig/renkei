@@ -45,7 +45,7 @@ fn test_install_valid_local_package() {
     // Verify archive exists
     let archive = home
         .path()
-        .join(".renkei/cache/@test/sample-workflow/0.1.0.tar.gz");
+        .join(".renkei/archives/@test/sample-workflow/0.1.0.tar.gz");
     assert!(archive.exists(), "Archive should exist at {:?}", archive);
 
     // Verify install-cache.json
