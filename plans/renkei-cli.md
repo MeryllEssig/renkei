@@ -140,6 +140,8 @@ Add support for two installation scopes: **project** (default) and **global** (`
 
 **CLI flag**: add `-g` / `--global` flag to `rk install`. Default is project scope.
 
+**Note on uninstall**: this phase lays the infrastructure (dual install-cache, scope detection, Config::for_project) that `rk uninstall` (Phase 9) will rely on. The `-g` flag added here will also apply to `rk uninstall` when implemented.
+
 ### Acceptance criteria
 
 - [ ] `rk install ./fixture/` deploys skills/agents to `.claude/` at the project root
@@ -230,7 +232,37 @@ Visual distinction between Git sources (`[git]`) and local sources (`[local]`). 
 
 ---
 
-## Phase 9: `rk doctor`
+## Phase 9: `rk uninstall`
+
+**User stories**: 41, 14g
+
+### What to build
+
+`rk uninstall @scope/pkg` command: remove all deployed artifacts for a package and clean up tracking data.
+
+**Scope behavior** (mirrors `rk install`):
+- `rk uninstall @scope/pkg` (default): reads the project install-cache (`~/.renkei/projects/<slug>/install-cache.json`), removes skills/agents from `<project>/.claude/`, removes hooks from `~/.claude/settings.json`, removes MCP servers from `~/.claude.json`, updates the project install-cache.
+- `rk uninstall -g @scope/pkg`: reads the global install-cache (`~/.renkei/install-cache.json`), removes all artifacts from `~/.claude/`, updates the global install-cache.
+- If the package is not found in the requested scope → error, no cross-scope fallback.
+
+**Lockfile update**: if the lockfile exists (`./rk.lock` or `~/.renkei/rk.lock` depending on scope), remove the package entry from it. If lockfile doesn't exist, skip this step silently (lockfile is optional at this point).
+
+**Hook/MCP removal**: reverse the merge operation — remove only the entries tracked in the install-cache for this package from `settings.json` / `claude.json`. Preserve all other entries.
+
+### Acceptance criteria
+
+- [ ] `rk uninstall @scope/pkg` removes project-scoped skills/agents from `.claude/`
+- [ ] `rk uninstall @scope/pkg` removes hooks/MCP entries from `~/.claude/settings.json` and `~/.claude.json`
+- [ ] `rk uninstall -g @scope/pkg` removes all artifacts from `~/.claude/`
+- [ ] Install-cache is updated (package entry removed)
+- [ ] Lockfile is updated if present (package entry removed)
+- [ ] Uninstalling a package not in the requested scope → error with clear message
+- [ ] Uninstalling a package leaves other packages' artifacts untouched
+- [ ] Tests: project uninstall, global uninstall, hook removal, MCP removal, not-found error, lockfile update, no side effects on other packages
+
+---
+
+## Phase 10: `rk doctor`
 
 **User stories**: 21, 22, 23, 24, 25
 
@@ -259,7 +291,7 @@ Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1
 
 ---
 
-## Phase 10: Lockfile
+## Phase 11: Lockfile
 
 **User stories**: 30, 31, 32, 33, 34
 
@@ -293,7 +325,7 @@ Integrity check: hash of the cached archive vs lockfile hash.
 
 ---
 
-## Phase 11: `rk package`
+## Phase 12: `rk package`
 
 **User stories**: 26, 27, 28, 29
 
@@ -316,7 +348,7 @@ Display summary: list of included files, count, archive size.
 
 ---
 
-## Phase 12: Workspace
+## Phase 13: Workspace
 
 **User stories**: workspace support (PRD "Workspace" section)
 
@@ -338,7 +370,7 @@ Workspace detection: a root `renkei.json` with a `workspace` field listing membe
 
 ---
 
-## Phase 13: CI/CD + Migration
+## Phase 14: CI/CD + Migration
 
 **User stories**: 35, 36
 

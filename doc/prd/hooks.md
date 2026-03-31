@@ -35,4 +35,4 @@ This mapping is maintained in `ClaudeBackend`. Other backends will define their 
 
 ## Tracking
 
-Deployed hooks are tracked in `~/.renkei/install-cache.json`, not in the backend's JSON. The backend JSON (`settings.json`, etc.) stays 100% native with no custom fields. On uninstall, Renkei compares with its cache to remove the right entries.
+Deployed hooks are tracked in the install-cache for the active scope — `~/.renkei/install-cache.json` (global) or `~/.renkei/projects/<slug>/install-cache.json` (project). Even though hooks always deploy globally to `~/.claude/settings.json` regardless of scope, they are tracked in the *project* install-cache when installed in project scope. The backend JSON (`settings.json`, etc.) stays 100% native with no custom fields. On uninstall, Renkei reads the appropriate install-cache to remove the right entries.

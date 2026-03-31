@@ -35,7 +35,7 @@
 
 ## Listing and visibility
 
-19. As a developer, I want to list all installed packages with their versions and sources (`rk list`) to get an overview of my environment.
+19. As a developer, I want to list all installed packages with their versions and sources (`rk list`) to get an overview of my project's environment, and `rk list -g` for the global environment.
 20. As a developer, I want to distinguish Git-installed packages from locally-installed ones in `rk list` to know which can be updated automatically.
 
 ## Diagnostics

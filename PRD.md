@@ -41,7 +41,7 @@ Abstract hook format with normalized events, Renkei → Claude Code event mappin
 
 ## [Local Storage and Lockfile](./doc/prd/storage.md)
 
-`~/.renkei/` directory layout (cache, install-cache, config) and `rk.lock` lockfile format with versioning, source tracking, and SHA-256 integrity.
+`~/.renkei/` directory layout (archives, install-cache, projects, config) and `rk.lock` lockfile format with versioning, source tracking, and SHA-256 integrity.
 
 ## [Commands](./doc/prd/commands.md)
 

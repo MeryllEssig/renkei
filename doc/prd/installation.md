@@ -34,14 +34,16 @@ Without `--tag` or `--branch`, HEAD of the default branch is used. The commit SH
 
 ## Local installation
 
-- `rk install ./my-workflow/` creates a **copy** (snapshot archive in cache), same as Git.
-- `rk install --link ./my-workflow/` creates **symlinks** for development (`npm link` / `pip install -e` model). Changes in source files are immediately reflected.
+- `rk install ./my-workflow/` creates a **copy** (snapshot archive in `~/.renkei/archives/`), same as Git, respecting the active scope.
+- `rk install --link ./my-workflow/` creates **symlinks** for development (`npm link` / `pip install -e` model), respecting the active scope. Changes in source files are immediately reflected.
 
 ## No-argument installation
 
 - `rk install` → if `rk.lock` exists in the project root → installs the exact versions from the lockfile in project scope.
 - `rk install -g` → if `~/.renkei/rk.lock` exists → installs the exact versions from the global lockfile in global scope.
-- If no lockfile found in the expected location → explicit error: "No rk.lock found. Use `rk install <source>` to install a package."
+- If no lockfile found in the expected location → scope-specific error:
+  - Project scope: "No rk.lock found at project root. Use `rk install <source>` to install a package."
+  - Global scope: "No global rk.lock found at ~/.renkei/rk.lock. Use `rk install -g <source>` to install a package."
 - If no lockfile but workspace detected → explicit error: "workspace detected, use `rk install --link .` for dev".
 
 ## Error handling: fail-fast + rollback

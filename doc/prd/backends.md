@@ -20,11 +20,11 @@ Codex and Gemini are on the radar but not planned. Artifact format varies by bac
 
 ## Deployment conventions (hardcoded, not configurable)
 
-| Artifact  | Claude Code                              | Cursor                       |
-|-----------|------------------------------------------|------------------------------|
-| Skills    | `~/.claude/skills/renkei-<name>/SKILL.md` | `.cursor/skills/<name>/`     |
-| Hooks     | Merge into `~/.claude/settings.json`     | N/A                          |
-| Agents    | `~/.claude/agents/<name>.md`             | N/A                          |
-| MCP config| Merge into `~/.claude.json`              | Merge into `.cursor/mcp.json` |
+| Artifact  | Claude Code (global)                      | Claude Code (project)                              | Cursor                       |
+|-----------|-------------------------------------------|-----------------------------------------------------|------------------------------|
+| Skills    | `~/.claude/skills/renkei-<name>/SKILL.md` | `<project>/.claude/skills/renkei-<name>/SKILL.md`  | `.cursor/skills/<name>/`     |
+| Hooks     | Merge into `~/.claude/settings.json`      | Merge into `~/.claude/settings.json` (always global)| N/A                          |
+| Agents    | `~/.claude/agents/<name>.md`              | `<project>/.claude/agents/<name>.md`               | N/A                          |
+| MCP config| Merge into `~/.claude.json`               | Merge into `~/.claude.json` (always global)        | Merge into `.cursor/mcp.json` |
 
-The `renkei-` prefix on skills creates a clear namespace and avoids collisions with native skills.
+In project scope, skills and agents deploy to the equivalent paths under `<project_root>/.claude/` instead of `~/.claude/`. Hooks and MCP always deploy to the global paths regardless of scope. The `renkei-` prefix on skills creates a clear namespace and avoids collisions with native skills.
