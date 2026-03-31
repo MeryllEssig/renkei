@@ -181,11 +181,7 @@ mod tests {
 
     #[test]
     fn test_cleanup_tolerates_already_missing_file() {
-        let cache = make_cache_with_artifacts(vec![(
-            "skill",
-            "gone",
-            "/tmp/nonexistent/SKILL.md",
-        )]);
+        let cache = make_cache_with_artifacts(vec![("skill", "gone", "/tmp/nonexistent/SKILL.md")]);
         // Should not panic
         cleanup_previous_installation("@test/pkg", &cache);
     }

@@ -298,8 +298,5 @@ fn test_reinstall_updates_cache() {
     let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
     let packages = cache["packages"].as_object().unwrap();
     assert_eq!(packages.len(), 1);
-    assert_eq!(
-        packages["@test/sample-workflow"]["version"],
-        "0.1.0"
-    );
+    assert_eq!(packages["@test/sample-workflow"]["version"], "0.1.0");
 }

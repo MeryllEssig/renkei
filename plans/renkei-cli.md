@@ -64,11 +64,11 @@ Reinstall support: if a package is already in `install-cache.json`, its old arti
 
 ### Acceptance criteria
 
-- [ ] Installing a package with 2 skills and 1 agent deploys all 3 files to the correct paths
-- [ ] If an artifact fails during deployment, all already-deployed artifacts are removed (rollback)
-- [ ] `rk install` on an already-installed package removes old artifacts and deploys new ones
-- [ ] `install-cache.json` is updated correctly after reinstall
-- [ ] Tests: rollback (deploy 2/3, error on 3rd, assert first 2 removed), multi-skill, agent deploy, reinstall
+- [x] Installing a package with 2 skills and 1 agent deploys all 3 files to the correct paths
+- [x] If an artifact fails during deployment, all already-deployed artifacts are removed (rollback)
+- [x] `rk install` on an already-installed package removes old artifacts and deploys new ones
+- [x] `install-cache.json` is updated correctly after reinstall
+- [x] Tests: rollback (deploy 2/3, error on 3rd, assert first 2 removed), multi-skill, agent deploy, reinstall
 
 ---
 
