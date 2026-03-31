@@ -7,6 +7,7 @@ use crate::backend::{Backend, DeployedArtifact};
 use crate::cache;
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
+use crate::hook;
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::Manifest;
 
@@ -17,17 +18,37 @@ fn remove_artifact_file(path: &Path) {
     }
 }
 
-fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache) {
+fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache, config: &Config) {
     if let Some(entry) = install_cache.packages.get(full_name) {
         for artifact in &entry.deployed_artifacts {
-            remove_artifact_file(Path::new(&artifact.deployed_path));
+            match artifact.artifact_type {
+                ArtifactKind::Hook => {
+                    let _ = hook::remove_hooks_from_settings(
+                        &config.claude_settings_path(),
+                        &artifact.deployed_hooks,
+                    );
+                }
+                _ => {
+                    remove_artifact_file(Path::new(&artifact.deployed_path));
+                }
+            }
         }
     }
 }
 
-fn rollback(deployed: &[DeployedArtifact]) {
+fn rollback(deployed: &[DeployedArtifact], config: &Config) {
     for artifact in deployed.iter().rev() {
-        remove_artifact_file(&artifact.deployed_path);
+        match artifact.artifact_kind {
+            ArtifactKind::Hook => {
+                let _ = hook::remove_hooks_from_settings(
+                    &config.claude_settings_path(),
+                    &artifact.deployed_hooks,
+                );
+            }
+            _ => {
+                remove_artifact_file(&artifact.deployed_path);
+            }
+        }
     }
 }
 
@@ -52,7 +73,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
     }
 
     let mut install_cache = InstallCache::load(config)?;
-    cleanup_previous_installation(&manifest.full_name, &install_cache);
+    cleanup_previous_installation(&manifest.full_name, &install_cache, config);
 
     let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
 
@@ -62,12 +83,12 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         let result = match art.kind {
             ArtifactKind::Skill => backend.deploy_skill(art, config),
             ArtifactKind::Agent => backend.deploy_agent(art, config),
-            ArtifactKind::Hook => todo!("Hook deployment — Step 8"),
+            ArtifactKind::Hook => backend.deploy_hook(art, config),
         };
         match result {
             Ok(d) => deployed.push(d),
             Err(e) => {
-                rollback(&deployed);
+                rollback(&deployed, config);
                 return Err(e);
             }
         }
@@ -148,6 +169,8 @@ mod tests {
 
     #[test]
     fn test_cleanup_removes_old_artifacts() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("renkei-review");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -161,7 +184,7 @@ mod tests {
             (ArtifactKind::Agent, "deploy", file2.to_str().unwrap()),
         ]);
 
-        cleanup_previous_installation("@test/pkg", &cache);
+        cleanup_previous_installation("@test/pkg", &cache, &config);
         assert!(!file1.exists());
         assert!(!file2.exists());
         assert!(!skill_dir.exists());
@@ -169,25 +192,31 @@ mod tests {
 
     #[test]
     fn test_cleanup_noop_on_missing_package() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let cache = InstallCache {
             version: 1,
             packages: HashMap::new(),
         };
-        cleanup_previous_installation("@test/nonexistent", &cache);
+        cleanup_previous_installation("@test/nonexistent", &cache, &config);
     }
 
     #[test]
     fn test_cleanup_tolerates_already_missing_file() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let cache = make_cache_with_artifacts(vec![(
             ArtifactKind::Skill,
             "gone",
             "/tmp/nonexistent/SKILL.md",
         )]);
-        cleanup_previous_installation("@test/pkg", &cache);
+        cleanup_previous_installation("@test/pkg", &cache, &config);
     }
 
     #[test]
     fn test_rollback_removes_deployed_files() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let dir = tempdir().unwrap();
         let file1 = dir.path().join("file1.md");
         let file2 = dir.path().join("file2.md");
@@ -209,13 +238,15 @@ mod tests {
             },
         ];
 
-        rollback(&deployed);
+        rollback(&deployed, &config);
         assert!(!file1.exists());
         assert!(!file2.exists());
     }
 
     #[test]
     fn test_rollback_removes_empty_parent_dir() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("renkei-review");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -229,13 +260,15 @@ mod tests {
             deployed_hooks: vec![],
         }];
 
-        rollback(&deployed);
+        rollback(&deployed, &config);
         assert!(!file.exists());
         assert!(!skill_dir.exists());
     }
 
     #[test]
     fn test_rollback_skips_missing_files() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
         let dir = tempdir().unwrap();
         let missing = dir.path().join("nonexistent.md");
 
@@ -246,7 +279,7 @@ mod tests {
             deployed_hooks: vec![],
         }];
 
-        rollback(&deployed);
+        rollback(&deployed, &config);
     }
 
     use crate::artifact::Artifact;
