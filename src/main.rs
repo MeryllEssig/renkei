@@ -4,6 +4,7 @@ mod cache;
 mod cli;
 mod config;
 mod error;
+mod hook;
 mod install;
 mod install_cache;
 mod manifest;
