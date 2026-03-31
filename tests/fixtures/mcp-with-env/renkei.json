@@ -1,0 +1,19 @@
+{
+  "name": "@test/mcp-env",
+  "version": "1.0.0",
+  "description": "MCP with required env vars",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"],
+  "mcp": {
+    "api-server": {
+      "command": "python",
+      "args": ["serve.py"],
+      "env": { "API_KEY": "${API_KEY}" }
+    }
+  },
+  "requiredEnv": {
+    "RK_TEST_API_KEY": "Required for API access",
+    "RK_TEST_DB_URL": "Database connection string"
+  }
+}

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
+use crate::mcp::{self, DeployedMcpEntry};
 
 use super::{Backend, DeployedArtifact};
 
@@ -72,6 +73,15 @@ impl Backend for ClaudeBackend {
             deployed_path: settings_path,
             deployed_hooks: deployed_entries,
         })
+    }
+
+    fn register_mcp(
+        &self,
+        mcp_config: &serde_json::Value,
+        config: &Config,
+    ) -> Result<Vec<DeployedMcpEntry>> {
+        let config_path = config.claude_config_path();
+        mcp::merge_mcp_into_config(&config_path, mcp_config)
     }
 }
 
@@ -250,5 +260,56 @@ mod tests {
 
         let backend = ClaudeBackend;
         assert!(backend.deploy_hook(&artifact, &config).is_err());
+    }
+
+    #[test]
+    fn test_register_mcp_creates_claude_json() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let backend = ClaudeBackend;
+
+        let mcp = serde_json::json!({
+            "test-server": {
+                "command": "node",
+                "args": ["server.js"],
+                "env": { "PORT": "3000" }
+            }
+        });
+
+        let entries = backend.register_mcp(&mcp, &config).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].server_name, "test-server");
+
+        let config_path = home.path().join(".claude.json");
+        assert!(config_path.exists());
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert_eq!(content["mcpServers"]["test-server"]["command"], "node");
+    }
+
+    #[test]
+    fn test_register_mcp_preserves_existing() {
+        let home = tempdir().unwrap();
+        let config_path = home.path().join(".claude.json");
+        fs::write(
+            &config_path,
+            r#"{"mcpServers":{"existing":{"command":"keep","args":[]}}}"#,
+        )
+        .unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let backend = ClaudeBackend;
+
+        let mcp = serde_json::json!({
+            "new-server": { "command": "python", "args": ["serve.py"] }
+        });
+
+        let entries = backend.register_mcp(&mcp, &config).unwrap();
+        assert_eq!(entries.len(), 1);
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert_eq!(content["mcpServers"]["existing"]["command"], "keep");
+        assert_eq!(content["mcpServers"]["new-server"]["command"], "python");
     }
 }

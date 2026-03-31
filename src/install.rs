@@ -6,10 +6,12 @@ use crate::artifact::{self, ArtifactKind};
 use crate::backend::{Backend, DeployedArtifact};
 use crate::cache;
 use crate::config::Config;
+use crate::env_check;
 use crate::error::{RenkeiError, Result};
 use crate::hook;
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::Manifest;
+use crate::mcp;
 
 fn remove_artifact_file(path: &Path) {
     let _ = std::fs::remove_file(path);
@@ -42,6 +44,16 @@ fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache, 
                 config,
             );
         }
+        if !entry.deployed_mcp_servers.is_empty() {
+            let mcp_entries: Vec<mcp::DeployedMcpEntry> = entry
+                .deployed_mcp_servers
+                .iter()
+                .map(|name| mcp::DeployedMcpEntry {
+                    server_name: name.clone(),
+                })
+                .collect();
+            let _ = mcp::remove_mcp_from_config(&config.claude_config_path(), &mcp_entries);
+        }
     }
 }
 
@@ -62,6 +74,8 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         .map_err(|_| RenkeiError::ManifestNotFound(package_dir.to_path_buf()))?;
 
     let raw_manifest = Manifest::from_path(&package_dir)?;
+    let mcp_config = raw_manifest.mcp.clone();
+    let required_env = raw_manifest.required_env.clone();
     let manifest = raw_manifest.validate()?;
 
     println!(
@@ -97,6 +111,20 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
             }
         }
     }
+
+    // MCP registration (after artifact deployment)
+    let deployed_mcp_servers = if let Some(ref mcp) = mcp_config {
+        match backend.register_mcp(mcp, config) {
+            Ok(entries) => entries.iter().map(|e| e.server_name.clone()).collect(),
+            Err(e) => {
+                rollback(&deployed, config);
+                return Err(e);
+            }
+        }
+    } else {
+        vec![]
+    };
+
     let deployed_entries: Vec<DeployedArtifactEntry> = deployed
         .iter()
         .map(|d| DeployedArtifactEntry {
@@ -116,6 +144,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
             integrity,
             archive_path: archive_path.to_string_lossy().to_string(),
             deployed_artifacts: deployed_entries,
+            deployed_mcp_servers,
         },
     );
     install_cache.save(config)?;
@@ -128,6 +157,14 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
     );
     for d in &deployed {
         println!("  {} {}", "→".dimmed(), d.deployed_path.display());
+    }
+
+    // Environment variable warnings (non-blocking)
+    if let Some(ref env) = required_env {
+        let missing = env_check::check_required_env(env);
+        if !missing.is_empty() {
+            env_check::print_env_warnings(&missing);
+        }
     }
 
     Ok(())
@@ -163,6 +200,7 @@ mod tests {
                 integrity: "abc".to_string(),
                 archive_path: "/tmp/a.tar.gz".to_string(),
                 deployed_artifacts: deployed,
+                deployed_mcp_servers: vec![],
             },
         );
         InstallCache {
@@ -296,10 +334,7 @@ mod tests {
     }
 
     impl FailingBackend {
-        fn try_deploy(
-            &self,
-            f: impl FnOnce() -> Result<DeployedArtifact>,
-        ) -> Result<DeployedArtifact> {
+        fn try_call<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
             let count = self.call_count.get();
             self.call_count.set(count + 1);
             if count >= self.fail_on {
@@ -319,15 +354,23 @@ mod tests {
         }
 
         fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-            self.try_deploy(|| ClaudeBackend.deploy_skill(artifact, config))
+            self.try_call(|| ClaudeBackend.deploy_skill(artifact, config))
         }
 
         fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-            self.try_deploy(|| ClaudeBackend.deploy_agent(artifact, config))
+            self.try_call(|| ClaudeBackend.deploy_agent(artifact, config))
         }
 
         fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-            self.try_deploy(|| ClaudeBackend.deploy_hook(artifact, config))
+            self.try_call(|| ClaudeBackend.deploy_hook(artifact, config))
+        }
+
+        fn register_mcp(
+            &self,
+            mcp_config: &serde_json::Value,
+            config: &Config,
+        ) -> Result<Vec<crate::mcp::DeployedMcpEntry>> {
+            self.try_call(|| ClaudeBackend.register_mcp(mcp_config, config))
         }
     }
 

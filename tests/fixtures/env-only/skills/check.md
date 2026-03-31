@@ -1,0 +1,2 @@
+# Check
+Verify environment configuration.

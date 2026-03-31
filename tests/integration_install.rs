@@ -511,3 +511,219 @@ fn test_reinstall_hook_package_no_duplication() {
         pre_tool.len()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: MCP + Environment variable integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_install_mcp_package() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Verify skill deployed
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-api/SKILL.md")
+        .exists());
+
+    // Verify ~/.claude.json has MCP config
+    let claude_json_path = home.path().join(".claude.json");
+    assert!(claude_json_path.exists());
+    let claude_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&claude_json_path).unwrap()).unwrap();
+    assert_eq!(claude_json["mcpServers"]["test-server"]["command"], "node");
+    assert_eq!(
+        claude_json["mcpServers"]["test-server"]["args"][0],
+        "server.js"
+    );
+    assert_eq!(
+        claude_json["mcpServers"]["test-server"]["env"]["PORT"],
+        "3000"
+    );
+}
+
+#[test]
+fn test_install_mcp_preserves_existing_servers() {
+    let home = tempdir().unwrap();
+
+    // Pre-populate ~/.claude.json with an existing server
+    fs::write(
+        home.path().join(".claude.json"),
+        r#"{"mcpServers":{"existing-server":{"command":"keep","args":["me"]}}}"#,
+    )
+    .unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success();
+
+    let claude_json: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude.json")).unwrap(),
+    )
+    .unwrap();
+    // Both servers present
+    assert_eq!(
+        claude_json["mcpServers"]["existing-server"]["command"],
+        "keep"
+    );
+    assert_eq!(claude_json["mcpServers"]["test-server"]["command"], "node");
+}
+
+#[test]
+fn test_install_mcp_tracked_in_cache() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success();
+
+    let cache: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".renkei/install-cache.json")).unwrap(),
+    )
+    .unwrap();
+    let pkg = &cache["packages"]["@test/mcp-pkg"];
+    let mcp_servers = pkg["deployed_mcp_servers"].as_array().unwrap();
+    assert_eq!(mcp_servers.len(), 1);
+    assert_eq!(mcp_servers[0], "test-server");
+}
+
+#[test]
+fn test_reinstall_mcp_no_duplication() {
+    let home = tempdir().unwrap();
+
+    // First install
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success();
+
+    // Second install (reinstall)
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success();
+
+    // Verify only one MCP server entry
+    let claude_json: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude.json")).unwrap(),
+    )
+    .unwrap();
+    let servers = claude_json["mcpServers"].as_object().unwrap();
+    assert_eq!(servers.len(), 1);
+    assert!(servers.contains_key("test-server"));
+}
+
+#[test]
+fn test_install_env_warning_missing() {
+    let home = tempdir().unwrap();
+
+    // Ensure env vars are NOT set
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .env_remove("RK_TEST_API_KEY")
+        .env_remove("RK_TEST_DB_URL")
+        .arg("install")
+        .arg(fixture_path("mcp-with-env"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Missing environment variables"))
+        .stdout(predicate::str::contains("RK_TEST_API_KEY"))
+        .stdout(predicate::str::contains("RK_TEST_DB_URL"));
+}
+
+#[test]
+fn test_install_env_no_warning_when_present() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .env("RK_TEST_API_KEY", "abc123")
+        .env("RK_TEST_DB_URL", "postgres://localhost/test")
+        .arg("install")
+        .arg(fixture_path("mcp-with-env"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Missing environment variables").not());
+}
+
+#[test]
+fn test_install_env_partial_warning() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .env("RK_TEST_API_KEY", "present")
+        .env_remove("RK_TEST_DB_URL")
+        .arg("install")
+        .arg(fixture_path("mcp-with-env"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("RK_TEST_DB_URL"))
+        .stdout(predicate::str::contains("RK_TEST_API_KEY").not());
+}
+
+#[test]
+fn test_install_without_mcp_no_claude_json() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success();
+
+    // ~/.claude.json should NOT be created for packages without MCP
+    assert!(!home.path().join(".claude.json").exists());
+}
+
+#[test]
+fn test_install_env_only_no_mcp() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .env_remove("RK_TEST_SECRET")
+        .arg("install")
+        .arg(fixture_path("env-only"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("RK_TEST_SECRET"));
+
+    // No ~/.claude.json since no MCP
+    assert!(!home.path().join(".claude.json").exists());
+
+    // But skill is deployed
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-check/SKILL.md")
+        .exists());
+}

@@ -8,6 +8,8 @@ mod hook;
 mod install;
 mod install_cache;
 mod manifest;
+mod mcp;
+mod env_check;
 
 use clap::Parser;
 use cli::{Cli, Commands};

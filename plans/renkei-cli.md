@@ -107,12 +107,12 @@ Environment variable checking: after successful installation, each variable from
 
 ### Acceptance criteria
 
-- [ ] `rk install` of a package with `mcp` registers the servers in `~/.claude.json`
-- [ ] Existing MCP servers are not overwritten
-- [ ] Missing environment variables trigger a warning (not an error)
-- [ ] Present variables do not generate a warning
-- [ ] Rollback removes MCP servers from the failing package
-- [ ] Tests: claude.json merge, MCP tracking, env var checking
+- [x] `rk install` of a package with `mcp` registers the servers in `~/.claude.json`
+- [x] Existing MCP servers are not overwritten
+- [x] Missing environment variables trigger a warning (not an error)
+- [x] Present variables do not generate a warning
+- [x] Rollback removes MCP servers from the failing package
+- [x] Tests: claude.json merge, MCP tracking, env var checking
 
 ---
 

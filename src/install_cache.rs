@@ -20,6 +20,8 @@ pub struct PackageEntry {
     pub integrity: String,
     pub archive_path: String,
     pub deployed_artifacts: Vec<DeployedArtifactEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deployed_mcp_servers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +96,7 @@ mod tests {
                     deployed_path: "/home/.claude/skills/renkei-review/SKILL.md".to_string(),
                     deployed_hooks: vec![],
                 }],
+                deployed_mcp_servers: vec![],
             },
         );
         cache.save(&config).unwrap();
@@ -123,6 +126,7 @@ mod tests {
                 integrity: "aaa".to_string(),
                 archive_path: "/a.tar.gz".to_string(),
                 deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
             },
         );
         assert_eq!(cache.packages["@test/pkg"].version, "1.0.0");
@@ -136,6 +140,7 @@ mod tests {
                 integrity: "bbb".to_string(),
                 archive_path: "/b.tar.gz".to_string(),
                 deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
             },
         );
         assert_eq!(cache.packages.len(), 1);
@@ -166,6 +171,7 @@ mod tests {
                         command: "lint.sh".to_string(),
                     }],
                 }],
+                deployed_mcp_servers: vec![],
             },
         );
         cache.save(&config).unwrap();
@@ -215,5 +221,33 @@ mod tests {
         let loaded = InstallCache::load(&config).unwrap();
         let entry = &loaded.packages["@test/legacy"];
         assert_eq!(entry.deployed_artifacts[0].deployed_hooks.len(), 0);
+        assert!(entry.deployed_mcp_servers.is_empty());
+    }
+
+    #[test]
+    fn test_save_and_load_with_mcp_servers() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/mcp-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec!["test-server".to_string(), "api-server".to_string()],
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/mcp-pkg"];
+        assert_eq!(entry.deployed_mcp_servers.len(), 2);
+        assert!(entry.deployed_mcp_servers.contains(&"test-server".to_string()));
+        assert!(entry.deployed_mcp_servers.contains(&"api-server".to_string()));
     }
 }

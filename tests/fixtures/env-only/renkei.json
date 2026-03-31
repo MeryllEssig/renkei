@@ -1,0 +1,11 @@
+{
+  "name": "@test/env-only",
+  "version": "1.0.0",
+  "description": "Package with required env vars only",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"],
+  "requiredEnv": {
+    "RK_TEST_SECRET": "A secret token"
+  }
+}

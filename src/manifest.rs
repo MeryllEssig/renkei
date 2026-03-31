@@ -15,10 +15,8 @@ pub struct Manifest {
     #[allow(dead_code)]
     #[serde(default)]
     pub keywords: Vec<String>,
-    #[allow(dead_code)]
     #[serde(default)]
     pub mcp: Option<serde_json::Value>,
-    #[allow(dead_code)]
     #[serde(rename = "requiredEnv", default)]
     pub required_env: Option<serde_json::Value>,
     #[allow(dead_code)]
