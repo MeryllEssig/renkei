@@ -62,6 +62,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         let result = match art.kind {
             ArtifactKind::Skill => backend.deploy_skill(art, config),
             ArtifactKind::Agent => backend.deploy_agent(art, config),
+            ArtifactKind::Hook => todo!("Hook deployment — Step 8"),
         };
         match result {
             Ok(d) => deployed.push(d),
