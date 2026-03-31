@@ -24,6 +24,13 @@ pub enum RenkeiError {
     #[error("Cache error: {0}")]
     CacheError(String),
 
+    #[error("Scope conflict: {message}")]
+    ScopeConflict { message: String },
+
+    #[allow(dead_code)]
+    #[error("No project root detected (not inside a git repository).\nUse `rk install -g <source>` to install globally.")]
+    NoProjectRoot,
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

@@ -67,6 +67,7 @@ mod tests {
             short_name: "sample".to_string(),
             full_name: "@test/sample".to_string(),
             version: Version::new(0, 1, 0),
+            install_scope: crate::manifest::ManifestScope::Any,
             description: "test".to_string(),
             author: "tester".to_string(),
             license: "MIT".to_string(),

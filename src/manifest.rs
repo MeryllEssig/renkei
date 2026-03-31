@@ -4,6 +4,40 @@ use std::path::Path;
 
 use crate::error::{RenkeiError, Result};
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ManifestScope {
+    Any,
+    Global,
+    Project,
+}
+
+impl Default for ManifestScope {
+    fn default() -> Self {
+        ManifestScope::Any
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RequestedScope {
+    Project,
+    Global,
+}
+
+pub fn validate_scope(manifest_scope: &ManifestScope, requested: RequestedScope) -> Result<()> {
+    match (manifest_scope, requested) {
+        (ManifestScope::Any, _) => Ok(()),
+        (ManifestScope::Global, RequestedScope::Global) => Ok(()),
+        (ManifestScope::Project, RequestedScope::Project) => Ok(()),
+        (ManifestScope::Global, RequestedScope::Project) => Err(RenkeiError::ScopeConflict {
+            message: "This package is global-only, use `rk install -g`".into(),
+        }),
+        (ManifestScope::Project, RequestedScope::Global) => Err(RenkeiError::ScopeConflict {
+            message: "This package is project-only, remove `-g`".into(),
+        }),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
     pub name: String,
@@ -15,6 +49,8 @@ pub struct Manifest {
     #[allow(dead_code)]
     #[serde(default)]
     pub keywords: Vec<String>,
+    #[serde(default)]
+    pub scope: ManifestScope,
     #[serde(default)]
     pub mcp: Option<serde_json::Value>,
     #[serde(rename = "requiredEnv", default)]
@@ -30,6 +66,7 @@ pub struct ValidatedManifest {
     pub short_name: String,
     pub full_name: String,
     pub version: Version,
+    pub install_scope: ManifestScope,
     #[allow(dead_code)]
     pub description: String,
     #[allow(dead_code)]
@@ -73,6 +110,7 @@ impl Manifest {
             short_name,
             full_name: self.name.clone(),
             version,
+            install_scope: self.scope.clone(),
             description: self.description.clone(),
             author: self.author.clone(),
             license: self.license.clone(),
@@ -214,5 +252,71 @@ mod tests {
         let m: Manifest = serde_json::from_str(json).unwrap();
         let err = m.validate().unwrap_err();
         assert!(err.to_string().contains("backends"));
+    }
+
+    #[test]
+    fn test_manifest_without_scope_defaults_to_any() {
+        let m: Manifest = serde_json::from_str(valid_json()).unwrap();
+        assert_eq!(m.scope, ManifestScope::Any);
+    }
+
+    #[test]
+    fn test_manifest_scope_global_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"scope":"global"}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        assert_eq!(m.scope, ManifestScope::Global);
+    }
+
+    #[test]
+    fn test_manifest_scope_project_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"scope":"project"}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        assert_eq!(m.scope, ManifestScope::Project);
+    }
+
+    #[test]
+    fn test_manifest_scope_any_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"scope":"any"}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        assert_eq!(m.scope, ManifestScope::Any);
+    }
+
+    #[test]
+    fn test_manifest_scope_invalid_fails() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"scope":"local"}"#;
+        let result: std::result::Result<Manifest, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_scope_any_with_project() {
+        assert!(validate_scope(&ManifestScope::Any, RequestedScope::Project).is_ok());
+    }
+
+    #[test]
+    fn test_validate_scope_any_with_global() {
+        assert!(validate_scope(&ManifestScope::Any, RequestedScope::Global).is_ok());
+    }
+
+    #[test]
+    fn test_validate_scope_global_with_global() {
+        assert!(validate_scope(&ManifestScope::Global, RequestedScope::Global).is_ok());
+    }
+
+    #[test]
+    fn test_validate_scope_global_with_project_fails() {
+        let err = validate_scope(&ManifestScope::Global, RequestedScope::Project).unwrap_err();
+        assert!(err.to_string().contains("global-only"));
+    }
+
+    #[test]
+    fn test_validate_scope_project_with_project() {
+        assert!(validate_scope(&ManifestScope::Project, RequestedScope::Project).is_ok());
+    }
+
+    #[test]
+    fn test_validate_scope_project_with_global_fails() {
+        let err = validate_scope(&ManifestScope::Project, RequestedScope::Global).unwrap_err();
+        assert!(err.to_string().contains("project-only"));
     }
 }
