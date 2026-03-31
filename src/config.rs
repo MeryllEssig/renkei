@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crate::error::{RenkeiError, Result};
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub home_dir: PathBuf,
@@ -83,6 +85,20 @@ impl Config {
     pub fn claude_config_path(&self) -> PathBuf {
         self.home_dir.join(".claude.json")
     }
+}
+
+pub fn detect_project_root() -> Result<PathBuf> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(|_| RenkeiError::NoProjectRoot)?;
+
+    if !output.status.success() {
+        return Err(RenkeiError::NoProjectRoot);
+    }
+
+    let path_str = String::from_utf8_lossy(&output.stdout);
+    Ok(PathBuf::from(path_str.trim()))
 }
 
 #[cfg(test)]
