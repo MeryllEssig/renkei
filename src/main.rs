@@ -1,3 +1,4 @@
+mod artifact;
 mod config;
 mod error;
 mod manifest;
