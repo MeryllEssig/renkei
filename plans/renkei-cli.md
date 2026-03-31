@@ -22,7 +22,7 @@ Durable decisions that apply across all phases:
 - **Injectable home directory**: every function reading/writing `~/.claude/` or `~/.renkei/` accepts a configurable base path (`Config` struct with `home_dir: PathBuf`) to enable testing in a tempdir.
 - **Hook tracking**: in `install-cache.json`, never in the backend's JSON. The backend JSON stays 100% native.
 - **Fail-fast + rollback**: every installation is atomic. Writes are collected in a `Vec`, rolled back in reverse order on error.
-- **Main crates**: `clap` (derive), `serde` + `serde_json`, `semver`, `tar` + `flate2`, `sha2`, `tempfile`, `thiserror`, `dialoguer`, `colored`, `dirs`. Dev: `assert_cmd`, `predicates`.
+- **Main crates**: `clap` (derive), `serde` + `serde_json`, `semver`, `tar` + `flate2`, `sha2`, `tempfile`, `thiserror`, `inquire`, `owo-colors`, `etcetera`. Dev: `assert_cmd`, `predicates`. If you need to install another crate, please make sure it's well supported. Don't add too much crates if you can do otherwise.
 
 ---
 
