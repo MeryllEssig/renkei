@@ -3,7 +3,6 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 
 use crate::artifact::{self, ArtifactKind};
-use crate::backend::claude::ClaudeBackend;
 use crate::backend::Backend;
 use crate::cache;
 use crate::config::Config;
@@ -11,7 +10,7 @@ use crate::error::{RenkeiError, Result};
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::Manifest;
 
-pub fn install_local(package_dir: &Path, config: &Config) -> Result<()> {
+pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend) -> Result<()> {
     let package_dir = package_dir
         .canonicalize()
         .map_err(|_| RenkeiError::ManifestNotFound(package_dir.to_path_buf()))?;
@@ -33,16 +32,12 @@ pub fn install_local(package_dir: &Path, config: &Config) -> Result<()> {
 
     let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
 
-    let backend = ClaudeBackend;
     let mut deployed = Vec::new();
 
     for art in &artifacts {
         let result = match art.kind {
             ArtifactKind::Skill => backend.deploy_skill(art, config)?,
-            ArtifactKind::Agent => {
-                // Agent deployment will be implemented in Step 3-4
-                continue;
-            }
+            ArtifactKind::Agent => backend.deploy_agent(art, config)?,
         };
         deployed.push(result);
     }
@@ -51,7 +46,7 @@ pub fn install_local(package_dir: &Path, config: &Config) -> Result<()> {
     let deployed_entries: Vec<DeployedArtifactEntry> = deployed
         .iter()
         .map(|d| DeployedArtifactEntry {
-            artifact_type: "skill".to_string(),
+            artifact_type: d.artifact_type.clone(),
             name: d.artifact_name.clone(),
             deployed_path: d.deployed_path.to_string_lossy().to_string(),
         })

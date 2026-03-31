@@ -15,14 +15,17 @@ use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use std::process;
 
+use backend::claude::ClaudeBackend;
+
 fn main() {
     let cli = Cli::parse();
     let config = Config::new();
+    let backend = ClaudeBackend;
 
     let result: error::Result<()> = match cli.command {
         Commands::Install { source } => {
             let path = PathBuf::from(&source);
-            install::install_local(&path, &config)
+            install::install_local(&path, &config, &backend)
         }
     };
 
