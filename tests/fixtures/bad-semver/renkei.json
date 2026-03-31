@@ -1,0 +1,8 @@
+{
+  "name": "@test/bad-version",
+  "version": "not.a.version",
+  "description": "Bad semver",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

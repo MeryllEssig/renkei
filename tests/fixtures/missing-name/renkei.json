@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "description": "Missing name",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@test/sample-workflow",
+  "version": "0.1.0",
+  "description": "A test workflow",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "not-scoped",
+  "version": "1.0.0",
+  "description": "Bad scope",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}
