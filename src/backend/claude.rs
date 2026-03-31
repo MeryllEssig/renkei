@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::artifact::Artifact;
+use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 
@@ -32,6 +32,7 @@ impl ClaudeBackend {
             artifact_kind: artifact.kind.clone(),
             artifact_name: artifact.name.clone(),
             deployed_path: dest,
+            deployed_hooks: vec![],
         })
     }
 }
@@ -55,6 +56,22 @@ impl Backend for ClaudeBackend {
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dest_filename = format!("{}.md", artifact.name);
         self.deploy_file(artifact, config.claude_agents_dir(), &dest_filename)
+    }
+
+    fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        use crate::hook;
+
+        let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
+        let translated = hook::translate_hooks(&renkei_hooks)?;
+        let settings_path = config.claude_settings_path();
+        let deployed_entries = hook::merge_hooks_into_settings(&settings_path, &translated)?;
+
+        Ok(DeployedArtifact {
+            artifact_kind: ArtifactKind::Hook,
+            artifact_name: artifact.name.clone(),
+            deployed_path: settings_path,
+            deployed_hooks: deployed_entries,
+        })
     }
 }
 

@@ -41,4 +41,8 @@ impl Config {
     pub fn claude_agents_dir(&self) -> PathBuf {
         self.claude_dir().join("agents")
     }
+
+    pub fn claude_settings_path(&self) -> PathBuf {
+        self.claude_dir().join("settings.json")
+    }
 }

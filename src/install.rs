@@ -197,11 +197,13 @@ mod tests {
                 artifact_kind: ArtifactKind::Skill,
                 artifact_name: "s1".to_string(),
                 deployed_path: file1.clone(),
+                deployed_hooks: vec![],
             },
             DeployedArtifact {
                 artifact_kind: ArtifactKind::Skill,
                 artifact_name: "s2".to_string(),
                 deployed_path: file2.clone(),
+                deployed_hooks: vec![],
             },
         ];
 
@@ -222,6 +224,7 @@ mod tests {
             artifact_kind: ArtifactKind::Skill,
             artifact_name: "review".to_string(),
             deployed_path: file.clone(),
+            deployed_hooks: vec![],
         }];
 
         rollback(&deployed);
@@ -238,6 +241,7 @@ mod tests {
             artifact_kind: ArtifactKind::Skill,
             artifact_name: "ghost".to_string(),
             deployed_path: missing,
+            deployed_hooks: vec![],
         }];
 
         rollback(&deployed);
@@ -281,6 +285,10 @@ mod tests {
 
         fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
             self.try_deploy(|| ClaudeBackend.deploy_agent(artifact, config))
+        }
+
+        fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            self.try_deploy(|| ClaudeBackend.deploy_hook(artifact, config))
         }
     }
 
