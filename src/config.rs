@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -42,7 +42,20 @@ impl Config {
     }
 
     pub fn install_cache_path(&self) -> PathBuf {
-        self.renkei_dir().join("install-cache.json")
+        match self.project_root {
+            Some(ref root) => self
+                .renkei_dir()
+                .join("projects")
+                .join(Self::slug(root))
+                .join("install-cache.json"),
+            None => self.renkei_dir().join("install-cache.json"),
+        }
+    }
+
+    pub fn slug(path: &Path) -> String {
+        let s = path.to_string_lossy();
+        let without_leading = s.strip_prefix('/').unwrap_or(&s);
+        without_leading.replace('/', "-")
     }
 
     pub fn claude_dir(&self) -> PathBuf {
@@ -139,6 +152,40 @@ mod tests {
         assert_eq!(
             config.claude_agents_dir(),
             PathBuf::from("/home/user/.claude/agents")
+        );
+    }
+
+    #[test]
+    fn test_slug_basic() {
+        assert_eq!(
+            Config::slug(Path::new("/Users/meryll/Projects/foo")),
+            "Users-meryll-Projects-foo"
+        );
+    }
+
+    #[test]
+    fn test_slug_no_leading_slash() {
+        assert_eq!(Config::slug(Path::new("tmp")), "tmp");
+    }
+
+    #[test]
+    fn test_install_cache_path_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.install_cache_path(),
+            PathBuf::from("/home/user/.renkei/install-cache.json")
+        );
+    }
+
+    #[test]
+    fn test_install_cache_path_project() {
+        let config = Config::for_project(
+            PathBuf::from("/home/user"),
+            PathBuf::from("/Users/meryll/Projects/foo"),
+        );
+        assert_eq!(
+            config.install_cache_path(),
+            PathBuf::from("/home/user/.renkei/projects/Users-meryll-Projects-foo/install-cache.json")
         );
     }
 }
