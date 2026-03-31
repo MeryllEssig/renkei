@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{RenkeiError, Result};
 
-// ---------------------------------------------------------------------------
-// Renkei hook format (hooks/*.json)
-// ---------------------------------------------------------------------------
+const HOOK_TYPE_COMMAND: &str = "command";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RenkeiHook {
@@ -19,10 +17,6 @@ pub struct RenkeiHook {
     pub timeout: Option<u64>,
 }
 
-// ---------------------------------------------------------------------------
-// Tracking struct (stored in install-cache.json)
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DeployedHookEntry {
     pub event: String,
@@ -30,10 +24,6 @@ pub struct DeployedHookEntry {
     pub matcher: Option<String>,
     pub command: String,
 }
-
-// ---------------------------------------------------------------------------
-// Event translation
-// ---------------------------------------------------------------------------
 
 pub fn translate_event(renkei_event: &str) -> Option<&'static str> {
     match renkei_event {
@@ -52,32 +42,13 @@ pub fn translate_event(renkei_event: &str) -> Option<&'static str> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Hook file parsing
-// ---------------------------------------------------------------------------
-
 pub fn parse_hook_file(path: &Path) -> Result<Vec<RenkeiHook>> {
     let content = std::fs::read_to_string(path)?;
     let hooks: Vec<RenkeiHook> = serde_json::from_str(&content).map_err(|e| {
         RenkeiError::InvalidManifest(format!("Invalid hook file {}: {}", path.display(), e))
     })?;
-
-    for hook in &hooks {
-        if translate_event(&hook.event).is_none() {
-            return Err(RenkeiError::InvalidManifest(format!(
-                "Unknown hook event '{}' in {}",
-                hook.event,
-                path.display()
-            )));
-        }
-    }
-
     Ok(hooks)
 }
-
-// ---------------------------------------------------------------------------
-// Claude Code native hook structs (for settings.json)
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaudeHookEntry {
@@ -95,10 +66,6 @@ pub struct ClaudeHookGroup {
     pub hooks: Vec<ClaudeHookEntry>,
 }
 
-// ---------------------------------------------------------------------------
-// Translation: Renkei hooks → Claude native grouped format
-// ---------------------------------------------------------------------------
-
 pub fn translate_hooks(
     renkei_hooks: &[RenkeiHook],
 ) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>> {
@@ -112,14 +79,13 @@ pub fn translate_hooks(
             .to_string();
 
         let entry = ClaudeHookEntry {
-            hook_type: "command".to_string(),
+            hook_type: HOOK_TYPE_COMMAND.to_string(),
             command: hook.command.clone(),
             timeout: hook.timeout,
         };
 
         let groups = result.entry(claude_event).or_default();
 
-        // Find existing group with same matcher, or create new one
         let existing = groups.iter_mut().find(|g| g.matcher == hook.matcher);
         match existing {
             Some(group) => group.hooks.push(entry),
@@ -133,20 +99,28 @@ pub fn translate_hooks(
     Ok(result)
 }
 
-// ---------------------------------------------------------------------------
-// Merge translated hooks into settings.json
-// ---------------------------------------------------------------------------
+fn read_settings(path: &Path) -> Result<serde_json::Value> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => Ok(serde_json::from_str(&content)?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn write_settings(path: &Path, value: &serde_json::Value) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(value)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
 
 pub fn merge_hooks_into_settings(
     settings_path: &Path,
     translated: &BTreeMap<String, Vec<ClaudeHookGroup>>,
 ) -> Result<Vec<DeployedHookEntry>> {
-    let mut settings: serde_json::Value = if settings_path.exists() {
-        let content = std::fs::read_to_string(settings_path)?;
-        serde_json::from_str(&content)?
-    } else {
-        serde_json::json!({})
-    };
+    let mut settings = read_settings(settings_path)?;
 
     let settings_obj = settings.as_object_mut().ok_or_else(|| {
         RenkeiError::DeploymentFailed("settings.json is not a JSON object".into())
@@ -183,29 +157,19 @@ pub fn merge_hooks_into_settings(
         }
     }
 
-    if let Some(parent) = settings_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(&settings)?;
-    std::fs::write(settings_path, content)?;
-
+    write_settings(settings_path, &settings)?;
     Ok(deployed_entries)
 }
-
-// ---------------------------------------------------------------------------
-// Remove hooks from settings.json (rollback / cleanup)
-// ---------------------------------------------------------------------------
 
 pub fn remove_hooks_from_settings(
     settings_path: &Path,
     entries_to_remove: &[DeployedHookEntry],
 ) -> Result<()> {
-    if !settings_path.exists() {
-        return Ok(());
-    }
-
-    let content = std::fs::read_to_string(settings_path)?;
-    let mut settings: serde_json::Value = serde_json::from_str(&content)?;
+    let mut settings: serde_json::Value = match std::fs::read_to_string(settings_path) {
+        Ok(content) => serde_json::from_str(&content)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
 
     let hooks_map = match settings
         .as_object_mut()
@@ -243,17 +207,13 @@ pub fn remove_hooks_from_settings(
         }
     }
 
-    // Clean up empty event arrays
     hooks_map.retain(|_, v| v.as_array().is_none_or(|a| !a.is_empty()));
 
-    // If hooks object is now empty, remove it
     if hooks_map.is_empty() {
         settings.as_object_mut().unwrap().remove("hooks");
     }
 
-    let content = serde_json::to_string_pretty(&settings)?;
-    std::fs::write(settings_path, content)?;
-
+    write_settings(settings_path, &settings)?;
     Ok(())
 }
 
@@ -262,8 +222,6 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
-
-    // -- translate_event ---------------------------------------------------
 
     #[test]
     fn test_translate_all_11_events() {
@@ -291,8 +249,6 @@ mod tests {
         assert_eq!(translate_event(""), None);
         assert_eq!(translate_event("PreToolUse"), None);
     }
-
-    // -- parse_hook_file ---------------------------------------------------
 
     #[test]
     fn test_parse_valid_hook_file() {
@@ -353,24 +309,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_hook_file_unknown_event() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("bad_event.json");
-        fs::write(&path, r#"[{"event":"on_magic","command":"magic.sh"}]"#).unwrap();
-
-        let err = parse_hook_file(&path).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("Unknown hook event 'on_magic'"), "Got: {msg}");
-    }
-
-    #[test]
     fn test_parse_hook_file_not_found() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("missing.json");
         assert!(parse_hook_file(&path).is_err());
     }
-
-    // -- DeployedHookEntry serialization -----------------------------------
 
     #[test]
     fn test_deployed_hook_entry_serde_with_matcher() {
@@ -397,8 +340,6 @@ mod tests {
         let roundtrip: DeployedHookEntry = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtrip, entry);
     }
-
-    // -- translate_hooks ---------------------------------------------------
 
     fn make_renkei_hook(
         event: &str,
@@ -485,7 +426,13 @@ mod tests {
         assert_eq!(groups[0].matcher, None);
     }
 
-    // -- merge_hooks_into_settings -----------------------------------------
+    #[test]
+    fn test_translate_hooks_unknown_event_fails() {
+        let hooks = vec![make_renkei_hook("on_magic", None, "magic.sh", None)];
+        let err = translate_hooks(&hooks).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Unknown hook event 'on_magic'"), "Got: {msg}");
+    }
 
     #[test]
     fn test_merge_into_empty_settings() {
@@ -609,8 +556,6 @@ mod tests {
         assert_eq!(pre_tool[1]["matcher"], "bash");
     }
 
-    // -- remove_hooks_from_settings ----------------------------------------
-
     #[test]
     fn test_remove_specific_hooks() {
         let dir = tempdir().unwrap();
@@ -631,7 +576,6 @@ mod tests {
 
         let settings: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
-        // hooks key should be removed entirely (empty)
         assert!(settings.get("hooks").is_none());
     }
 

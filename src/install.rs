@@ -18,37 +18,41 @@ fn remove_artifact_file(path: &Path) {
     }
 }
 
+fn undo_artifact(
+    kind: &ArtifactKind,
+    path: &Path,
+    hooks: &[hook::DeployedHookEntry],
+    config: &Config,
+) {
+    match kind {
+        ArtifactKind::Hook => {
+            let _ = hook::remove_hooks_from_settings(&config.claude_settings_path(), hooks);
+        }
+        _ => remove_artifact_file(path),
+    }
+}
+
 fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache, config: &Config) {
     if let Some(entry) = install_cache.packages.get(full_name) {
         for artifact in &entry.deployed_artifacts {
-            match artifact.artifact_type {
-                ArtifactKind::Hook => {
-                    let _ = hook::remove_hooks_from_settings(
-                        &config.claude_settings_path(),
-                        &artifact.deployed_hooks,
-                    );
-                }
-                _ => {
-                    remove_artifact_file(Path::new(&artifact.deployed_path));
-                }
-            }
+            undo_artifact(
+                &artifact.artifact_type,
+                Path::new(&artifact.deployed_path),
+                &artifact.deployed_hooks,
+                config,
+            );
         }
     }
 }
 
 fn rollback(deployed: &[DeployedArtifact], config: &Config) {
     for artifact in deployed.iter().rev() {
-        match artifact.artifact_kind {
-            ArtifactKind::Hook => {
-                let _ = hook::remove_hooks_from_settings(
-                    &config.claude_settings_path(),
-                    &artifact.deployed_hooks,
-                );
-            }
-            _ => {
-                remove_artifact_file(&artifact.deployed_path);
-            }
-        }
+        undo_artifact(
+            &artifact.artifact_kind,
+            &artifact.deployed_path,
+            &artifact.deployed_hooks,
+            config,
+        );
     }
 }
 
