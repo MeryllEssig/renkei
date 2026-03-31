@@ -8,6 +8,7 @@ use crate::error::Result;
 
 #[derive(Debug, Clone)]
 pub struct DeployedArtifact {
+    pub artifact_type: String,
     pub artifact_name: String,
     pub deployed_path: PathBuf,
 }
@@ -17,4 +18,5 @@ pub trait Backend {
     fn name(&self) -> &str;
     fn detect_installed(&self, config: &Config) -> bool;
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact>;
+    fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact>;
 }

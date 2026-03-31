@@ -34,6 +34,28 @@ impl Backend for ClaudeBackend {
         })?;
 
         Ok(DeployedArtifact {
+            artifact_type: "skill".to_string(),
+            artifact_name: artifact.name.clone(),
+            deployed_path: dest,
+        })
+    }
+
+    fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let agents_dir = config.claude_agents_dir();
+        fs::create_dir_all(&agents_dir)?;
+
+        let dest = agents_dir.join(format!("{}.md", artifact.name));
+        fs::copy(&artifact.source_path, &dest).map_err(|e| {
+            RenkeiError::DeploymentFailed(format!(
+                "Failed to copy {} to {}: {}",
+                artifact.source_path.display(),
+                dest.display(),
+                e
+            ))
+        })?;
+
+        Ok(DeployedArtifact {
+            artifact_type: "agent".to_string(),
             artifact_name: artifact.name.clone(),
             deployed_path: dest,
         })
@@ -61,6 +83,36 @@ mod tests {
         let config = Config::with_home_dir(dir.path().to_path_buf());
         let backend = ClaudeBackend;
         assert!(!backend.detect_installed(&config));
+    }
+
+    #[test]
+    fn test_deploy_agent() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        let agents_dir = pkg.path().join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        let source = agents_dir.join("deploy.md");
+        fs::write(&source, "# Deploy\nDeploy the application.").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let artifact = Artifact {
+            kind: ArtifactKind::Agent,
+            name: "deploy".to_string(),
+            source_path: source,
+        };
+
+        let backend = ClaudeBackend;
+        let result = backend.deploy_agent(&artifact, &config).unwrap();
+
+        let expected = home.path().join(".claude/agents/deploy.md");
+        assert_eq!(result.deployed_path, expected);
+        assert_eq!(result.artifact_type, "agent");
+        assert!(expected.exists());
+        assert_eq!(
+            fs::read_to_string(&expected).unwrap(),
+            "# Deploy\nDeploy the application."
+        );
     }
 
     #[test]
