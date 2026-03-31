@@ -10,30 +10,24 @@ use crate::error::{RenkeiError, Result};
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::Manifest;
 
+fn remove_artifact_file(path: &Path) {
+    let _ = std::fs::remove_file(path);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::remove_dir(parent);
+    }
+}
+
 fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache) {
     if let Some(entry) = install_cache.packages.get(full_name) {
         for artifact in &entry.deployed_artifacts {
-            let path = std::path::PathBuf::from(&artifact.deployed_path);
-            if path.exists() {
-                let _ = std::fs::remove_file(&path);
-            }
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::remove_dir(parent);
-            }
+            remove_artifact_file(Path::new(&artifact.deployed_path));
         }
     }
 }
 
 fn rollback(deployed: &[DeployedArtifact]) {
     for artifact in deployed.iter().rev() {
-        let path = &artifact.deployed_path;
-        if path.exists() {
-            let _ = std::fs::remove_file(path);
-        }
-        if let Some(parent) = path.parent() {
-            // Only removes if empty — safe no-op otherwise
-            let _ = std::fs::remove_dir(parent);
-        }
+        remove_artifact_file(&artifact.deployed_path);
     }
 }
 
@@ -80,7 +74,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
     let deployed_entries: Vec<DeployedArtifactEntry> = deployed
         .iter()
         .map(|d| DeployedArtifactEntry {
-            artifact_type: d.artifact_type.clone(),
+            artifact_type: d.artifact_kind.clone(),
             name: d.artifact_name.clone(),
             deployed_path: d.deployed_path.to_string_lossy().to_string(),
         })
@@ -118,14 +112,15 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
+    use crate::artifact::ArtifactKind;
     use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
     use std::collections::HashMap;
 
-    fn make_cache_with_artifacts(artifacts: Vec<(&str, &str, &str)>) -> InstallCache {
+    fn make_cache_with_artifacts(artifacts: Vec<(ArtifactKind, &str, &str)>) -> InstallCache {
         let deployed: Vec<DeployedArtifactEntry> = artifacts
             .into_iter()
-            .map(|(atype, name, path)| DeployedArtifactEntry {
-                artifact_type: atype.to_string(),
+            .map(|(kind, name, path)| DeployedArtifactEntry {
+                artifact_type: kind,
                 name: name.to_string(),
                 deployed_path: path.to_string(),
             })
@@ -159,8 +154,8 @@ mod tests {
         fs::write(&file2, "old agent").unwrap();
 
         let cache = make_cache_with_artifacts(vec![
-            ("skill", "review", file1.to_str().unwrap()),
-            ("agent", "deploy", file2.to_str().unwrap()),
+            (ArtifactKind::Skill, "review", file1.to_str().unwrap()),
+            (ArtifactKind::Agent, "deploy", file2.to_str().unwrap()),
         ]);
 
         cleanup_previous_installation("@test/pkg", &cache);
@@ -175,14 +170,16 @@ mod tests {
             version: 1,
             packages: HashMap::new(),
         };
-        // Should not panic
         cleanup_previous_installation("@test/nonexistent", &cache);
     }
 
     #[test]
     fn test_cleanup_tolerates_already_missing_file() {
-        let cache = make_cache_with_artifacts(vec![("skill", "gone", "/tmp/nonexistent/SKILL.md")]);
-        // Should not panic
+        let cache = make_cache_with_artifacts(vec![(
+            ArtifactKind::Skill,
+            "gone",
+            "/tmp/nonexistent/SKILL.md",
+        )]);
         cleanup_previous_installation("@test/pkg", &cache);
     }
 
@@ -196,12 +193,12 @@ mod tests {
 
         let deployed = vec![
             DeployedArtifact {
-                artifact_type: "skill".to_string(),
+                artifact_kind: ArtifactKind::Skill,
                 artifact_name: "s1".to_string(),
                 deployed_path: file1.clone(),
             },
             DeployedArtifact {
-                artifact_type: "skill".to_string(),
+                artifact_kind: ArtifactKind::Skill,
                 artifact_name: "s2".to_string(),
                 deployed_path: file2.clone(),
             },
@@ -221,7 +218,7 @@ mod tests {
         fs::write(&file, "content").unwrap();
 
         let deployed = vec![DeployedArtifact {
-            artifact_type: "skill".to_string(),
+            artifact_kind: ArtifactKind::Skill,
             artifact_name: "review".to_string(),
             deployed_path: file.clone(),
         }];
@@ -237,22 +234,35 @@ mod tests {
         let missing = dir.path().join("nonexistent.md");
 
         let deployed = vec![DeployedArtifact {
-            artifact_type: "skill".to_string(),
+            artifact_kind: ArtifactKind::Skill,
             artifact_name: "ghost".to_string(),
             deployed_path: missing,
         }];
 
-        // Should not panic
         rollback(&deployed);
     }
 
-    use crate::artifact::{Artifact, ArtifactKind};
+    use crate::artifact::Artifact;
     use crate::backend::claude::ClaudeBackend;
     use std::cell::Cell;
 
     struct FailingBackend {
         fail_on: usize,
         call_count: Cell<usize>,
+    }
+
+    impl FailingBackend {
+        fn try_deploy(
+            &self,
+            f: impl FnOnce() -> Result<DeployedArtifact>,
+        ) -> Result<DeployedArtifact> {
+            let count = self.call_count.get();
+            self.call_count.set(count + 1);
+            if count >= self.fail_on {
+                return Err(RenkeiError::DeploymentFailed("simulated failure".into()));
+            }
+            f()
+        }
     }
 
     impl Backend for FailingBackend {
@@ -265,21 +275,11 @@ mod tests {
         }
 
         fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-            let count = self.call_count.get();
-            self.call_count.set(count + 1);
-            if count >= self.fail_on {
-                return Err(RenkeiError::DeploymentFailed("simulated failure".into()));
-            }
-            ClaudeBackend.deploy_skill(artifact, config)
+            self.try_deploy(|| ClaudeBackend.deploy_skill(artifact, config))
         }
 
         fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-            let count = self.call_count.get();
-            self.call_count.set(count + 1);
-            if count >= self.fail_on {
-                return Err(RenkeiError::DeploymentFailed("simulated failure".into()));
-            }
-            ClaudeBackend.deploy_agent(artifact, config)
+            self.try_deploy(|| ClaudeBackend.deploy_agent(artifact, config))
         }
     }
 
@@ -288,7 +288,6 @@ mod tests {
         let home = tempdir().unwrap();
         let pkg = tempdir().unwrap();
 
-        // Create a package with 2 skills + 1 agent
         fs::write(
             pkg.path().join("renkei.json"),
             r#"{"name":"@test/rollback","version":"1.0.0","description":"test","author":"t","license":"MIT","backends":["claude"]}"#,
@@ -305,8 +304,6 @@ mod tests {
         fs::write(agents_dir.join("deploy.md"), "# Deploy").unwrap();
 
         let config = Config::with_home_dir(home.path().to_path_buf());
-        // Fail on the 3rd artifact (sorted: deploy(agent), lint(skill), review(skill))
-        // deploy is first (alphabetical), lint second, review third
         let backend = FailingBackend {
             fail_on: 2,
             call_count: Cell::new(0),
@@ -315,13 +312,11 @@ mod tests {
         let result = install_local(pkg.path(), &config, &backend);
         assert!(result.is_err());
 
-        // First two deployed files should have been rolled back
         assert!(!home.path().join(".claude/agents/deploy.md").exists());
         assert!(!home
             .path()
             .join(".claude/skills/renkei-lint/SKILL.md")
             .exists());
-        // The parent dir for lint should also be cleaned
         assert!(!home.path().join(".claude/skills/renkei-lint").exists());
     }
 }

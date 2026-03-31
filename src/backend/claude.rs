@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 
 use crate::artifact::Artifact;
 use crate::config::Config;
@@ -7,6 +8,33 @@ use crate::error::{RenkeiError, Result};
 use super::{Backend, DeployedArtifact};
 
 pub struct ClaudeBackend;
+
+impl ClaudeBackend {
+    fn deploy_file(
+        &self,
+        artifact: &Artifact,
+        dest_dir: PathBuf,
+        dest_filename: &str,
+    ) -> Result<DeployedArtifact> {
+        fs::create_dir_all(&dest_dir)?;
+
+        let dest = dest_dir.join(dest_filename);
+        fs::copy(&artifact.source_path, &dest).map_err(|e| {
+            RenkeiError::DeploymentFailed(format!(
+                "Failed to copy {} to {}: {}",
+                artifact.source_path.display(),
+                dest.display(),
+                e
+            ))
+        })?;
+
+        Ok(DeployedArtifact {
+            artifact_kind: artifact.kind.clone(),
+            artifact_name: artifact.name.clone(),
+            deployed_path: dest,
+        })
+    }
+}
 
 impl Backend for ClaudeBackend {
     fn name(&self) -> &str {
@@ -21,44 +49,12 @@ impl Backend for ClaudeBackend {
         let skill_dir = config
             .claude_skills_dir()
             .join(format!("renkei-{}", artifact.name));
-        fs::create_dir_all(&skill_dir)?;
-
-        let dest = skill_dir.join("SKILL.md");
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-
-        Ok(DeployedArtifact {
-            artifact_type: "skill".to_string(),
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-        })
+        self.deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let agents_dir = config.claude_agents_dir();
-        fs::create_dir_all(&agents_dir)?;
-
-        let dest = agents_dir.join(format!("{}.md", artifact.name));
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-
-        Ok(DeployedArtifact {
-            artifact_type: "agent".to_string(),
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-        })
+        let dest_filename = format!("{}.md", artifact.name);
+        self.deploy_file(artifact, config.claude_agents_dir(), &dest_filename)
     }
 }
 
@@ -107,7 +103,7 @@ mod tests {
 
         let expected = home.path().join(".claude/agents/deploy.md");
         assert_eq!(result.deployed_path, expected);
-        assert_eq!(result.artifact_type, "agent");
+        assert_eq!(result.artifact_kind, ArtifactKind::Agent);
         assert!(expected.exists());
         assert_eq!(
             fs::read_to_string(&expected).unwrap(),
@@ -137,6 +133,7 @@ mod tests {
 
         let expected = home.path().join(".claude/skills/renkei-review/SKILL.md");
         assert_eq!(result.deployed_path, expected);
+        assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected.exists());
         assert_eq!(
             fs::read_to_string(&expected).unwrap(),

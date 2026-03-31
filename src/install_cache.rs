@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::artifact::ArtifactKind;
 use crate::config::Config;
 use crate::error::Result;
 
@@ -22,7 +23,7 @@ pub struct PackageEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeployedArtifactEntry {
-    pub artifact_type: String,
+    pub artifact_type: ArtifactKind,
     pub name: String,
     pub deployed_path: String,
 }
@@ -85,7 +86,7 @@ mod tests {
                 integrity: "abc123".to_string(),
                 archive_path: "/tmp/archive.tar.gz".to_string(),
                 deployed_artifacts: vec![DeployedArtifactEntry {
-                    artifact_type: "skill".to_string(),
+                    artifact_type: ArtifactKind::Skill,
                     name: "review".to_string(),
                     deployed_path: "/home/.claude/skills/renkei-review/SKILL.md".to_string(),
                 }],

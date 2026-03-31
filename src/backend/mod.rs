@@ -2,13 +2,13 @@ pub mod claude;
 
 use std::path::PathBuf;
 
-use crate::artifact::Artifact;
+use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
 use crate::error::Result;
 
 #[derive(Debug, Clone)]
 pub struct DeployedArtifact {
-    pub artifact_type: String,
+    pub artifact_kind: ArtifactKind,
     pub artifact_name: String,
     pub deployed_path: PathBuf,
 }
