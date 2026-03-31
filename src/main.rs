@@ -1,5 +1,6 @@
 mod artifact;
 mod backend;
+mod cache;
 mod config;
 mod error;
 mod manifest;
