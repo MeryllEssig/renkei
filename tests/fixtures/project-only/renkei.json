@@ -1,0 +1,9 @@
+{
+  "name": "@test/project-pkg",
+  "version": "1.0.0",
+  "description": "A project-only package",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"],
+  "scope": "project"
+}

@@ -759,3 +759,297 @@ fn test_install_env_only_no_mcp() {
         .join(".claude/skills/renkei-check/SKILL.md")
         .exists());
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5: Installation scope integration tests
+// ---------------------------------------------------------------------------
+
+fn init_git_repo(dir: &std::path::Path) {
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(dir)
+        .output()
+        .expect("git init failed");
+}
+
+#[test]
+fn test_install_project_scope_deploys_to_project_root() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Skills deployed to project/.claude/skills/
+    let skill_path = project
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md");
+    assert!(
+        skill_path.exists(),
+        "Skill should be at project root: {:?}",
+        skill_path
+    );
+
+    // NOT in global ~/.claude/skills/
+    assert!(!home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Install-cache is per-project
+    let slug = project
+        .path()
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .strip_prefix('/')
+        .unwrap_or(&project.path().to_string_lossy())
+        .replace('/', "-");
+    let cache_path = home
+        .path()
+        .join(format!(".renkei/projects/{}/install-cache.json", slug));
+    assert!(
+        cache_path.exists(),
+        "Project install-cache should exist at {:?}",
+        cache_path
+    );
+
+    // Global install-cache should NOT exist
+    assert!(!home.path().join(".renkei/install-cache.json").exists());
+}
+
+#[test]
+fn test_install_project_scope_hooks_deploy_globally() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("mixed-with-hooks"))
+        .assert()
+        .success();
+
+    // Skill at project root
+    assert!(project
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Agent at project root
+    assert!(project.path().join(".claude/agents/deploy.md").exists());
+
+    // Hooks deployed GLOBALLY (not to project)
+    let settings_path = home.path().join(".claude/settings.json");
+    assert!(settings_path.exists());
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(settings["hooks"]["PreToolUse"].is_array());
+}
+
+#[test]
+fn test_install_project_scope_mcp_deploys_globally() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("mcp-package"))
+        .assert()
+        .success();
+
+    // Skill at project root
+    assert!(project
+        .path()
+        .join(".claude/skills/renkei-api/SKILL.md")
+        .exists());
+
+    // MCP deployed globally
+    let claude_json_path = home.path().join(".claude.json");
+    assert!(claude_json_path.exists());
+    let claude_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&claude_json_path).unwrap()).unwrap();
+    assert_eq!(claude_json["mcpServers"]["test-server"]["command"], "node");
+}
+
+#[test]
+fn test_install_global_flag_deploys_to_home() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success();
+
+    // Skills at global ~/.claude/
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Global install-cache
+    assert!(home.path().join(".renkei/install-cache.json").exists());
+}
+
+#[test]
+fn test_install_no_git_repo_without_global_fails() {
+    let home = tempdir().unwrap();
+    let no_git_dir = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(no_git_dir.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not inside a git repository"));
+}
+
+#[test]
+fn test_install_scope_global_only_without_flag_fails() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("global-only"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("global-only"));
+}
+
+#[test]
+fn test_install_scope_global_only_with_flag_succeeds() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("global-only"))
+        .assert()
+        .success();
+
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-admin/SKILL.md")
+        .exists());
+}
+
+#[test]
+fn test_install_scope_project_only_with_global_flag_fails() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("project-only"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("project-only"));
+}
+
+#[test]
+fn test_install_scope_project_only_without_flag_succeeds() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("project-only"))
+        .assert()
+        .success();
+
+    assert!(project
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
+}
+
+#[test]
+fn test_reinstall_project_scope_cleans_up_old_artifacts() {
+    let home = tempdir().unwrap();
+    let project = tempdir().unwrap();
+    init_git_repo(project.path());
+
+    // First install
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success();
+
+    assert!(project
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Second install (reinstall)
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .arg("install")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 artifact(s)"));
+
+    // Skill still exists (redeployed)
+    assert!(project
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Only 1 entry in project install-cache
+    let slug = project
+        .path()
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .strip_prefix('/')
+        .unwrap_or(&project.path().to_string_lossy())
+        .replace('/', "-");
+    let cache_path = home
+        .path()
+        .join(format!(".renkei/projects/{}/install-cache.json", slug));
+    let cache: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
+    let packages = cache["packages"].as_object().unwrap();
+    assert_eq!(packages.len(), 1);
+}

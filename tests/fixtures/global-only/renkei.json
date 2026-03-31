@@ -1,0 +1,9 @@
+{
+  "name": "@test/global-pkg",
+  "version": "1.0.0",
+  "description": "A global-only package",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"],
+  "scope": "global"
+}
