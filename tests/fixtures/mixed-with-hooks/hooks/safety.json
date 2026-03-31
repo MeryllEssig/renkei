@@ -1,0 +1,12 @@
+[
+  {
+    "event": "before_tool",
+    "matcher": "bash",
+    "command": "bash scripts/safety-check.sh",
+    "timeout": 10
+  },
+  {
+    "event": "on_stop",
+    "command": "bash scripts/cleanup.sh"
+  }
+]

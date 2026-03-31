@@ -1,0 +1,8 @@
+{
+  "name": "@test/bad-hook",
+  "version": "1.0.0",
+  "description": "A package with an invalid hook event",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

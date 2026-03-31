@@ -1,0 +1,8 @@
+{
+  "name": "@test/hooks-only",
+  "version": "1.0.0",
+  "description": "A package with only hooks",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

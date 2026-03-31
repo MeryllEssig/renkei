@@ -1,0 +1,6 @@
+[
+  {
+    "event": "on_magic",
+    "command": "bash scripts/magic.sh"
+  }
+]

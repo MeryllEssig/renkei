@@ -11,3 +11,4 @@
     * In the index PRD.md
     * In an existing thematic sub-file in ./doc/prd/
     * In a new thematic sub-file in ./doc/prd/, updating the index accordingly.
+* Maintain a good folder structure to improve retrievability.

@@ -1,0 +1,6 @@
+[
+  {
+    "event": "on_notification",
+    "command": "bash scripts/notify.sh"
+  }
+]

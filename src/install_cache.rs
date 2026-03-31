@@ -172,10 +172,19 @@ mod tests {
 
         let loaded = InstallCache::load(&config).unwrap();
         let entry = &loaded.packages["@test/hook-pkg"];
-        assert_eq!(entry.deployed_artifacts[0].artifact_type, ArtifactKind::Hook);
+        assert_eq!(
+            entry.deployed_artifacts[0].artifact_type,
+            ArtifactKind::Hook
+        );
         assert_eq!(entry.deployed_artifacts[0].deployed_hooks.len(), 1);
-        assert_eq!(entry.deployed_artifacts[0].deployed_hooks[0].event, "PreToolUse");
-        assert_eq!(entry.deployed_artifacts[0].deployed_hooks[0].command, "lint.sh");
+        assert_eq!(
+            entry.deployed_artifacts[0].deployed_hooks[0].event,
+            "PreToolUse"
+        );
+        assert_eq!(
+            entry.deployed_artifacts[0].deployed_hooks[0].command,
+            "lint.sh"
+        );
     }
 
     #[test]

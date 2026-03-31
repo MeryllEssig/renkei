@@ -1,0 +1,8 @@
+[
+  {
+    "event": "before_tool",
+    "matcher": "bash",
+    "command": "bash scripts/lint.sh",
+    "timeout": 5
+  }
+]

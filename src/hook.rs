@@ -217,7 +217,10 @@ pub fn remove_hooks_from_settings(
     };
 
     for entry in entries_to_remove {
-        if let Some(event_array) = hooks_map.get_mut(&entry.event).and_then(|v| v.as_array_mut()) {
+        if let Some(event_array) = hooks_map
+            .get_mut(&entry.event)
+            .and_then(|v| v.as_array_mut())
+        {
             event_array.retain(|group| {
                 let group_matcher = group
                     .get("matcher")
@@ -226,21 +229,22 @@ pub fn remove_hooks_from_settings(
                 if group_matcher != entry.matcher {
                     return true;
                 }
-                let has_match = group
-                    .get("hooks")
-                    .and_then(|h| h.as_array())
-                    .map_or(false, |hooks| {
-                        hooks
-                            .iter()
-                            .any(|h| h.get("command").and_then(|c| c.as_str()) == Some(&entry.command))
-                    });
+                let has_match =
+                    group
+                        .get("hooks")
+                        .and_then(|h| h.as_array())
+                        .is_some_and(|hooks| {
+                            hooks.iter().any(|h| {
+                                h.get("command").and_then(|c| c.as_str()) == Some(&entry.command)
+                            })
+                        });
                 !has_match
             });
         }
     }
 
     // Clean up empty event arrays
-    hooks_map.retain(|_, v| v.as_array().map_or(true, |a| !a.is_empty()));
+    hooks_map.retain(|_, v| v.as_array().is_none_or(|a| !a.is_empty()));
 
     // If hooks object is now empty, remove it
     if hooks_map.is_empty() {
@@ -277,11 +281,7 @@ mod tests {
             ("on_elicitation", "Elicitation"),
         ];
         for (renkei, claude) in mappings {
-            assert_eq!(
-                translate_event(renkei),
-                Some(claude),
-                "Failed for {renkei}"
-            );
+            assert_eq!(translate_event(renkei), Some(claude), "Failed for {renkei}");
         }
     }
 
@@ -316,11 +316,7 @@ mod tests {
     fn test_parse_hook_file_optional_fields() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("stop.json");
-        fs::write(
-            &path,
-            r#"[{"event":"on_stop","command":"cleanup.sh"}]"#,
-        )
-        .unwrap();
+        fs::write(&path, r#"[{"event":"on_stop","command":"cleanup.sh"}]"#).unwrap();
 
         let hooks = parse_hook_file(&path).unwrap();
         assert_eq!(hooks.len(), 1);
@@ -360,11 +356,7 @@ mod tests {
     fn test_parse_hook_file_unknown_event() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("bad_event.json");
-        fs::write(
-            &path,
-            r#"[{"event":"on_magic","command":"magic.sh"}]"#,
-        )
-        .unwrap();
+        fs::write(&path, r#"[{"event":"on_magic","command":"magic.sh"}]"#).unwrap();
 
         let err = parse_hook_file(&path).unwrap_err();
         let msg = err.to_string();
@@ -408,7 +400,12 @@ mod tests {
 
     // -- translate_hooks ---------------------------------------------------
 
-    fn make_renkei_hook(event: &str, matcher: Option<&str>, cmd: &str, timeout: Option<u64>) -> RenkeiHook {
+    fn make_renkei_hook(
+        event: &str,
+        matcher: Option<&str>,
+        cmd: &str,
+        timeout: Option<u64>,
+    ) -> RenkeiHook {
         RenkeiHook {
             event: event.to_string(),
             matcher: matcher.map(String::from),
@@ -419,7 +416,12 @@ mod tests {
 
     #[test]
     fn test_translate_hooks_single() {
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            Some(5),
+        )];
         let result = translate_hooks(&hooks).unwrap();
 
         assert_eq!(result.len(), 1);

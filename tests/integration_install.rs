@@ -300,3 +300,214 @@ fn test_reinstall_updates_cache() {
     assert_eq!(packages.len(), 1);
     assert_eq!(packages["@test/sample-workflow"]["version"], "0.1.0");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: Hook integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_install_hook_package() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hook-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 artifact(s)"));
+
+    // Verify settings.json was created with correct structure
+    let settings_path = home.path().join(".claude/settings.json");
+    assert!(settings_path.exists());
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(settings["hooks"]["PreToolUse"].is_array());
+    let pre_tool = &settings["hooks"]["PreToolUse"][0];
+    assert_eq!(pre_tool["matcher"], "bash");
+    assert_eq!(pre_tool["hooks"][0]["command"], "bash scripts/lint.sh");
+    assert_eq!(pre_tool["hooks"][0]["timeout"], 5);
+    assert_eq!(pre_tool["hooks"][0]["type"], "command");
+
+    // Verify install-cache.json tracks the hook
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
+    let artifacts = &cache["packages"]["@test/hook-pkg"]["deployed_artifacts"];
+    assert_eq!(artifacts.as_array().unwrap().len(), 1);
+    assert_eq!(artifacts[0]["artifact_type"], "hook");
+    assert!(artifacts[0]["deployed_hooks"].is_array());
+    assert_eq!(artifacts[0]["deployed_hooks"][0]["event"], "PreToolUse");
+}
+
+#[test]
+fn test_install_hooks_preserve_existing_settings() {
+    let home = tempdir().unwrap();
+
+    // Pre-create settings.json with existing content
+    let claude_dir = home.path().join(".claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"permissions":{"allow":["Bash"]},"language":"French"}"#,
+    )
+    .unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hook-package"))
+        .assert()
+        .success();
+
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(claude_dir.join("settings.json")).unwrap())
+            .unwrap();
+    // Hooks are added
+    assert!(settings["hooks"]["PreToolUse"].is_array());
+    // Existing settings preserved
+    assert_eq!(settings["language"], "French");
+    assert!(settings["permissions"]["allow"].is_array());
+}
+
+#[test]
+fn test_install_hooks_append_to_existing() {
+    let home = tempdir().unwrap();
+
+    // Pre-create settings.json with an existing hook
+    let claude_dir = home.path().join(".claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"existing.sh"}]}]}}"#,
+    )
+    .unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hook-package"))
+        .assert()
+        .success();
+
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(claude_dir.join("settings.json")).unwrap())
+            .unwrap();
+    let pre_tool = settings["hooks"]["PreToolUse"].as_array().unwrap();
+    // Should have 2 entries: existing + new
+    assert_eq!(pre_tool.len(), 2);
+    assert_eq!(pre_tool[0]["matcher"], "Write");
+    assert_eq!(pre_tool[1]["matcher"], "bash");
+}
+
+#[test]
+fn test_install_mixed_with_hooks() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("mixed-with-hooks"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("3 artifact(s)"));
+
+    // Verify skill and agent deployed
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home.path().join(".claude/agents/deploy.md").exists());
+
+    // Verify hooks in settings.json (safety.json has 2 entries: before_tool + on_stop)
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(settings["hooks"]["PreToolUse"].is_array());
+    assert!(settings["hooks"]["Stop"].is_array());
+
+    // Verify install-cache has 3 artifacts (1 skill + 1 agent + 1 hook file)
+    let cache: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".renkei/install-cache.json")).unwrap(),
+    )
+    .unwrap();
+    let artifacts = cache["packages"]["@test/mixed-hooks"]["deployed_artifacts"]
+        .as_array()
+        .unwrap();
+    assert_eq!(artifacts.len(), 3);
+}
+
+#[test]
+fn test_install_hooks_only_package() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hooks-only"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 artifact(s)"));
+
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(settings["hooks"]["Notification"].is_array());
+}
+
+#[test]
+fn test_install_bad_hook_event_fails() {
+    let home = tempdir().unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("bad-hook-event"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unknown hook event"));
+}
+
+#[test]
+fn test_reinstall_hook_package_no_duplication() {
+    let home = tempdir().unwrap();
+
+    // First install
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hook-package"))
+        .assert()
+        .success();
+
+    // Second install (reinstall)
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg(fixture_path("hook-package"))
+        .assert()
+        .success();
+
+    // Verify hooks are NOT duplicated in settings.json
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    let pre_tool = settings["hooks"]["PreToolUse"].as_array().unwrap();
+    assert_eq!(
+        pre_tool.len(),
+        1,
+        "Should have exactly 1 hook group after reinstall, got {}",
+        pre_tool.len()
+    );
+}

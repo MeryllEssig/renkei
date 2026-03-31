@@ -225,10 +225,9 @@ mod tests {
         let backend = ClaudeBackend;
         backend.deploy_hook(&artifact, &config).unwrap();
 
-        let settings: serde_json::Value = serde_json::from_str(
-            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
-        )
-        .unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(claude_dir.join("settings.json")).unwrap())
+                .unwrap();
         assert_eq!(settings["language"], "French");
         assert!(settings["hooks"]["Stop"].is_array());
         assert!(settings["hooks"]["PreToolUse"].is_array());
