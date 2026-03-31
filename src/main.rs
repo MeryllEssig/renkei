@@ -3,6 +3,7 @@ mod backend;
 mod cache;
 mod config;
 mod error;
+mod install_cache;
 mod manifest;
 
 fn main() {
