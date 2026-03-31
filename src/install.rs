@@ -74,8 +74,6 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         .map_err(|_| RenkeiError::ManifestNotFound(package_dir.to_path_buf()))?;
 
     let raw_manifest = Manifest::from_path(&package_dir)?;
-    let mcp_config = raw_manifest.mcp.clone();
-    let required_env = raw_manifest.required_env.clone();
     let manifest = raw_manifest.validate()?;
 
     println!(
@@ -112,10 +110,9 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         }
     }
 
-    // MCP registration (after artifact deployment)
-    let deployed_mcp_servers = if let Some(ref mcp) = mcp_config {
+    let deployed_mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
         match backend.register_mcp(mcp, config) {
-            Ok(entries) => entries.iter().map(|e| e.server_name.clone()).collect(),
+            Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
             Err(e) => {
                 rollback(&deployed, config);
                 return Err(e);
@@ -159,8 +156,7 @@ pub fn install_local(package_dir: &Path, config: &Config, backend: &dyn Backend)
         println!("  {} {}", "→".dimmed(), d.deployed_path.display());
     }
 
-    // Environment variable warnings (non-blocking)
-    if let Some(ref env) = required_env {
+    if let Some(ref env) = raw_manifest.required_env {
         let missing = env_check::check_required_env(env);
         if !missing.is_empty() {
             env_check::print_env_warnings(&missing);

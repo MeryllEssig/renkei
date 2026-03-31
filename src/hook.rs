@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{RenkeiError, Result};
+use crate::json_file;
 
 const HOOK_TYPE_COMMAND: &str = "command";
 
@@ -100,20 +101,11 @@ pub fn translate_hooks(
 }
 
 fn read_settings(path: &Path) -> Result<serde_json::Value> {
-    match std::fs::read_to_string(path) {
-        Ok(content) => Ok(serde_json::from_str(&content)?),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
-        Err(e) => Err(e.into()),
-    }
+    json_file::read_json_or_empty(path)
 }
 
 fn write_settings(path: &Path, value: &serde_json::Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(value)?;
-    std::fs::write(path, content)?;
-    Ok(())
+    json_file::write_json_pretty(path, value)
 }
 
 pub fn merge_hooks_into_settings(

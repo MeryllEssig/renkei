@@ -4,12 +4,13 @@ mod cache;
 mod cli;
 mod config;
 mod error;
+mod env_check;
 mod hook;
 mod install;
 mod install_cache;
+mod json_file;
 mod manifest;
 mod mcp;
-mod env_check;
 
 use clap::Parser;
 use cli::{Cli, Commands};

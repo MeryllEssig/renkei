@@ -4,27 +4,11 @@ use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{RenkeiError, Result};
+use crate::json_file;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DeployedMcpEntry {
     pub server_name: String,
-}
-
-fn read_claude_config(path: &Path) -> Result<serde_json::Value> {
-    match std::fs::read_to_string(path) {
-        Ok(content) => Ok(serde_json::from_str(&content)?),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
-        Err(e) => Err(e.into()),
-    }
-}
-
-fn write_claude_config(path: &Path, value: &serde_json::Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(value)?;
-    std::fs::write(path, content)?;
-    Ok(())
 }
 
 pub fn merge_mcp_into_config(
@@ -35,7 +19,7 @@ pub fn merge_mcp_into_config(
         RenkeiError::InvalidManifest("mcp field must be a JSON object".into())
     })?;
 
-    let mut config = read_claude_config(config_path)?;
+    let mut config = json_file::read_json_or_empty(config_path)?;
 
     let config_obj = config.as_object_mut().ok_or_else(|| {
         RenkeiError::DeploymentFailed("~/.claude.json is not a JSON object".into())
@@ -66,7 +50,9 @@ pub fn merge_mcp_into_config(
         });
     }
 
-    write_claude_config(config_path, &config)?;
+    if !deployed.is_empty() {
+        json_file::write_json_pretty(config_path, &config)?;
+    }
     Ok(deployed)
 }
 
@@ -97,7 +83,7 @@ pub fn remove_mcp_from_config(
         config.as_object_mut().unwrap().remove("mcpServers");
     }
 
-    write_claude_config(config_path, &config)?;
+    json_file::write_json_pretty(config_path, &config)?;
     Ok(())
 }
 
