@@ -5,7 +5,6 @@ use std::path::Path;
 use crate::error::{RenkeiError, Result};
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct Manifest {
     pub name: String,
     pub version: String,
@@ -13,36 +12,46 @@ pub struct Manifest {
     pub author: String,
     pub license: String,
     pub backends: Vec<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub keywords: Vec<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub mcp: Option<serde_json::Value>,
+    #[allow(dead_code)]
     #[serde(rename = "requiredEnv", default)]
     pub required_env: Option<serde_json::Value>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub workspace: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ValidatedManifest {
     pub scope: String,
     pub short_name: String,
     pub full_name: String,
     pub version: Version,
+    #[allow(dead_code)]
     pub description: String,
+    #[allow(dead_code)]
     pub author: String,
+    #[allow(dead_code)]
     pub license: String,
+    #[allow(dead_code)]
     pub backends: Vec<String>,
 }
 
 impl Manifest {
     pub fn from_path(path: &Path) -> Result<Self> {
         let manifest_path = path.join("renkei.json");
-        if !manifest_path.exists() {
-            return Err(RenkeiError::ManifestNotFound(manifest_path));
-        }
-        let content = std::fs::read_to_string(&manifest_path)?;
+        let content = std::fs::read_to_string(&manifest_path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                RenkeiError::ManifestNotFound(manifest_path.clone())
+            } else {
+                RenkeiError::Io(e)
+            }
+        })?;
         let manifest: Manifest = serde_json::from_str(&content)?;
         Ok(manifest)
     }
@@ -75,29 +84,23 @@ impl Manifest {
 }
 
 fn parse_scoped_name(name: &str) -> Result<(String, String)> {
-    if !name.starts_with('@') {
-        return Err(RenkeiError::InvalidScope {
-            name: name.to_string(),
-        });
-    }
-    let without_at = &name[1..];
-    let parts: Vec<&str> = without_at.splitn(2, '/').collect();
-    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
-        return Err(RenkeiError::InvalidScope {
-            name: name.to_string(),
-        });
-    }
-    let scope = parts[0];
-    let short_name = parts[1];
+    let invalid = || RenkeiError::InvalidScope {
+        name: name.to_string(),
+    };
+
+    let without_at = name.strip_prefix('@').ok_or_else(invalid)?;
+
+    let (scope, short_name) = without_at
+        .split_once('/')
+        .filter(|(s, n)| !s.is_empty() && !n.is_empty())
+        .ok_or_else(invalid)?;
 
     let valid_chars = |s: &str| {
         s.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     };
     if !valid_chars(scope) || !valid_chars(short_name) {
-        return Err(RenkeiError::InvalidScope {
-            name: name.to_string(),
-        });
+        return Err(invalid());
     }
 
     Ok((scope.to_string(), short_name.to_string()))

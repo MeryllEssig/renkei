@@ -1,4 +1,5 @@
 use std::fs::{self, File};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 use flate2::write::GzEncoder;
@@ -9,8 +10,6 @@ use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 use crate::manifest::ValidatedManifest;
 
-/// Creates a .tar.gz archive from the package directory.
-/// Returns (archive_path, sha256_hex).
 pub fn create_archive(
     package_dir: &Path,
     manifest: &ValidatedManifest,
@@ -34,10 +33,7 @@ pub fn create_archive(
     let enc = GzEncoder::new(file, Compression::default());
     let mut tar_builder = tar::Builder::new(enc);
 
-    let manifest_path = package_dir.join("renkei.json");
-    if manifest_path.exists() {
-        tar_builder.append_path_with_name(&manifest_path, "renkei.json")?;
-    }
+    tar_builder.append_path_with_name(package_dir.join("renkei.json"), "renkei.json")?;
 
     for dir_name in &["skills", "hooks", "agents"] {
         let dir = package_dir.join(dir_name);
@@ -53,11 +49,10 @@ pub fn create_archive(
 }
 
 fn compute_sha256(path: &Path) -> Result<String> {
-    let bytes = fs::read(path)?;
     let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    let result = hasher.finalize();
-    Ok(format!("{:x}", result))
+    let mut reader = BufReader::new(File::open(path)?);
+    std::io::copy(&mut reader, &mut hasher)?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 #[cfg(test)]
