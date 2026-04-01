@@ -30,6 +30,12 @@ pub enum RenkeiError {
     #[error("No project root detected (not inside a git repository).\nUse `rk install -g <source>` to install globally.")]
     NoProjectRoot,
 
+    #[error("Git clone failed for {url}: {reason}")]
+    GitCloneFailed { url: String, reason: String },
+
+    #[error("No compatible backend detected. Package requires: {required}. Detected: {detected}.\nUse --force to override.")]
+    BackendNotDetected { required: String, detected: String },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -38,3 +44,41 @@ pub enum RenkeiError {
 }
 
 pub type Result<T> = std::result::Result<T, RenkeiError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_git_clone_failed_message() {
+        let err = RenkeiError::GitCloneFailed {
+            url: "git@github.com:user/repo".to_string(),
+            reason: "repository not found".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("git@github.com:user/repo"));
+        assert!(msg.contains("repository not found"));
+    }
+
+    #[test]
+    fn test_backend_not_detected_message() {
+        let err = RenkeiError::BackendNotDetected {
+            required: "cursor".to_string(),
+            detected: "claude".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("cursor"));
+        assert!(msg.contains("claude"));
+        assert!(msg.contains("--force"));
+    }
+
+    #[test]
+    fn test_backend_not_detected_none() {
+        let err = RenkeiError::BackendNotDetected {
+            required: "cursor".to_string(),
+            detected: "none".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("none"));
+    }
+}
