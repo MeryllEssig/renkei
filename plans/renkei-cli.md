@@ -281,13 +281,13 @@ Output: checkmark/cross per check, grouped by package. Exit code 0 if healthy, 1
 
 ### Acceptance criteria
 
-- [ ] `rk doctor` on a healthy environment returns exit code 0
-- [ ] Deleted deployed file → flagged, exit code 1
-- [ ] Locally modified skill → flags the modification
-- [ ] Missing environment variable → flagged
-- [ ] Missing hook in settings.json → flagged
-- [ ] Missing MCP in claude.json → flagged
-- [ ] Tests: each check individually, exit codes, formatting
+- [x] `rk doctor` on a healthy environment returns exit code 0
+- [x] Deleted deployed file → flagged, exit code 1
+- [x] Locally modified skill → flags the modification
+- [x] Missing environment variable → flagged
+- [x] Missing hook in settings.json → flagged
+- [x] Missing MCP in claude.json → flagged
+- [x] Tests: each check individually, exit codes, formatting
 
 ---
 
