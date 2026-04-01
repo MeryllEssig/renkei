@@ -63,14 +63,14 @@ impl InstallOptions {
     }
 }
 
-fn remove_artifact_file(path: &Path) {
+pub(crate) fn remove_artifact_file(path: &Path) {
     let _ = std::fs::remove_file(path);
     if let Some(parent) = path.parent() {
         let _ = std::fs::remove_dir(parent);
     }
 }
 
-fn undo_artifact(
+pub(crate) fn undo_artifact(
     kind: &ArtifactKind,
     path: &Path,
     hooks: &[hook::DeployedHookEntry],
@@ -84,7 +84,7 @@ fn undo_artifact(
     }
 }
 
-fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache, config: &Config) {
+pub(crate) fn cleanup_previous_installation(full_name: &str, install_cache: &InstallCache, config: &Config) {
     if let Some(entry) = install_cache.packages.get(full_name) {
         for artifact in &entry.deployed_artifacts {
             undo_artifact(
