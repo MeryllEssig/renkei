@@ -16,6 +16,7 @@ mod lockfile;
 mod json_file;
 mod list;
 mod manifest;
+mod package;
 mod mcp;
 mod source;
 mod uninstall;
@@ -120,6 +121,7 @@ fn main() {
         Commands::List { global } => run_list(global),
         Commands::Doctor { global } => run_doctor(global, &backend),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
+        Commands::Package { bump } => package::run_package(bump),
     };
 
     if let Err(e) = result {

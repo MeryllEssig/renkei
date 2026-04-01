@@ -339,12 +339,12 @@ Display summary: list of included files, count, archive size.
 
 ### Acceptance criteria
 
-- [ ] `rk package` creates `<name>-<version>.tar.gz` with the correct contents
-- [ ] The archive excludes everything except `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`
-- [ ] `rk package --bump minor` increments the minor version in `renkei.json`
-- [ ] `rk package` in a directory without `renkei.json` → error
-- [ ] Summary displayed with file list and size
-- [ ] Tests: archive contents, version bump (patch/minor/major), validation, summary
+- [x] `rk package` creates `<name>-<version>.tar.gz` with the correct contents
+- [x] The archive excludes everything except `renkei.json`, `skills/`, `hooks/`, `agents/`, `scripts/`
+- [x] `rk package --bump minor` increments the minor version in `renkei.json`
+- [x] `rk package` in a directory without `renkei.json` → error
+- [x] Summary displayed with file list and size
+- [x] Tests: archive contents, version bump (patch/minor/major), validation, summary
 
 ---
 

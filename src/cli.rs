@@ -1,4 +1,11 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum BumpLevel {
+    Patch,
+    Minor,
+    Major,
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -46,5 +53,11 @@ pub enum Commands {
         /// Check globally installed packages instead of project-scoped
         #[arg(short = 'g', long = "global")]
         global: bool,
+    },
+    /// Create a distributable .tar.gz archive of the current package
+    Package {
+        /// Bump the version before packaging (patch, minor, major)
+        #[arg(long)]
+        bump: Option<BumpLevel>,
     },
 }
