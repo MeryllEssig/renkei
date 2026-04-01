@@ -2,6 +2,7 @@ mod artifact;
 mod backend;
 mod cache;
 mod cli;
+mod conflict;
 mod config;
 mod env_check;
 mod error;
