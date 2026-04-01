@@ -105,14 +105,11 @@ fn strip_integrity_prefix(integrity: &str) -> &str {
 pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<()> {
     let lockfile_path = config.lockfile_path();
 
-    // Before strict-loading lockfile, check for workspace context (project scope only).
-    // Workspace without lockfile gets a specific error guiding toward `rk install --link .`.
     if config.is_project() && !lockfile_path.exists() {
         if let Some(ref root) = config.project_root {
             if manifest::try_load_workspace(root).is_some() {
                 return Err(RenkeiError::WorkspaceDetected {
                     path: root.to_string_lossy().to_string(),
-                    hint: "workspace detected, use `rk install --link .` for dev".to_string(),
                 });
             }
         }

@@ -8,26 +8,17 @@ use crate::error::{RenkeiError, Result};
 use crate::install::{self, InstallOptions, SourceKind};
 use crate::manifest::RequestedScope;
 
-pub struct WorkspaceInstallOptions {
-    pub force: bool,
-    pub source_kind: SourceKind,
-    pub source_url: String,
-    pub resolved: Option<String>,
-    pub tag: Option<String>,
-}
-
 /// Install all members of a workspace.
 ///
 /// Validates that every member directory contains a `renkei.json` before
-/// installing any member (fail-fast). Then installs each member independently
-/// via `install::install_local`.
+/// installing any member (fail-fast). Then installs each member independently.
 pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],
     config: &Config,
     backend: &dyn Backend,
     requested_scope: RequestedScope,
-    options: &WorkspaceInstallOptions,
+    options: &InstallOptions,
 ) -> Result<()> {
     println!(
         "{} workspace with {} member(s)",
@@ -35,7 +26,6 @@ pub fn install_workspace(
         members.len()
     );
 
-    // Validate all member directories exist and have a manifest before installing any
     for member in members {
         let member_dir = workspace_dir.join(member);
         if !member_dir.join("renkei.json").exists() {
@@ -54,21 +44,12 @@ pub fn install_workspace(
     Ok(())
 }
 
-fn build_member_options(member_dir: &Path, ws_options: &WorkspaceInstallOptions) -> InstallOptions {
-    match ws_options.source_kind {
-        SourceKind::Local => InstallOptions {
-            force: ws_options.force,
-            ..InstallOptions::local(member_dir.to_string_lossy().to_string())
-        },
-        SourceKind::Git => InstallOptions {
-            force: ws_options.force,
-            ..InstallOptions::git(
-                ws_options.source_url.clone(),
-                ws_options.resolved.clone().unwrap_or_default(),
-                ws_options.tag.clone(),
-            )
-        },
+fn build_member_options(member_dir: &Path, base: &InstallOptions) -> InstallOptions {
+    let mut opts = base.clone();
+    if opts.source_kind == SourceKind::Local {
+        opts.source_url = member_dir.to_string_lossy().to_string();
     }
+    opts
 }
 
 #[cfg(test)]
@@ -111,6 +92,17 @@ mod tests {
         ws
     }
 
+    fn local_options(source_url: &str) -> InstallOptions {
+        InstallOptions::local(source_url.to_string())
+    }
+
+    fn force_local_options(source_url: &str) -> InstallOptions {
+        InstallOptions {
+            force: true,
+            ..InstallOptions::local(source_url.to_string())
+        }
+    }
+
     #[test]
     fn test_install_workspace_deploys_all_members() {
         let home = tempdir().unwrap();
@@ -122,13 +114,7 @@ mod tests {
             ("member-b", "@test/member-b", "lint"),
         ]);
 
-        let options = WorkspaceInstallOptions {
-            force: false,
-            source_kind: SourceKind::Local,
-            source_url: ws.path().to_string_lossy().to_string(),
-            resolved: None,
-            tag: None,
-        };
+        let options = local_options(&ws.path().to_string_lossy());
 
         install_workspace(
             ws.path(),
@@ -149,7 +135,6 @@ mod tests {
             .join(".claude/skills/renkei-lint/SKILL.md")
             .exists());
 
-        // Both should be in install-cache
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
         assert!(cache.packages.contains_key("@test/member-a"));
         assert!(cache.packages.contains_key("@test/member-b"));
@@ -168,7 +153,6 @@ mod tests {
         )
         .unwrap();
 
-        // Create only 'exists' member
         let exists_dir = ws.path().join("exists");
         fs::create_dir_all(exists_dir.join("skills")).unwrap();
         fs::write(
@@ -182,16 +166,9 @@ mod tests {
         )
         .unwrap();
 
-        // 'missing' dir exists but has no renkei.json
         fs::create_dir_all(ws.path().join("missing")).unwrap();
 
-        let options = WorkspaceInstallOptions {
-            force: false,
-            source_kind: SourceKind::Local,
-            source_url: ws.path().to_string_lossy().to_string(),
-            resolved: None,
-            tag: None,
-        };
+        let options = local_options(&ws.path().to_string_lossy());
 
         let result = install_workspace(
             ws.path(),
@@ -206,7 +183,6 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Manifest not found"));
 
-        // 'exists' member should NOT have been installed (fail-fast)
         assert!(!home
             .path()
             .join(".claude/skills/renkei-foo/SKILL.md")
@@ -216,18 +192,11 @@ mod tests {
     #[test]
     fn test_install_workspace_propagates_force() {
         let home = tempdir().unwrap();
-        // No .claude dir — backend detection would fail without force
         let config = Config::with_home_dir(home.path().to_path_buf());
 
         let ws = make_workspace(&[("member-a", "@test/member-a", "review")]);
 
-        let options = WorkspaceInstallOptions {
-            force: true,
-            source_kind: SourceKind::Local,
-            source_url: ws.path().to_string_lossy().to_string(),
-            resolved: None,
-            tag: None,
-        };
+        let options = force_local_options(&ws.path().to_string_lossy());
 
         let result = install_workspace(
             ws.path(),
@@ -252,13 +221,7 @@ mod tests {
             ("member-b", "@test/member-b", "lint"),
         ]);
 
-        let options = WorkspaceInstallOptions {
-            force: false,
-            source_kind: SourceKind::Local,
-            source_url: ws.path().to_string_lossy().to_string(),
-            resolved: None,
-            tag: None,
-        };
+        let options = local_options(&ws.path().to_string_lossy());
 
         install_workspace(
             ws.path(),

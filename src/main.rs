@@ -22,16 +22,17 @@ mod source;
 mod uninstall;
 mod workspace;
 
-use clap::Parser;
-use cli::{Cli, Commands};
-use config::Config;
-use manifest::RequestedScope;
-use owo_colors::OwoColorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
+
+use clap::Parser;
+use owo_colors::OwoColorize;
 
 use backend::claude::ClaudeBackend;
 use backend::Backend;
+use cli::{Cli, Commands};
+use config::Config;
+use manifest::RequestedScope;
 
 fn build_config(global: bool) -> error::Result<Config> {
     let home_dir = Config::default_home_dir();
@@ -40,6 +41,21 @@ fn build_config(global: bool) -> error::Result<Config> {
     } else {
         let project_root = config::detect_project_root()?;
         Ok(Config::for_project(home_dir, project_root))
+    }
+}
+
+/// Dispatch to workspace or single-package install based on the manifest.
+fn install_or_workspace(
+    package_dir: &Path,
+    config: &Config,
+    backend: &dyn Backend,
+    requested_scope: RequestedScope,
+    options: &install::InstallOptions,
+) -> error::Result<()> {
+    if let Some(members) = manifest::try_load_workspace(package_dir) {
+        workspace::install_workspace(package_dir, &members, config, backend, requested_scope, options)
+    } else {
+        install::install_local(package_dir, config, backend, requested_scope, options)
     }
 }
 
@@ -61,62 +77,20 @@ fn run_install(
     match source::parse_source(source) {
         source::PackageSource::Local(path_str) => {
             let path = PathBuf::from(&path_str);
-            if let Some(members) = manifest::try_load_workspace(&path) {
-                let ws_options = workspace::WorkspaceInstallOptions {
-                    force,
-                    source_kind: install::SourceKind::Local,
-                    source_url: path_str,
-                    resolved: None,
-                    tag: None,
-                };
-                workspace::install_workspace(
-                    &path,
-                    &members,
-                    &config,
-                    backend,
-                    requested_scope,
-                    &ws_options,
-                )
-            } else {
-                let options = install::InstallOptions {
-                    force,
-                    ..install::InstallOptions::local(path_str)
-                };
-                install::install_local(&path, &config, backend, requested_scope, &options)
-            }
+            let options = install::InstallOptions {
+                force,
+                ..install::InstallOptions::local(path_str)
+            };
+            install_or_workspace(&path, &config, backend, requested_scope, &options)
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
             let sha = git::resolve_head(tmp_dir.path())?;
-            if let Some(members) = manifest::try_load_workspace(tmp_dir.path()) {
-                let ws_options = workspace::WorkspaceInstallOptions {
-                    force,
-                    source_kind: install::SourceKind::Git,
-                    source_url: url,
-                    resolved: Some(sha),
-                    tag: tag.map(String::from),
-                };
-                workspace::install_workspace(
-                    tmp_dir.path(),
-                    &members,
-                    &config,
-                    backend,
-                    requested_scope,
-                    &ws_options,
-                )
-            } else {
-                let options = install::InstallOptions {
-                    force,
-                    ..install::InstallOptions::git(url, sha, tag.map(String::from))
-                };
-                install::install_local(
-                    tmp_dir.path(),
-                    &config,
-                    backend,
-                    requested_scope,
-                    &options,
-                )
-            }
+            let options = install::InstallOptions {
+                force,
+                ..install::InstallOptions::git(url, sha, tag.map(String::from))
+            };
+            install_or_workspace(tmp_dir.path(), &config, backend, requested_scope, &options)
         }
     }
 }

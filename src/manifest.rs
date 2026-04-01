@@ -50,9 +50,6 @@ pub struct Manifest {
     pub mcp: Option<serde_json::Value>,
     #[serde(rename = "requiredEnv", default)]
     pub required_env: Option<serde_json::Value>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub workspace: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +111,6 @@ impl Manifest {
     }
 }
 
-/// Minimal struct for workspace root manifests (only the `workspace` field).
 #[derive(Debug, Deserialize)]
 struct WorkspaceManifest {
     workspace: Option<Vec<String>>,

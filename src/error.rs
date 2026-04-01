@@ -59,8 +59,8 @@ pub enum RenkeiError {
         actual: String,
     },
 
-    #[error("Workspace detected at {path}.\n{hint}")]
-    WorkspaceDetected { path: String, hint: String },
+    #[error("Workspace detected at {path}.\nUse `rk install --link .` for dev.")]
+    WorkspaceDetected { path: String },
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -157,7 +157,6 @@ mod tests {
     fn test_workspace_detected_message() {
         let err = RenkeiError::WorkspaceDetected {
             path: "/projects/my-workspace".to_string(),
-            hint: "workspace detected, use `rk install --link .` for dev".to_string(),
         };
         let msg = err.to_string();
         assert!(msg.contains("/projects/my-workspace"));
