@@ -13,6 +13,16 @@ pub enum ArtifactKind {
     Hook,
 }
 
+impl ArtifactKind {
+    pub fn dir_name(&self) -> &'static str {
+        match self {
+            ArtifactKind::Skill => "skills",
+            ArtifactKind::Agent => "agents",
+            ArtifactKind::Hook => "hooks",
+        }
+    }
+}
+
 impl fmt::Display for ArtifactKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

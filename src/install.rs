@@ -246,7 +246,12 @@ pub(crate) fn install_local_with_resolver(
     }
 
     let (archive_path, integrity) = if options.from_lockfile {
-        let path = cache::archive_path(config, &manifest.scope, &manifest.short_name, &manifest.version);
+        let path = cache::archive_path(
+            config,
+            &manifest.scope,
+            &manifest.short_name,
+            &manifest.version,
+        );
         let hash = if path.exists() {
             cache::compute_sha256(&path)?
         } else {

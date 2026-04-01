@@ -28,17 +28,18 @@ pub fn create_archive(
     manifest: &ValidatedManifest,
     config: &Config,
 ) -> Result<(PathBuf, String)> {
-    let path = archive_path(config, &manifest.scope, &manifest.short_name, &manifest.version);
+    let path = archive_path(
+        config,
+        &manifest.scope,
+        &manifest.short_name,
+        &manifest.version,
+    );
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let file = File::create(&path).map_err(|e| {
-        RenkeiError::CacheError(format!(
-            "Cannot create archive {}: {}",
-            path.display(),
-            e
-        ))
+        RenkeiError::CacheError(format!("Cannot create archive {}: {}", path.display(), e))
     })?;
     let enc = GzEncoder::new(file, Compression::default());
     let mut tar_builder = tar::Builder::new(enc);

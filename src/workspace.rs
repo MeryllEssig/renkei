@@ -38,7 +38,13 @@ pub fn install_workspace(
     for member in members {
         let member_dir = workspace_dir.join(member);
         let member_options = build_member_options(&member_dir, options);
-        install::install_local(&member_dir, config, backend, requested_scope, &member_options)?;
+        install::install_local(
+            &member_dir,
+            config,
+            backend,
+            requested_scope,
+            &member_options,
+        )?;
     }
 
     Ok(())

@@ -90,16 +90,27 @@ impl LockfileEntry {
     }
 }
 
-fn archive_path_for_entry(config: &Config, package_name: &str, entry: &LockfileEntry) -> Result<PathBuf> {
+fn archive_path_for_entry(
+    config: &Config,
+    package_name: &str,
+    entry: &LockfileEntry,
+) -> Result<PathBuf> {
     let (scope, short_name) = manifest::parse_scoped_name(package_name)?;
-    let version: semver::Version = entry.version.parse().map_err(|e| {
-        RenkeiError::InvalidVersion { version: entry.version.clone(), reason: format!("{e}") }
-    })?;
+    let version: semver::Version =
+        entry
+            .version
+            .parse()
+            .map_err(|e| RenkeiError::InvalidVersion {
+                version: entry.version.clone(),
+                reason: format!("{e}"),
+            })?;
     Ok(cache::archive_path(config, &scope, &short_name, &version))
 }
 
 fn strip_integrity_prefix(integrity: &str) -> &str {
-    integrity.strip_prefix(INTEGRITY_PREFIX).unwrap_or(integrity)
+    integrity
+        .strip_prefix(INTEGRITY_PREFIX)
+        .unwrap_or(integrity)
 }
 
 pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<()> {
@@ -159,9 +170,8 @@ pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<(
                     });
                 }
 
-                let tmp = tempfile::tempdir().map_err(|e| {
-                    RenkeiError::CacheError(format!("Cannot create temp dir: {e}"))
-                })?;
+                let tmp = tempfile::tempdir()
+                    .map_err(|e| RenkeiError::CacheError(format!("Cannot create temp dir: {e}")))?;
                 cache::extract_archive_to_dir(&archive, tmp.path())?;
 
                 let options = build_install_options(entry);
@@ -185,9 +195,7 @@ fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
                 entry.tag.clone(),
             )
         }
-        source::PackageSource::Local(_) => {
-            install::InstallOptions::local(entry.source.clone())
-        }
+        source::PackageSource::Local(_) => install::InstallOptions::local(entry.source.clone()),
     };
     options.from_lockfile = true;
     options
@@ -526,7 +534,8 @@ mod tests {
         let lockfile_path = config.lockfile_path();
         let mut lockfile = Lockfile::load(&lockfile_path).unwrap();
         let entry = lockfile.packages.get_mut("@test/corrupt").unwrap();
-        entry.integrity = "sha256-0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        entry.integrity =
+            "sha256-0000000000000000000000000000000000000000000000000000000000000000".to_string();
         lockfile.save(&lockfile_path).unwrap();
 
         // Install from lockfile should fail with integrity error

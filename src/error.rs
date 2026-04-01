@@ -62,6 +62,12 @@ pub enum RenkeiError {
     #[error("Workspace detected at {path}.\nUse `rk install --link .` for dev.")]
     WorkspaceDetected { path: String },
 
+    #[error("Already a Renkei package: {0} contains renkei.json")]
+    AlreadyRenkeiPackage(PathBuf),
+
+    #[error("Nothing to migrate: no skills, hooks, or agents found in {0}")]
+    NothingToMigrate(PathBuf),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

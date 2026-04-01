@@ -349,11 +349,7 @@ mod tests {
     #[test]
     fn test_try_load_workspace_returns_none_for_empty_workspace() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("renkei.json"),
-            r#"{ "workspace": [] }"#,
-        )
-        .unwrap();
+        std::fs::write(dir.path().join("renkei.json"), r#"{ "workspace": [] }"#).unwrap();
         assert!(try_load_workspace(dir.path()).is_none());
     }
 

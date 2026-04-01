@@ -70,7 +70,11 @@ impl Config {
     }
 
     pub fn scope_label(&self) -> &'static str {
-        if self.is_project() { "project" } else { "global" }
+        if self.is_project() {
+            "project"
+        } else {
+            "global"
+        }
     }
 
     pub fn lockfile_path(&self) -> PathBuf {

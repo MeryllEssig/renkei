@@ -110,8 +110,7 @@ fn create_package_archive(
 }
 
 fn collect_dir_entries(dir: &Path, prefix: &str, entries: &mut Vec<String>) -> Result<()> {
-    let mut dir_entries: Vec<_> = fs::read_dir(dir)?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut dir_entries: Vec<_> = fs::read_dir(dir)?.collect::<std::result::Result<Vec<_>, _>>()?;
     dir_entries.sort_by_key(|e| e.file_name());
     for entry in dir_entries {
         let path = entry.path();

@@ -60,4 +60,9 @@ pub enum Commands {
         #[arg(long)]
         bump: Option<BumpLevel>,
     },
+    /// Migrate an existing directory into a valid Renkei package
+    Migrate {
+        /// Path to the directory to migrate
+        path: String,
+    },
 }

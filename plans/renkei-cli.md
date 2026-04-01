@@ -384,8 +384,8 @@ CI workflow: tests + clippy + fmt on each PR.
 
 ### Acceptance criteria
 
-- [ ] Release workflow produces binaries for all 5 targets
-- [ ] CI workflow runs tests, clippy, fmt
-- [ ] `rk migrate` generates a valid `renkei.json` from the old format
-- [ ] The migrated package passes `rk package` without errors
-- [ ] Tests: old format → valid new format migration
+- [x] Release workflow produces binaries for all 5 targets
+- [x] CI workflow runs tests, clippy, fmt
+- [x] `rk migrate` generates a valid `renkei.json` from the old format
+- [x] The migrated package passes `rk package` without errors
+- [x] Tests: old format → valid new format migration

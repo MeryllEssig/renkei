@@ -12,12 +12,13 @@ mod git;
 mod hook;
 mod install;
 mod install_cache;
-mod lockfile;
 mod json_file;
 mod list;
+mod lockfile;
 mod manifest;
-mod package;
 mod mcp;
+mod migrate;
+mod package;
 mod source;
 mod uninstall;
 mod workspace;
@@ -53,7 +54,14 @@ fn install_or_workspace(
     options: &install::InstallOptions,
 ) -> error::Result<()> {
     if let Some(members) = manifest::try_load_workspace(package_dir) {
-        workspace::install_workspace(package_dir, &members, config, backend, requested_scope, options)
+        workspace::install_workspace(
+            package_dir,
+            &members,
+            config,
+            backend,
+            requested_scope,
+            options,
+        )
     } else {
         install::install_local(package_dir, config, backend, requested_scope, options)
     }
@@ -139,6 +147,7 @@ fn main() {
         Commands::Doctor { global } => run_doctor(global, &backend),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
         Commands::Package { bump } => package::run_package(bump),
+        Commands::Migrate { path } => migrate::run_migrate(&path),
     };
 
     if let Err(e) = result {

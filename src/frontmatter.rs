@@ -33,7 +33,7 @@ pub fn replace_frontmatter_name(content: &str, new_name: &str) -> Result<String>
 
 /// Split content into (before_first_delimiter, frontmatter_body, after_second_delimiter).
 /// Returns None if no valid frontmatter block is found.
-fn split_frontmatter(content: &str) -> Option<(&str, &str, &str)> {
+pub(crate) fn split_frontmatter(content: &str) -> Option<(&str, &str, &str)> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return None;
