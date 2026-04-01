@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use owo_colors::OwoColorize;
+
 use crate::artifact::ArtifactKind;
 use crate::cache;
 use crate::config::Config;
@@ -202,6 +204,166 @@ fn check_mcp(entry: &PackageEntry, claude_config: &serde_json::Value) -> Vec<Dia
     issues
 }
 
+fn format_report(report: &DoctorReport, scope_label: &str) -> String {
+    let mut out = format!("rk doctor ({scope_label})\n\n");
+
+    // Backend line
+    let backend_status = if report.backend_ok {
+        format!("{}", "ok".green())
+    } else {
+        format!("{}", "FAIL".red().bold())
+    };
+    out.push_str(&format!(
+        "Backend: Claude Code ............ {backend_status}\n"
+    ));
+
+    for diag in &report.package_diagnostics {
+        out.push('\n');
+        out.push_str(&format!(
+            "{} v{}\n",
+            diag.package_name.bold(),
+            diag.version
+        ));
+
+        let file_issues: Vec<_> = diag
+            .issues
+            .iter()
+            .filter(|i| matches!(i, DiagnosticKind::FileMissing { .. }))
+            .collect();
+        let skill_issues: Vec<_> = diag
+            .issues
+            .iter()
+            .filter(|i| {
+                matches!(
+                    i,
+                    DiagnosticKind::SkillModified { .. } | DiagnosticKind::ArchiveMissing { .. }
+                )
+            })
+            .collect();
+        let env_issues: Vec<_> = diag
+            .issues
+            .iter()
+            .filter(|i| matches!(i, DiagnosticKind::EnvVarMissing { .. }))
+            .collect();
+        let hook_issues: Vec<_> = diag
+            .issues
+            .iter()
+            .filter(|i| matches!(i, DiagnosticKind::HookMissing { .. }))
+            .collect();
+        let mcp_issues: Vec<_> = diag
+            .issues
+            .iter()
+            .filter(|i| matches!(i, DiagnosticKind::McpMissing { .. }))
+            .collect();
+
+        format_check_section(&mut out, "Deployed files", &file_issues);
+        format_check_section(&mut out, "Skill integrity", &skill_issues);
+        format_check_section(&mut out, "Environment variables", &env_issues);
+        format_check_section(&mut out, "Hooks", &hook_issues);
+        format_check_section(&mut out, "MCP servers", &mcp_issues);
+    }
+
+    // Summary
+    let total = report.package_diagnostics.len();
+    let with_issues = report
+        .package_diagnostics
+        .iter()
+        .filter(|p| !p.issues.is_empty())
+        .count();
+    let healthy = total - with_issues;
+    out.push('\n');
+    if with_issues == 0 && report.backend_ok {
+        out.push_str(&format!(
+            "{}",
+            format!("All healthy: {total} package(s).\n").green()
+        ));
+    } else {
+        out.push_str(&format!(
+            "{healthy} healthy, {with_issues} with issues.\n"
+        ));
+    }
+
+    out
+}
+
+fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind]) {
+    let dots = ".".repeat(32_usize.saturating_sub(label.len()));
+    if issues.is_empty() {
+        out.push_str(&format!(
+            "  {label} {dots} {}\n",
+            "ok".green()
+        ));
+    } else {
+        let status_label = if issues
+            .iter()
+            .all(|i| matches!(i, DiagnosticKind::SkillModified { .. }))
+        {
+            format!("{}", "WARN".yellow().bold())
+        } else {
+            format!("{}", "FAIL".red().bold())
+        };
+        out.push_str(&format!("  {label} {dots} {status_label}\n"));
+
+        for issue in issues {
+            match issue {
+                DiagnosticKind::FileMissing {
+                    artifact_name,
+                    ..
+                } => {
+                    out.push_str(&format!(
+                        "    {} {} — file missing\n",
+                        "x".red(),
+                        artifact_name
+                    ));
+                }
+                DiagnosticKind::SkillModified {
+                    artifact_name,
+                    ..
+                } => {
+                    out.push_str(&format!(
+                        "    {} {} — locally modified\n",
+                        "!".yellow(),
+                        artifact_name
+                    ));
+                }
+                DiagnosticKind::EnvVarMissing {
+                    var_name,
+                    description,
+                } => {
+                    out.push_str(&format!(
+                        "    {} {} — {}\n",
+                        "x".red(),
+                        var_name,
+                        description
+                    ));
+                }
+                DiagnosticKind::HookMissing { event, command } => {
+                    out.push_str(&format!(
+                        "    {} {} ({}) — missing from settings.json\n",
+                        "x".red(),
+                        command,
+                        event
+                    ));
+                }
+                DiagnosticKind::McpMissing { server_name } => {
+                    out.push_str(&format!(
+                        "    {} {} — missing from claude.json\n",
+                        "x".red(),
+                        server_name
+                    ));
+                }
+                DiagnosticKind::ArchiveMissing { archive_path } => {
+                    out.push_str(&format!(
+                        "    {} archive missing: {}\n",
+                        "x".red(),
+                        archive_path
+                    ));
+                }
+            }
+        }
+    }
+}
+
 pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
     let cache = InstallCache::load(config)?;
     let scope_label = if global { "global" } else { "project" };
@@ -217,6 +379,9 @@ pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
         backend_ok,
         package_diagnostics: Vec::new(),
     };
+
+    let output = format_report(&report, scope_label);
+    print!("{}", output);
 
     Ok(report.is_healthy())
 }
@@ -727,5 +892,92 @@ mod tests {
         let config = serde_json::json!({});
         let entry = make_entry(vec![]);
         assert!(check_mcp(&entry, &config).is_empty());
+    }
+
+    // -- Formatting tests --
+
+    #[test]
+    fn test_format_healthy_report() {
+        let report = DoctorReport {
+            backend_ok: true,
+            package_diagnostics: vec![PackageDiagnostic {
+                package_name: "@test/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                issues: vec![],
+            }],
+        };
+        let output = format_report(&report, "global");
+        assert!(output.contains("rk doctor (global)"));
+        assert!(output.contains("ok"));
+        assert!(output.contains("@test/pkg"));
+        assert!(output.contains("v1.0.0"));
+        assert!(output.contains("All healthy: 1 package(s)."));
+    }
+
+    #[test]
+    fn test_format_backend_missing() {
+        let report = DoctorReport {
+            backend_ok: false,
+            package_diagnostics: vec![],
+        };
+        let output = format_report(&report, "global");
+        assert!(output.contains("FAIL"));
+        assert!(output.contains("0 healthy, 0 with issues"));
+    }
+
+    #[test]
+    fn test_format_with_issues() {
+        let report = DoctorReport {
+            backend_ok: true,
+            package_diagnostics: vec![PackageDiagnostic {
+                package_name: "@test/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                issues: vec![
+                    DiagnosticKind::FileMissing {
+                        artifact_name: "review".to_string(),
+                        path: "/p/review".to_string(),
+                    },
+                    DiagnosticKind::McpMissing {
+                        server_name: "srv".to_string(),
+                    },
+                ],
+            }],
+        };
+        let output = format_report(&report, "project");
+        assert!(output.contains("rk doctor (project)"));
+        assert!(output.contains("review"));
+        assert!(output.contains("file missing"));
+        assert!(output.contains("srv"));
+        assert!(output.contains("missing from claude.json"));
+        assert!(output.contains("0 healthy, 1 with issues"));
+    }
+
+    #[test]
+    fn test_format_skill_modified_shows_warn() {
+        let report = DoctorReport {
+            backend_ok: true,
+            package_diagnostics: vec![PackageDiagnostic {
+                package_name: "@test/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                issues: vec![DiagnosticKind::SkillModified {
+                    artifact_name: "review".to_string(),
+                    path: "/p/review".to_string(),
+                }],
+            }],
+        };
+        let output = format_report(&report, "global");
+        assert!(output.contains("WARN"));
+        assert!(output.contains("locally modified"));
+    }
+
+    #[test]
+    fn test_format_empty_packages() {
+        let report = DoctorReport {
+            backend_ok: true,
+            package_diagnostics: vec![],
+        };
+        let output = format_report(&report, "global");
+        assert!(output.contains("rk doctor (global)"));
+        assert!(output.contains("All healthy: 0 package(s)."));
     }
 }
