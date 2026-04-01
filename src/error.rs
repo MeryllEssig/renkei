@@ -36,6 +36,13 @@ pub enum RenkeiError {
     #[error("No compatible backend detected. Package requires: {required}. Detected: {detected}.\nUse --force to override.")]
     BackendNotDetected { required: String, detected: String },
 
+    #[error("Conflict: {kind} '{name}' is already deployed by package '{owner}'.\nUse --force to overwrite, or rename interactively in a TTY.")]
+    ArtifactConflict {
+        kind: String,
+        name: String,
+        owner: String,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
