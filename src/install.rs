@@ -118,16 +118,10 @@ fn rollback(deployed: &[DeployedArtifact], config: &Config) {
     }
 }
 
-/// Prompt the user for a new artifact name using `inquire`.
 fn prompt_rename(conflict: &Conflict) -> Result<String> {
-    let kind_label = match conflict.artifact_kind {
-        ArtifactKind::Skill => "Skill",
-        ArtifactKind::Agent => "Agent",
-        _ => "Artifact",
-    };
     let prompt = format!(
-        "{kind_label} '{}' conflicts with package '{}'. Enter a new name:",
-        conflict.artifact_name, conflict.owner_package,
+        "{} '{}' conflicts with package '{}'. Enter a new name:",
+        conflict.artifact_kind, conflict.artifact_name, conflict.owner_package,
     );
     inquire::Text::new(&prompt)
         .with_help_message("The artifact will be deployed under this name")
@@ -146,7 +140,7 @@ fn default_resolver(force: bool) -> Box<ConflictResolver> {
     } else {
         Box::new(|c: &Conflict| {
             Err(RenkeiError::ArtifactConflict {
-                kind: format!("{:?}", c.artifact_kind).to_lowercase(),
+                kind: c.artifact_kind.clone(),
                 name: c.artifact_name.clone(),
                 owner: c.owner_package.clone(),
             })
@@ -172,18 +166,14 @@ pub fn install_local(
     )
 }
 
-/// Inner implementation that accepts an injectable conflict resolver.
-/// The resolver receives a Conflict and returns:
-///   - `Ok(None)` → force overwrite (no rename)
-///   - `Ok(Some(new_name))` → rename the artifact
-///   - `Err(...)` → abort installation
-pub fn install_local_with_resolver(
+/// Testable core of `install_local` with an injectable conflict resolver.
+pub(crate) fn install_local_with_resolver(
     package_dir: &Path,
     config: &Config,
     backend: &dyn Backend,
     requested_scope: RequestedScope,
     options: &InstallOptions,
-    conflict_resolver: &dyn Fn(&Conflict) -> Result<Option<String>>,
+    conflict_resolver: &ConflictResolver,
 ) -> Result<()> {
     let package_dir = package_dir
         .canonicalize()
@@ -248,10 +238,11 @@ pub fn install_local_with_resolver(
 
     let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
 
-    // Build effective artifacts (apply renames)
+    // Build effective artifacts (apply renames).
+    // Hold temp files alive until deployment completes (they are deleted on Drop).
     let mut temp_files: Vec<tempfile::NamedTempFile> = Vec::new();
     let effective_artifacts: Vec<(Artifact, Option<String>)> = artifacts
-        .iter()
+        .into_iter()
         .map(|art| {
             let key = (art.kind.clone(), art.name.clone());
             if let Some(new_name) = renames.get(&key) {
@@ -271,15 +262,16 @@ pub fn install_local_with_resolver(
                     RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}"))
                 })?;
 
+                let original_name = art.name;
                 let renamed_artifact = Artifact {
-                    kind: art.kind.clone(),
+                    kind: art.kind,
                     name: new_name.to_string(),
                     source_path: tmp.path().to_path_buf(),
                 };
                 temp_files.push(tmp);
-                Ok((renamed_artifact, Some(art.name.clone())))
+                Ok((renamed_artifact, Some(original_name)))
             } else {
-                Ok((art.clone(), None))
+                Ok((art, None))
             }
         })
         .collect::<Result<Vec<_>>>()?;
@@ -738,7 +730,7 @@ mod tests {
 
     fn error_resolver(c: &conflict::Conflict) -> Result<Option<String>> {
         Err(RenkeiError::ArtifactConflict {
-            kind: format!("{:?}", c.artifact_kind).to_lowercase(),
+            kind: c.artifact_kind.clone(),
             name: c.artifact_name.clone(),
             owner: c.owner_package.clone(),
         })

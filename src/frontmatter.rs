@@ -6,7 +6,7 @@ use crate::error::{RenkeiError, Result};
 /// Returns the full content with the name field updated.
 pub fn replace_frontmatter_name(content: &str, new_name: &str) -> Result<String> {
     let Some((before, fm, after)) = split_frontmatter(content) else {
-        return Err(RenkeiError::InvalidManifest(
+        return Err(RenkeiError::DeploymentFailed(
             "No frontmatter found in artifact".into(),
         ));
     };
@@ -23,7 +23,7 @@ pub fn replace_frontmatter_name(content: &str, new_name: &str) -> Result<String>
     }
 
     if !found {
-        return Err(RenkeiError::InvalidManifest(
+        return Err(RenkeiError::DeploymentFailed(
             "No 'name' field found in frontmatter".into(),
         ));
     }

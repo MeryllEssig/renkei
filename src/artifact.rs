@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,16 @@ pub enum ArtifactKind {
     Skill,
     Agent,
     Hook,
+}
+
+impl fmt::Display for ArtifactKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArtifactKind::Skill => write!(f, "skill"),
+            ArtifactKind::Agent => write!(f, "agent"),
+            ArtifactKind::Hook => write!(f, "hook"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

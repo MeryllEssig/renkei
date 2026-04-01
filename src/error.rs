@@ -1,5 +1,8 @@
 use std::path::PathBuf;
+
 use thiserror::Error;
+
+use crate::artifact::ArtifactKind;
 
 #[derive(Debug, Error)]
 pub enum RenkeiError {
@@ -38,7 +41,7 @@ pub enum RenkeiError {
 
     #[error("Conflict: {kind} '{name}' is already deployed by package '{owner}'.\nUse --force to overwrite, or rename interactively in a TTY.")]
     ArtifactConflict {
-        kind: String,
+        kind: ArtifactKind,
         name: String,
         owner: String,
     },
