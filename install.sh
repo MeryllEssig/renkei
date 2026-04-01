@@ -68,8 +68,7 @@ artifact_name() {
     case "${_os}-${_arch}" in
         linux-x86_64)   echo "rk-linux-x86_64" ;;
         linux-aarch64)  echo "rk-linux-aarch64" ;;
-        darwin-x86_64)  echo "rk-darwin-x86_64" ;;
-        darwin-aarch64) echo "rk-darwin-aarch64" ;;
+        darwin-x86_64|darwin-aarch64) echo "rk-darwin-aarch64" ;;
         windows-x86_64) echo "rk-windows-x86_64.exe" ;;
         *) echo "" ;;
     esac
