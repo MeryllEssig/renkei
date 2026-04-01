@@ -48,7 +48,7 @@ fn format_package_line(name: &str, entry: &PackageEntry) -> String {
         let sha_short = entry
             .resolved
             .as_deref()
-            .map(|s| &s[..s.len().min(7)])
+            .map(|s| s.get(..7).unwrap_or(s))
             .unwrap_or("unknown");
         match &entry.tag {
             Some(tag) => format!(" {}", format!("({tag} @ {sha_short})").dimmed()),
@@ -75,21 +75,14 @@ fn format_artifact_line(entry: &PackageEntry) -> String {
 }
 
 fn format_artifact_summary(entry: &PackageEntry) -> String {
-    let skills = entry
-        .deployed_artifacts
-        .iter()
-        .filter(|a| a.artifact_type == ArtifactKind::Skill)
-        .count();
-    let agents = entry
-        .deployed_artifacts
-        .iter()
-        .filter(|a| a.artifact_type == ArtifactKind::Agent)
-        .count();
-    let hooks = entry
-        .deployed_artifacts
-        .iter()
-        .filter(|a| a.artifact_type == ArtifactKind::Hook)
-        .count();
+    let (mut skills, mut agents, mut hooks) = (0, 0, 0);
+    for a in &entry.deployed_artifacts {
+        match a.artifact_type {
+            ArtifactKind::Skill => skills += 1,
+            ArtifactKind::Agent => agents += 1,
+            ArtifactKind::Hook => hooks += 1,
+        }
+    }
     let mcp = entry.deployed_mcp_servers.len();
 
     let mut parts = Vec::new();

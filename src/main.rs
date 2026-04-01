@@ -28,6 +28,16 @@ use std::process;
 use backend::claude::ClaudeBackend;
 use backend::Backend;
 
+fn build_config(global: bool) -> error::Result<Config> {
+    let home_dir = Config::default_home_dir();
+    if global {
+        Ok(Config::with_home_dir(home_dir))
+    } else {
+        let project_root = config::detect_project_root()?;
+        Ok(Config::for_project(home_dir, project_root))
+    }
+}
+
 fn run_install(
     source: &str,
     global: bool,
@@ -41,14 +51,7 @@ fn run_install(
         RequestedScope::Project
     };
 
-    let home_dir = Config::default_home_dir();
-
-    let config = if global {
-        Config::with_home_dir(home_dir)
-    } else {
-        let project_root = config::detect_project_root()?;
-        Config::for_project(home_dir, project_root)
-    };
+    let config = build_config(global)?;
 
     match source::parse_source(source) {
         source::PackageSource::Local(path_str) => {
@@ -72,13 +75,7 @@ fn run_install(
 }
 
 fn run_list(global: bool) -> error::Result<()> {
-    let home_dir = Config::default_home_dir();
-    let config = if global {
-        Config::with_home_dir(home_dir)
-    } else {
-        let project_root = config::detect_project_root()?;
-        Config::for_project(home_dir, project_root)
-    };
+    let config = build_config(global)?;
     list::run_list(&config, global)
 }
 
