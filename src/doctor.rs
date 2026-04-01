@@ -137,6 +137,55 @@ fn check_env_vars(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         .collect()
 }
 
+fn check_hooks(entry: &PackageEntry, settings: &serde_json::Value) -> Vec<DiagnosticKind> {
+    let mut issues = Vec::new();
+    for artifact in &entry.deployed_artifacts {
+        for hook in &artifact.deployed_hooks {
+            if !hook_exists_in_settings(settings, &hook.event, &hook.matcher, &hook.command) {
+                issues.push(DiagnosticKind::HookMissing {
+                    event: hook.event.clone(),
+                    command: hook.command.clone(),
+                });
+            }
+        }
+    }
+    issues
+}
+
+fn hook_exists_in_settings(
+    settings: &serde_json::Value,
+    event: &str,
+    matcher: &Option<String>,
+    command: &str,
+) -> bool {
+    let groups = match settings
+        .get("hooks")
+        .and_then(|h| h.get(event))
+        .and_then(|e| e.as_array())
+    {
+        Some(arr) => arr,
+        None => return false,
+    };
+
+    groups.iter().any(|group| {
+        let group_matcher = group
+            .get("matcher")
+            .and_then(|m| m.as_str())
+            .map(String::from);
+        if group_matcher != *matcher {
+            return false;
+        }
+        group
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .is_some_and(|hooks| {
+                hooks
+                    .iter()
+                    .any(|h| h.get("command").and_then(|c| c.as_str()) == Some(command))
+            })
+    })
+}
+
 pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
     let cache = InstallCache::load(config)?;
     let scope_label = if global { "global" } else { "project" };
@@ -514,5 +563,99 @@ mod tests {
         entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
         // Missing archive → empty (already reported elsewhere)
         assert!(check_env_vars(&entry).is_empty());
+    }
+
+    // -- Hook presence tests --
+
+    fn make_hook_entry(
+        event: &str,
+        matcher: Option<&str>,
+        command: &str,
+    ) -> DeployedArtifactEntry {
+        DeployedArtifactEntry {
+            artifact_type: ArtifactKind::Hook,
+            name: "hook".to_string(),
+            deployed_path: "/settings.json".to_string(),
+            deployed_hooks: vec![DeployedHookEntry {
+                event: event.to_string(),
+                matcher: matcher.map(String::from),
+                command: command.to_string(),
+            }],
+            original_name: None,
+        }
+    }
+
+    #[test]
+    fn test_hooks_present() {
+        let settings = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "bash",
+                    "hooks": [{"type": "command", "command": "lint.sh"}]
+                }]
+            }
+        });
+        let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
+        assert!(check_hooks(&entry, &settings).is_empty());
+    }
+
+    #[test]
+    fn test_hooks_missing() {
+        let settings = serde_json::json!({});
+        let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
+        let issues = check_hooks(&entry, &settings);
+        assert_eq!(issues.len(), 1);
+        assert!(matches!(&issues[0], DiagnosticKind::HookMissing { event, command } if event == "PreToolUse" && command == "lint.sh"));
+    }
+
+    #[test]
+    fn test_hooks_without_matcher() {
+        let settings = serde_json::json!({
+            "hooks": {
+                "Stop": [{
+                    "hooks": [{"type": "command", "command": "cleanup.sh"}]
+                }]
+            }
+        });
+        let entry = make_entry(vec![make_hook_entry("Stop", None, "cleanup.sh")]);
+        assert!(check_hooks(&entry, &settings).is_empty());
+    }
+
+    #[test]
+    fn test_hooks_wrong_command() {
+        let settings = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "bash",
+                    "hooks": [{"type": "command", "command": "other.sh"}]
+                }]
+            }
+        });
+        let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
+        let issues = check_hooks(&entry, &settings);
+        assert_eq!(issues.len(), 1);
+    }
+
+    #[test]
+    fn test_hooks_wrong_matcher() {
+        let settings = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Write",
+                    "hooks": [{"type": "command", "command": "lint.sh"}]
+                }]
+            }
+        });
+        let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
+        let issues = check_hooks(&entry, &settings);
+        assert_eq!(issues.len(), 1);
+    }
+
+    #[test]
+    fn test_hooks_no_hooks_key() {
+        let settings = serde_json::json!({"language": "French"});
+        let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
+        let issues = check_hooks(&entry, &settings);
+        assert_eq!(issues.len(), 1);
     }
 }
