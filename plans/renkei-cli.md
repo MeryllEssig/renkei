@@ -193,7 +193,7 @@ Extract the commit SHA from the clone for future use (lockfile).
 Before each skill deployment, check `install-cache.json` for whether another package already owns a skill with the same name. In project scope, check the project install-cache; in global scope, check the global install-cache.
 
 Behavior by context:
-- **TTY**: interactive prompt (`dialoguer`) to choose a new name
+- **TTY**: interactive prompt (`inquire`) to choose a new name
 - **Non-TTY**: error with exit code 1
 - **`--force`**: silent overwrite
 

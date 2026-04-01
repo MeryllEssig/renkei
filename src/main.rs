@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod env_check;
 mod error;
+mod frontmatter;
 mod git;
 mod hook;
 mod install;
