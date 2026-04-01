@@ -12,6 +12,7 @@ mod hook;
 mod install;
 mod install_cache;
 mod json_file;
+mod list;
 mod manifest;
 mod mcp;
 mod source;
@@ -70,6 +71,17 @@ fn run_install(
     }
 }
 
+fn run_list(global: bool) -> error::Result<()> {
+    let home_dir = Config::default_home_dir();
+    let config = if global {
+        Config::with_home_dir(home_dir)
+    } else {
+        let project_root = config::detect_project_root()?;
+        Config::for_project(home_dir, project_root)
+    };
+    list::run_list(&config, global)
+}
+
 fn main() {
     let cli = Cli::parse();
     let backend = ClaudeBackend;
@@ -81,6 +93,7 @@ fn main() {
             tag,
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
+        Commands::List { global } => run_list(global),
     };
 
     if let Err(e) = result {
