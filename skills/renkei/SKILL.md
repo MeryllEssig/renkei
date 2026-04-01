@@ -9,11 +9,12 @@ Renkei (`rk`) is a CLI package manager written in Rust that installs, versions, 
 
 Dig into these files only when you need details on a specific action:
 
-- [Installing a package](references/install.md) — install from local path or git, global vs project scope
+- [Installing a package](references/install.md) — install from local path or git, global vs project scope, lockfile replay
 - [Creating a package](references/creating-a-package.md) — manifest format, directory conventions, artifact types
-- (Not implemented) Listing installed packages — `rk list` command
-- (Not implemented) Uninstalling a package — `rk uninstall` command
-- (Not implemented) Diagnosing issues — `rk doctor` health checks
-- (Not implemented) Lockfile — reproducible installs with `rk.lock`
-- (Not implemented) Packaging for distribution — `rk package` archive creation
-- (Not implemented) Workspace support — multi-package monorepos
+- [Listing installed packages](references/list.md) — `rk list` command
+- [Uninstalling a package](references/uninstall.md) — `rk uninstall` command
+- [Diagnosing issues](references/doctor.md) — `rk doctor` health checks
+- [Lockfile](references/lockfile.md) — reproducible installs with `rk.lock`
+- [Packaging for distribution](references/package.md) — `rk package` archive creation
+- [Workspace support](references/workspace.md) — multi-package monorepos
+- [Migration](references/migrate.md) — `rk migrate` from old format
