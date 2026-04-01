@@ -43,7 +43,8 @@ fn run_install(source: &str, global: bool, backend: &dyn Backend) -> error::Resu
         Config::for_project(home_dir, project_root)
     };
 
-    install::install_local(&path, &config, backend, requested_scope)
+    let options = install::InstallOptions::local(source.to_string());
+    install::install_local(&path, &config, backend, requested_scope, &options)
 }
 
 fn main() {

@@ -13,6 +13,37 @@ use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::{self, Manifest, RequestedScope};
 use crate::mcp;
 
+#[derive(Debug, Clone)]
+pub struct InstallOptions {
+    pub force: bool,
+    pub source_type: String,
+    pub source_url: String,
+    pub resolved: Option<String>,
+    pub tag: Option<String>,
+}
+
+impl InstallOptions {
+    pub fn local(source_path: String) -> Self {
+        Self {
+            force: false,
+            source_type: "local".to_string(),
+            source_url: source_path,
+            resolved: None,
+            tag: None,
+        }
+    }
+
+    pub fn git(url: String, resolved: String, tag: Option<String>) -> Self {
+        Self {
+            force: false,
+            source_type: "git".to_string(),
+            source_url: url,
+            resolved: Some(resolved),
+            tag,
+        }
+    }
+}
+
 fn remove_artifact_file(path: &Path) {
     let _ = std::fs::remove_file(path);
     if let Some(parent) = path.parent() {
@@ -73,6 +104,7 @@ pub fn install_local(
     config: &Config,
     backend: &dyn Backend,
     requested_scope: RequestedScope,
+    options: &InstallOptions,
 ) -> Result<()> {
     let package_dir = package_dir
         .canonicalize()
@@ -81,6 +113,25 @@ pub fn install_local(
     let raw_manifest = Manifest::from_path(&package_dir)?;
     let manifest = raw_manifest.validate()?;
     manifest::validate_scope(&manifest.install_scope, requested_scope)?;
+
+    // Backend detection
+    if !options.force {
+        let detected_name = if backend.detect_installed(config) {
+            Some(backend.name().to_string())
+        } else {
+            None
+        };
+        let has_match = manifest
+            .backends
+            .iter()
+            .any(|r| detected_name.as_deref() == Some(r.as_str()));
+        if !has_match {
+            return Err(RenkeiError::BackendNotDetected {
+                required: manifest.backends.join(", "),
+                detected: detected_name.unwrap_or_else(|| "none".to_string()),
+            });
+        }
+    }
 
     println!(
         "{} {} v{}",
@@ -142,14 +193,18 @@ pub fn install_local(
         &manifest.full_name,
         PackageEntry {
             version: manifest.version.to_string(),
-            source: "local".to_string(),
-            source_path: package_dir.to_string_lossy().to_string(),
+            source: options.source_type.clone(),
+            source_path: if options.source_type == "git" {
+                options.source_url.clone()
+            } else {
+                package_dir.to_string_lossy().to_string()
+            },
             integrity,
             archive_path: archive_path.to_string_lossy().to_string(),
             deployed_artifacts: deployed_entries,
             deployed_mcp_servers,
-            resolved: None,
-            tag: None,
+            resolved: options.resolved.clone(),
+            tag: options.tag.clone(),
         },
     );
     install_cache.save(config)?;
@@ -406,7 +461,11 @@ mod tests {
             call_count: Cell::new(0),
         };
 
-        let result = install_local(pkg.path(), &config, &backend, RequestedScope::Global);
+        let options = InstallOptions {
+            force: true,
+            ..InstallOptions::local("/tmp".to_string())
+        };
+        let result = install_local(pkg.path(), &config, &backend, RequestedScope::Global, &options);
         assert!(result.is_err());
 
         assert!(!home.path().join(".claude/agents/deploy.md").exists());
@@ -415,5 +474,97 @@ mod tests {
             .join(".claude/skills/renkei-lint/SKILL.md")
             .exists());
         assert!(!home.path().join(".claude/skills/renkei-lint").exists());
+    }
+
+    #[test]
+    fn test_backend_detected_succeeds() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        // Create .claude/ so backend is detected
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+
+        fs::write(
+            pkg.path().join("renkei.json"),
+            r#"{"name":"@test/ok","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
+        ).unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(skills.join("check.md"), "# Check").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let options = InstallOptions::local("/tmp".to_string());
+        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_backend_not_detected_fails() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        // Do NOT create .claude/ — backend not detected
+
+        fs::write(
+            pkg.path().join("renkei.json"),
+            r#"{"name":"@test/fail","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
+        ).unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(skills.join("check.md"), "# Check").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let options = InstallOptions::local("/tmp".to_string());
+        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No compatible backend"));
+        assert!(err.contains("--force"));
+    }
+
+    #[test]
+    fn test_backend_force_bypasses_check() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        // Do NOT create .claude/ — backend not detected, but force=true
+
+        fs::write(
+            pkg.path().join("renkei.json"),
+            r#"{"name":"@test/forced","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
+        ).unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(skills.join("check.md"), "# Check").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let options = InstallOptions {
+            force: true,
+            ..InstallOptions::local("/tmp".to_string())
+        };
+        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_backend_multi_with_partial_match() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        // Create .claude/ so "claude" backend is detected
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+
+        fs::write(
+            pkg.path().join("renkei.json"),
+            r#"{"name":"@test/multi","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude","cursor"]}"#,
+        ).unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(skills.join("check.md"), "# Check").unwrap();
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let options = InstallOptions::local("/tmp".to_string());
+        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        assert!(result.is_ok(), "Should succeed with at least one matching backend");
     }
 }
