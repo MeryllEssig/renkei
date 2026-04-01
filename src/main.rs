@@ -75,6 +75,11 @@ fn run_install(
     }
 }
 
+fn run_uninstall(package: &str, global: bool) -> error::Result<()> {
+    let config = build_config(global)?;
+    uninstall::run_uninstall(package, &config)
+}
+
 fn run_list(global: bool) -> error::Result<()> {
     let config = build_config(global)?;
     list::run_list(&config, global)
@@ -92,7 +97,7 @@ fn main() {
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
         Commands::List { global } => run_list(global),
-        Commands::Uninstall { .. } => todo!("uninstall not yet implemented"),
+        Commands::Uninstall { package, global } => run_uninstall(&package, global),
     };
 
     if let Err(e) = result {
