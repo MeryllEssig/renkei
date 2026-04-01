@@ -11,6 +11,7 @@ mod install_cache;
 mod json_file;
 mod manifest;
 mod mcp;
+mod source;
 
 use clap::Parser;
 use cli::{Cli, Commands};
