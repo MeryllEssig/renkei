@@ -375,9 +375,30 @@ pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
 
     let backend_ok = check_backend(config);
 
+    let settings = crate::json_file::read_json_or_empty(&config.claude_settings_path())?;
+    let claude_config = crate::json_file::read_json_or_empty(&config.claude_config_path())?;
+
+    let mut packages: Vec<_> = cache.packages.iter().collect();
+    packages.sort_by_key(|(name, _)| name.as_str());
+
+    let mut package_diagnostics = Vec::new();
+    for (name, entry) in &packages {
+        let mut issues = Vec::new();
+        issues.extend(check_deployed_files(entry));
+        issues.extend(check_skill_modifications(entry));
+        issues.extend(check_env_vars(entry));
+        issues.extend(check_hooks(entry, &settings));
+        issues.extend(check_mcp(entry, &claude_config));
+        package_diagnostics.push(PackageDiagnostic {
+            package_name: name.to_string(),
+            version: entry.version.clone(),
+            issues,
+        });
+    }
+
     let report = DoctorReport {
         backend_ok,
-        package_diagnostics: Vec::new(),
+        package_diagnostics,
     };
 
     let output = format_report(&report, scope_label);
