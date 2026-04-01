@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::artifact::ArtifactKind;
 use crate::cache;
 use crate::config::Config;
+use crate::env_check;
 use crate::error::Result;
 use crate::install_cache::{InstallCache, PackageEntry};
 
@@ -104,6 +105,36 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         }
     }
     issues
+}
+
+fn check_env_vars(entry: &PackageEntry) -> Vec<DiagnosticKind> {
+    let archive_path = Path::new(&entry.archive_path);
+
+    let manifest_bytes = match cache::extract_file_from_archive(archive_path, "renkei.json") {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            // Archive missing already reported by check_skill_modifications
+            return vec![];
+        }
+    };
+
+    let manifest: serde_json::Value = match serde_json::from_slice(&manifest_bytes) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+
+    let required_env = match manifest.get("requiredEnv") {
+        Some(v) => v,
+        None => return vec![],
+    };
+
+    env_check::check_required_env(required_env)
+        .into_iter()
+        .map(|m| DiagnosticKind::EnvVarMissing {
+            var_name: m.name,
+            description: m.description,
+        })
+        .collect()
 }
 
 pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
@@ -407,5 +438,81 @@ mod tests {
         entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
         // Agent should be skipped entirely
         assert!(check_skill_modifications(&entry).is_empty());
+    }
+
+    // -- Environment variable tests --
+
+    fn setup_package_with_env(dir: &std::path::Path, required_env: &str) {
+        std::fs::write(
+            dir.join("renkei.json"),
+            format!(
+                r#"{{"name":"@test/sample","version":"0.1.0","description":"test","author":"tester","license":"MIT","backends":["claude"],"requiredEnv":{required_env}}}"#
+            ),
+        ).unwrap();
+        let skills = dir.join("skills");
+        std::fs::create_dir_all(&skills).unwrap();
+        std::fs::write(skills.join("review.md"), "# Review").unwrap();
+    }
+
+    #[test]
+    fn test_env_vars_all_present() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        unsafe { std::env::set_var("RK_DOCTOR_TEST_A", "val") };
+        setup_package_with_env(pkg.path(), r#"{"RK_DOCTOR_TEST_A":"desc"}"#);
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = archive_path.to_string_lossy().to_string();
+
+        let issues = check_env_vars(&entry);
+        assert!(issues.is_empty());
+        unsafe { std::env::remove_var("RK_DOCTOR_TEST_A") };
+    }
+
+    #[test]
+    fn test_env_vars_missing() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        std::env::remove_var("RK_DOCTOR_TEST_B");
+        setup_package_with_env(pkg.path(), r#"{"RK_DOCTOR_TEST_B":"API key"}"#);
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = archive_path.to_string_lossy().to_string();
+
+        let issues = check_env_vars(&entry);
+        assert_eq!(issues.len(), 1);
+        assert!(matches!(&issues[0], DiagnosticKind::EnvVarMissing { var_name, description } if var_name == "RK_DOCTOR_TEST_B" && description == "API key"));
+    }
+
+    #[test]
+    fn test_env_vars_no_required_env() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+
+        setup_package_with_skill(pkg.path(), "review", "# Review");
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = archive_path.to_string_lossy().to_string();
+
+        assert!(check_env_vars(&entry).is_empty());
+    }
+
+    #[test]
+    fn test_env_vars_archive_missing() {
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
+        // Missing archive → empty (already reported elsewhere)
+        assert!(check_env_vars(&entry).is_empty());
     }
 }
