@@ -1,8 +1,9 @@
 use std::path::Path;
 
+use crate::artifact::ArtifactKind;
 use crate::config::Config;
 use crate::error::Result;
-use crate::install_cache::InstallCache;
+use crate::install_cache::{InstallCache, PackageEntry};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiagnosticKind {
@@ -41,6 +42,24 @@ fn check_backend(config: &Config) -> bool {
     config.claude_dir().is_dir()
 }
 
+fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
+    let mut issues = Vec::new();
+    for artifact in &entry.deployed_artifacts {
+        match artifact.artifact_type {
+            ArtifactKind::Skill | ArtifactKind::Agent => {
+                if !Path::new(&artifact.deployed_path).exists() {
+                    issues.push(DiagnosticKind::FileMissing {
+                        artifact_name: artifact.name.clone(),
+                        path: artifact.deployed_path.clone(),
+                    });
+                }
+            }
+            ArtifactKind::Hook => {}
+        }
+    }
+    issues
+}
+
 pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
     let cache = InstallCache::load(config)?;
     let scope_label = if global { "global" } else { "project" };
@@ -63,7 +82,8 @@ pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use crate::hook::DeployedHookEntry;
+    use crate::install_cache::DeployedArtifactEntry;
     use tempfile::tempdir;
 
     #[test]
@@ -116,5 +136,82 @@ mod tests {
             }],
         };
         assert!(!report.is_healthy());
+    }
+
+    fn make_entry(artifacts: Vec<DeployedArtifactEntry>) -> PackageEntry {
+        PackageEntry {
+            version: "1.0.0".to_string(),
+            source: "local".to_string(),
+            source_path: "/tmp/pkg".to_string(),
+            integrity: "abc".to_string(),
+            archive_path: "/tmp/a.tar.gz".to_string(),
+            deployed_artifacts: artifacts,
+            deployed_mcp_servers: vec![],
+            resolved: None,
+            tag: None,
+        }
+    }
+
+    fn make_artifact(kind: ArtifactKind, name: &str, path: &str) -> DeployedArtifactEntry {
+        DeployedArtifactEntry {
+            artifact_type: kind,
+            name: name.to_string(),
+            deployed_path: path.to_string(),
+            deployed_hooks: vec![],
+            original_name: None,
+        }
+    }
+
+    #[test]
+    fn test_deployed_files_all_exist() {
+        let dir = tempdir().unwrap();
+        let skill_path = dir.path().join("skill.md");
+        let agent_path = dir.path().join("agent.md");
+        std::fs::write(&skill_path, "# Skill").unwrap();
+        std::fs::write(&agent_path, "# Agent").unwrap();
+
+        let entry = make_entry(vec![
+            make_artifact(ArtifactKind::Skill, "review", skill_path.to_str().unwrap()),
+            make_artifact(ArtifactKind::Agent, "deploy", agent_path.to_str().unwrap()),
+        ]);
+        assert!(check_deployed_files(&entry).is_empty());
+    }
+
+    #[test]
+    fn test_deployed_files_missing() {
+        let entry = make_entry(vec![make_artifact(
+            ArtifactKind::Skill,
+            "review",
+            "/nonexistent/path/SKILL.md",
+        )]);
+        let issues = check_deployed_files(&entry);
+        assert_eq!(issues.len(), 1);
+        assert!(matches!(&issues[0], DiagnosticKind::FileMissing { artifact_name, .. } if artifact_name == "review"));
+    }
+
+    #[test]
+    fn test_deployed_files_hook_skipped() {
+        let entry = make_entry(vec![DeployedArtifactEntry {
+            artifact_type: ArtifactKind::Hook,
+            name: "lint".to_string(),
+            deployed_path: "/nonexistent/settings.json".to_string(),
+            deployed_hooks: vec![DeployedHookEntry {
+                event: "PreToolUse".to_string(),
+                matcher: Some("bash".to_string()),
+                command: "lint.sh".to_string(),
+            }],
+            original_name: None,
+        }]);
+        assert!(check_deployed_files(&entry).is_empty());
+    }
+
+    #[test]
+    fn test_deployed_files_multiple_missing() {
+        let entry = make_entry(vec![
+            make_artifact(ArtifactKind::Skill, "a", "/missing/a"),
+            make_artifact(ArtifactKind::Agent, "b", "/missing/b"),
+        ]);
+        let issues = check_deployed_files(&entry);
+        assert_eq!(issues.len(), 2);
     }
 }
