@@ -1,0 +1,8 @@
+{
+  "name": "@test/cursor-only",
+  "version": "1.0.0",
+  "description": "Package requiring cursor backend",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["cursor"]
+}
