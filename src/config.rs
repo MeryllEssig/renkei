@@ -201,10 +201,8 @@ mod tests {
 
     #[test]
     fn test_lockfile_path_project() {
-        let config = Config::for_project(
-            PathBuf::from("/home/user"),
-            PathBuf::from("/projects/foo"),
-        );
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
         assert_eq!(
             config.lockfile_path(),
             PathBuf::from("/projects/foo/rk.lock")

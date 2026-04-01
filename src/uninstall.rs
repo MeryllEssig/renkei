@@ -29,11 +29,7 @@ pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
 
     remove_from_lockfile(package, config);
 
-    println!(
-        "{} Uninstalled {}",
-        "Done.".green().bold(),
-        package.bold()
-    );
+    println!("{} Uninstalled {}", "Done.".green().bold(), package.bold());
     Ok(())
 }
 
@@ -65,10 +61,7 @@ mod tests {
         Config::for_project(home.to_path_buf(), project.to_path_buf())
     }
 
-    fn make_skill_entry(
-        skill_name: &str,
-        deployed_path: &str,
-    ) -> PackageEntry {
+    fn make_skill_entry(skill_name: &str, deployed_path: &str) -> PackageEntry {
         PackageEntry {
             version: "1.0.0".to_string(),
             source: "local".to_string(),
@@ -179,7 +172,11 @@ mod tests {
                 ]
             }
         });
-        std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        std::fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&settings).unwrap(),
+        )
+        .unwrap();
 
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
@@ -231,7 +228,11 @@ mod tests {
                 }
             }
         });
-        std::fs::write(&config_path, serde_json::to_string_pretty(&claude_json).unwrap()).unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&claude_json).unwrap(),
+        )
+        .unwrap();
 
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
@@ -395,7 +396,11 @@ mod tests {
                 }
             }
         });
-        std::fs::write(&lockfile_path, serde_json::to_string_pretty(&lockfile).unwrap()).unwrap();
+        std::fs::write(
+            &lockfile_path,
+            serde_json::to_string_pretty(&lockfile).unwrap(),
+        )
+        .unwrap();
 
         // Set up cache
         let mut cache = InstallCache::load(&config).unwrap();

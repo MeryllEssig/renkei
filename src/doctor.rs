@@ -11,12 +11,28 @@ use crate::install_cache::{InstallCache, PackageEntry};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiagnosticKind {
-    FileMissing { artifact_name: String, path: String },
-    SkillModified { artifact_name: String, path: String },
-    EnvVarMissing { var_name: String, description: String },
-    HookMissing { event: String, command: String },
-    McpMissing { server_name: String },
-    ArchiveMissing { archive_path: String },
+    FileMissing {
+        artifact_name: String,
+        path: String,
+    },
+    SkillModified {
+        artifact_name: String,
+        path: String,
+    },
+    EnvVarMissing {
+        var_name: String,
+        description: String,
+    },
+    HookMissing {
+        event: String,
+        command: String,
+    },
+    McpMissing {
+        server_name: String,
+    },
+    ArchiveMissing {
+        archive_path: String,
+    },
 }
 
 #[derive(Debug)]
@@ -34,11 +50,7 @@ pub struct DoctorReport {
 
 impl DoctorReport {
     pub fn is_healthy(&self) -> bool {
-        self.backend_ok
-            && self
-                .package_diagnostics
-                .iter()
-                .all(|p| p.issues.is_empty())
+        self.backend_ok && self.package_diagnostics.iter().all(|p| p.issues.is_empty())
     }
 }
 
@@ -77,10 +89,7 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
             continue; // already caught by check_deployed_files
         }
 
-        let archive_name = artifact
-            .original_name
-            .as_deref()
-            .unwrap_or(&artifact.name);
+        let archive_name = artifact.original_name.as_deref().unwrap_or(&artifact.name);
         let inner_path = format!("skills/{}.md", archive_name);
 
         let original_bytes = match cache::extract_file_from_archive(archive_path, &inner_path) {
@@ -219,11 +228,7 @@ fn format_report(report: &DoctorReport, scope_label: &str) -> String {
 
     for diag in &report.package_diagnostics {
         out.push('\n');
-        out.push_str(&format!(
-            "{} v{}\n",
-            diag.package_name.bold(),
-            diag.version
-        ));
+        out.push_str(&format!("{} v{}\n", diag.package_name.bold(), diag.version));
 
         let file_issues: Vec<_> = diag
             .issues
@@ -278,9 +283,7 @@ fn format_report(report: &DoctorReport, scope_label: &str) -> String {
             format!("All healthy: {total} package(s).\n").green()
         ));
     } else {
-        out.push_str(&format!(
-            "{healthy} healthy, {with_issues} with issues.\n"
-        ));
+        out.push_str(&format!("{healthy} healthy, {with_issues} with issues.\n"));
     }
 
     out
@@ -289,10 +292,7 @@ fn format_report(report: &DoctorReport, scope_label: &str) -> String {
 fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind]) {
     let dots = ".".repeat(32_usize.saturating_sub(label.len()));
     if issues.is_empty() {
-        out.push_str(&format!(
-            "  {label} {dots} {}\n",
-            "ok".green()
-        ));
+        out.push_str(&format!("  {label} {dots} {}\n", "ok".green()));
     } else {
         let status_label = if issues
             .iter()
@@ -306,20 +306,14 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
 
         for issue in issues {
             match issue {
-                DiagnosticKind::FileMissing {
-                    artifact_name,
-                    ..
-                } => {
+                DiagnosticKind::FileMissing { artifact_name, .. } => {
                     out.push_str(&format!(
                         "    {} {} — file missing\n",
                         "x".red(),
                         artifact_name
                     ));
                 }
-                DiagnosticKind::SkillModified {
-                    artifact_name,
-                    ..
-                } => {
+                DiagnosticKind::SkillModified { artifact_name, .. } => {
                     out.push_str(&format!(
                         "    {} {} — locally modified\n",
                         "!".yellow(),
@@ -516,7 +510,9 @@ mod tests {
         )]);
         let issues = check_deployed_files(&entry);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::FileMissing { artifact_name, .. } if artifact_name == "review"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::FileMissing { artifact_name, .. } if artifact_name == "review")
+        );
     }
 
     #[test]
@@ -620,7 +616,9 @@ mod tests {
 
         let issues = check_skill_modifications(&entry);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::SkillModified { artifact_name, .. } if artifact_name == "review"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::SkillModified { artifact_name, .. } if artifact_name == "review")
+        );
     }
 
     #[test]
@@ -740,7 +738,9 @@ mod tests {
 
         let issues = check_env_vars(&entry);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::EnvVarMissing { var_name, description } if var_name == "RK_DOCTOR_TEST_B" && description == "API key"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::EnvVarMissing { var_name, description } if var_name == "RK_DOCTOR_TEST_B" && description == "API key")
+        );
     }
 
     #[test]
@@ -769,11 +769,7 @@ mod tests {
 
     // -- Hook presence tests --
 
-    fn make_hook_entry(
-        event: &str,
-        matcher: Option<&str>,
-        command: &str,
-    ) -> DeployedArtifactEntry {
+    fn make_hook_entry(event: &str, matcher: Option<&str>, command: &str) -> DeployedArtifactEntry {
         DeployedArtifactEntry {
             artifact_type: ArtifactKind::Hook,
             name: "hook".to_string(),
@@ -807,7 +803,9 @@ mod tests {
         let entry = make_entry(vec![make_hook_entry("PreToolUse", Some("bash"), "lint.sh")]);
         let issues = check_hooks(&entry, &settings);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::HookMissing { event, command } if event == "PreToolUse" && command == "lint.sh"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::HookMissing { event, command } if event == "PreToolUse" && command == "lint.sh")
+        );
     }
 
     #[test]
@@ -882,7 +880,9 @@ mod tests {
         entry.deployed_mcp_servers = vec!["test-server".to_string()];
         let issues = check_mcp(&entry, &config);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::McpMissing { server_name } if server_name == "test-server"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::McpMissing { server_name } if server_name == "test-server")
+        );
     }
 
     #[test]
@@ -905,7 +905,9 @@ mod tests {
         entry.deployed_mcp_servers = vec!["server-a".to_string(), "server-b".to_string()];
         let issues = check_mcp(&entry, &config);
         assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::McpMissing { server_name } if server_name == "server-b"));
+        assert!(
+            matches!(&issues[0], DiagnosticKind::McpMissing { server_name } if server_name == "server-b")
+        );
     }
 
     #[test]

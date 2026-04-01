@@ -61,10 +61,7 @@ pub(crate) fn compute_sha256_bytes(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-pub(crate) fn extract_file_from_archive(
-    archive_path: &Path,
-    inner_path: &str,
-) -> Result<Vec<u8>> {
+pub(crate) fn extract_file_from_archive(archive_path: &Path, inner_path: &str) -> Result<Vec<u8>> {
     let file = File::open(archive_path).map_err(|e| {
         RenkeiError::CacheError(format!(
             "Cannot open archive {}: {}",
