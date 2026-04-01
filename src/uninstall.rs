@@ -7,18 +7,12 @@ use crate::install_cache::InstallCache;
 use crate::lockfile::Lockfile;
 
 pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
-    let scope_label = if config.project_root.is_some() {
-        "project"
-    } else {
-        "global"
-    };
-
     let mut install_cache = InstallCache::load(config)?;
 
     if !install_cache.packages.contains_key(package) {
         return Err(RenkeiError::PackageNotFound {
             package: package.to_string(),
-            scope: scope_label.to_string(),
+            scope: config.scope_label().to_string(),
         });
     }
 

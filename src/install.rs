@@ -40,6 +40,8 @@ pub struct InstallOptions {
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
+    /// Skip archive creation and lockfile write (used during lockfile replay).
+    pub from_lockfile: bool,
 }
 
 impl InstallOptions {
@@ -50,6 +52,7 @@ impl InstallOptions {
             source_url: source_path,
             resolved: None,
             tag: None,
+            from_lockfile: false,
         }
     }
 
@@ -60,6 +63,7 @@ impl InstallOptions {
             source_url: url,
             resolved: Some(resolved),
             tag,
+            from_lockfile: false,
         }
     }
 }
@@ -241,7 +245,17 @@ pub(crate) fn install_local_with_resolver(
         }
     }
 
-    let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
+    let (archive_path, integrity) = if options.from_lockfile {
+        let path = cache::archive_path(config, &manifest.scope, &manifest.short_name, &manifest.version);
+        let hash = if path.exists() {
+            cache::compute_sha256(&path)?
+        } else {
+            String::new()
+        };
+        (path, hash)
+    } else {
+        cache::create_archive(&package_dir, &manifest, config)?
+    };
 
     // Build effective artifacts (apply renames).
     // Hold temp files alive until deployment completes (they are deleted on Drop).
@@ -341,16 +355,17 @@ pub(crate) fn install_local_with_resolver(
     );
     install_cache.save(config)?;
 
-    // Update lockfile
-    let lockfile_path = config.lockfile_path();
-    let mut lockfile = Lockfile::load(&lockfile_path)?;
-    lockfile.upsert(
-        &manifest.full_name,
-        LockfileEntry::from_package_entry(
-            install_cache.packages.get(&manifest.full_name).unwrap(),
-        ),
-    );
-    lockfile.save(&lockfile_path)?;
+    if !options.from_lockfile {
+        let lockfile_path = config.lockfile_path();
+        let mut lockfile = Lockfile::load(&lockfile_path)?;
+        lockfile.upsert(
+            &manifest.full_name,
+            LockfileEntry::from_package_entry(
+                install_cache.packages.get(&manifest.full_name).unwrap(),
+            ),
+        );
+        lockfile.save(&lockfile_path)?;
+    }
 
     println!(
         "{} Deployed {} artifact(s) for {}",

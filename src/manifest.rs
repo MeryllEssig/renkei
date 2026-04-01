@@ -114,7 +114,7 @@ impl Manifest {
     }
 }
 
-fn parse_scoped_name(name: &str) -> Result<(String, String)> {
+pub fn parse_scoped_name(name: &str) -> Result<(String, String)> {
     let invalid = || RenkeiError::InvalidScope {
         name: name.to_string(),
     };

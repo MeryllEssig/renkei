@@ -10,23 +10,33 @@ use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 use crate::manifest::ValidatedManifest;
 
+pub fn archive_path(
+    config: &Config,
+    scope: &str,
+    short_name: &str,
+    version: &semver::Version,
+) -> PathBuf {
+    config
+        .archives_dir()
+        .join(format!("@{scope}"))
+        .join(short_name)
+        .join(format!("{version}.tar.gz"))
+}
+
 pub fn create_archive(
     package_dir: &Path,
     manifest: &ValidatedManifest,
     config: &Config,
 ) -> Result<(PathBuf, String)> {
-    let cache_dir = config
-        .archives_dir()
-        .join(format!("@{}", manifest.scope))
-        .join(&manifest.short_name);
-    fs::create_dir_all(&cache_dir)?;
+    let path = archive_path(config, &manifest.scope, &manifest.short_name, &manifest.version);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
-    let archive_path = cache_dir.join(format!("{}.tar.gz", manifest.version));
-
-    let file = File::create(&archive_path).map_err(|e| {
+    let file = File::create(&path).map_err(|e| {
         RenkeiError::CacheError(format!(
             "Cannot create archive {}: {}",
-            archive_path.display(),
+            path.display(),
             e
         ))
     })?;
@@ -44,8 +54,8 @@ pub fn create_archive(
 
     tar_builder.into_inner()?.finish()?;
 
-    let hash = compute_sha256(&archive_path)?;
-    Ok((archive_path, hash))
+    let hash = compute_sha256(&path)?;
+    Ok((path, hash))
 }
 
 pub(crate) fn compute_sha256(path: &Path) -> Result<String> {

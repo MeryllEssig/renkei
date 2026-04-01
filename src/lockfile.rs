@@ -10,8 +10,10 @@ use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 use crate::install;
 use crate::install_cache::PackageEntry;
-use crate::manifest::RequestedScope;
+use crate::manifest::{self, RequestedScope};
 use crate::source;
+
+const INTEGRITY_PREFIX: &str = "sha256-";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -83,35 +85,26 @@ impl LockfileEntry {
             source: entry.source_path.clone(),
             tag: entry.tag.clone(),
             resolved: entry.resolved.clone(),
-            integrity: format!("sha256-{}", entry.integrity),
+            integrity: format!("{INTEGRITY_PREFIX}{}", entry.integrity),
         }
     }
 }
 
-/// Compute the expected archive path for a lockfile entry.
-fn archive_path_for_entry(config: &Config, package_name: &str, entry: &LockfileEntry) -> PathBuf {
-    // package_name is @scope/short_name
-    let without_at = package_name.strip_prefix('@').unwrap_or(package_name);
-    let (scope, short_name) = without_at.split_once('/').unwrap_or(("unknown", without_at));
-    config
-        .archives_dir()
-        .join(format!("@{scope}"))
-        .join(short_name)
-        .join(format!("{}.tar.gz", entry.version))
+fn archive_path_for_entry(config: &Config, package_name: &str, entry: &LockfileEntry) -> Result<PathBuf> {
+    let (scope, short_name) = manifest::parse_scoped_name(package_name)?;
+    let version: semver::Version = entry.version.parse().map_err(|e| {
+        RenkeiError::InvalidVersion { version: entry.version.clone(), reason: format!("{e}") }
+    })?;
+    Ok(cache::archive_path(config, &scope, &short_name, &version))
 }
 
-/// Strip the "sha256-" prefix from a lockfile integrity string.
 fn strip_integrity_prefix(integrity: &str) -> &str {
-    integrity.strip_prefix("sha256-").unwrap_or(integrity)
+    integrity.strip_prefix(INTEGRITY_PREFIX).unwrap_or(integrity)
 }
 
 pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<()> {
-    let scope_label = if config.project_root.is_some() {
-        "project"
-    } else {
-        "global"
-    };
-    let hint = if config.project_root.is_some() {
+    let scope_label = config.scope_label();
+    let hint = if config.is_project() {
         "Use `rk install <source>` to install a package."
     } else {
         "Use `rk install -g <source>` to install a package."
@@ -125,7 +118,7 @@ pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<(
         return Ok(());
     }
 
-    let requested_scope = if config.project_root.is_some() {
+    let requested_scope = if config.is_project() {
         RequestedScope::Project
     } else {
         RequestedScope::Global
@@ -142,31 +135,30 @@ pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<(
 
     for name in names {
         let entry = &lockfile.packages[name];
-        let archive = archive_path_for_entry(config, name, entry);
+        let archive = archive_path_for_entry(config, name, entry)?;
 
-        if archive.exists() {
-            // Verify integrity
-            let actual_hash = cache::compute_sha256(&archive)?;
-            let expected_hash = strip_integrity_prefix(&entry.integrity);
-            if actual_hash != expected_hash {
-                return Err(RenkeiError::IntegrityMismatch {
-                    package: name.clone(),
-                    expected: entry.integrity.clone(),
-                    actual: format!("sha256-{actual_hash}"),
-                });
+        match cache::compute_sha256(&archive) {
+            Ok(actual_hash) => {
+                let expected_hash = strip_integrity_prefix(&entry.integrity);
+                if actual_hash != expected_hash {
+                    return Err(RenkeiError::IntegrityMismatch {
+                        package: name.clone(),
+                        expected: entry.integrity.clone(),
+                        actual: format!("{INTEGRITY_PREFIX}{actual_hash}"),
+                    });
+                }
+
+                let tmp = tempfile::tempdir().map_err(|e| {
+                    RenkeiError::CacheError(format!("Cannot create temp dir: {e}"))
+                })?;
+                cache::extract_archive_to_dir(&archive, tmp.path())?;
+
+                let options = build_install_options(entry);
+                install::install_local(tmp.path(), config, backend, requested_scope, &options)?;
             }
-
-            // Extract archive to tempdir and install from it
-            let tmp = tempfile::tempdir().map_err(|e| {
-                RenkeiError::CacheError(format!("Cannot create temp dir: {e}"))
-            })?;
-            cache::extract_archive_to_dir(&archive, tmp.path())?;
-
-            let options = build_install_options(entry);
-            install::install_local(tmp.path(), config, backend, requested_scope, &options)?;
-        } else {
-            // No cached archive — re-install from source
-            install_from_source(config, backend, requested_scope, entry)?;
+            Err(_) => {
+                install_from_source(config, backend, requested_scope, entry)?;
+            }
         }
     }
 
@@ -174,7 +166,7 @@ pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<(
 }
 
 fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
-    match source::parse_source(&entry.source) {
+    let mut options = match source::parse_source(&entry.source) {
         source::PackageSource::GitSsh(_) | source::PackageSource::GitUrl(_) => {
             install::InstallOptions::git(
                 entry.source.clone(),
@@ -185,7 +177,9 @@ fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
         source::PackageSource::Local(_) => {
             install::InstallOptions::local(entry.source.clone())
         }
-    }
+    };
+    options.from_lockfile = true;
+    options
 }
 
 fn install_from_source(
@@ -600,7 +594,7 @@ mod tests {
             resolved: None,
             integrity: "sha256-abc".to_string(),
         };
-        let path = archive_path_for_entry(&config, "@test/pkg", &entry);
+        let path = archive_path_for_entry(&config, "@test/pkg", &entry).unwrap();
         assert_eq!(
             path,
             PathBuf::from("/home/user/.renkei/archives/@test/pkg/1.2.0.tar.gz")

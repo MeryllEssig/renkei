@@ -65,6 +65,14 @@ impl Config {
         without_leading.replace('/', "-")
     }
 
+    pub fn is_project(&self) -> bool {
+        self.project_root.is_some()
+    }
+
+    pub fn scope_label(&self) -> &'static str {
+        if self.is_project() { "project" } else { "global" }
+    }
+
     pub fn lockfile_path(&self) -> PathBuf {
         match self.project_root {
             Some(ref root) => root.join("rk.lock"),
