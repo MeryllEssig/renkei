@@ -13,10 +13,25 @@ use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::{self, Manifest, RequestedScope};
 use crate::mcp;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum SourceKind {
+    Local,
+    Git,
+}
+
+impl SourceKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SourceKind::Local => "local",
+            SourceKind::Git => "git",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct InstallOptions {
     pub force: bool,
-    pub source_type: String,
+    pub source_kind: SourceKind,
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
@@ -26,7 +41,7 @@ impl InstallOptions {
     pub fn local(source_path: String) -> Self {
         Self {
             force: false,
-            source_type: "local".to_string(),
+            source_kind: SourceKind::Local,
             source_url: source_path,
             resolved: None,
             tag: None,
@@ -36,7 +51,7 @@ impl InstallOptions {
     pub fn git(url: String, resolved: String, tag: Option<String>) -> Self {
         Self {
             force: false,
-            source_type: "git".to_string(),
+            source_kind: SourceKind::Git,
             source_url: url,
             resolved: Some(resolved),
             tag,
@@ -116,19 +131,16 @@ pub fn install_local(
 
     // Backend detection
     if !options.force {
-        let detected_name = if backend.detect_installed(config) {
-            Some(backend.name().to_string())
-        } else {
-            None
-        };
-        let has_match = manifest
-            .backends
-            .iter()
-            .any(|r| detected_name.as_deref() == Some(r.as_str()));
+        let is_installed = backend.detect_installed(config);
+        let has_match = is_installed && manifest.backends.iter().any(|b| b == backend.name());
         if !has_match {
             return Err(RenkeiError::BackendNotDetected {
                 required: manifest.backends.join(", "),
-                detected: detected_name.unwrap_or_else(|| "none".to_string()),
+                detected: if is_installed {
+                    backend.name().to_string()
+                } else {
+                    "none".to_string()
+                },
             });
         }
     }
@@ -193,11 +205,10 @@ pub fn install_local(
         &manifest.full_name,
         PackageEntry {
             version: manifest.version.to_string(),
-            source: options.source_type.clone(),
-            source_path: if options.source_type == "git" {
-                options.source_url.clone()
-            } else {
-                package_dir.to_string_lossy().to_string()
+            source: options.source_kind.as_str().to_string(),
+            source_path: match options.source_kind {
+                SourceKind::Git => options.source_url.clone(),
+                SourceKind::Local => package_dir.to_string_lossy().to_string(),
             },
             integrity,
             archive_path: archive_path.to_string_lossy().to_string(),
@@ -476,21 +487,25 @@ mod tests {
         assert!(!home.path().join(".claude/skills/renkei-lint").exists());
     }
 
-    #[test]
-    fn test_backend_detected_succeeds() {
-        let home = tempdir().unwrap();
+    fn make_backend_test_pkg(backends_json: &str) -> tempfile::TempDir {
         let pkg = tempdir().unwrap();
-
-        // Create .claude/ so backend is detected
-        fs::create_dir_all(home.path().join(".claude")).unwrap();
-
         fs::write(
             pkg.path().join("renkei.json"),
-            r#"{"name":"@test/ok","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
+            format!(
+                r#"{{"name":"@test/pkg","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":{backends_json}}}"#
+            ),
         ).unwrap();
         let skills = pkg.path().join("skills");
         fs::create_dir_all(&skills).unwrap();
         fs::write(skills.join("check.md"), "# Check").unwrap();
+        pkg
+    }
+
+    #[test]
+    fn test_backend_detected_succeeds() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let pkg = make_backend_test_pkg(r#"["claude"]"#);
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
@@ -501,17 +516,7 @@ mod tests {
     #[test]
     fn test_backend_not_detected_fails() {
         let home = tempdir().unwrap();
-        let pkg = tempdir().unwrap();
-
-        // Do NOT create .claude/ — backend not detected
-
-        fs::write(
-            pkg.path().join("renkei.json"),
-            r#"{"name":"@test/fail","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
-        ).unwrap();
-        let skills = pkg.path().join("skills");
-        fs::create_dir_all(&skills).unwrap();
-        fs::write(skills.join("check.md"), "# Check").unwrap();
+        let pkg = make_backend_test_pkg(r#"["claude"]"#);
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
@@ -525,17 +530,7 @@ mod tests {
     #[test]
     fn test_backend_force_bypasses_check() {
         let home = tempdir().unwrap();
-        let pkg = tempdir().unwrap();
-
-        // Do NOT create .claude/ — backend not detected, but force=true
-
-        fs::write(
-            pkg.path().join("renkei.json"),
-            r#"{"name":"@test/forced","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
-        ).unwrap();
-        let skills = pkg.path().join("skills");
-        fs::create_dir_all(&skills).unwrap();
-        fs::write(skills.join("check.md"), "# Check").unwrap();
+        let pkg = make_backend_test_pkg(r#"["claude"]"#);
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions {
@@ -549,18 +544,8 @@ mod tests {
     #[test]
     fn test_backend_multi_with_partial_match() {
         let home = tempdir().unwrap();
-        let pkg = tempdir().unwrap();
-
-        // Create .claude/ so "claude" backend is detected
         fs::create_dir_all(home.path().join(".claude")).unwrap();
-
-        fs::write(
-            pkg.path().join("renkei.json"),
-            r#"{"name":"@test/multi","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude","cursor"]}"#,
-        ).unwrap();
-        let skills = pkg.path().join("skills");
-        fs::create_dir_all(&skills).unwrap();
-        fs::write(skills.join("check.md"), "# Check").unwrap();
+        let pkg = make_backend_test_pkg(r#"["claude","cursor"]"#);
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());

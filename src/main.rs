@@ -56,7 +56,7 @@ fn run_install(
             };
             install::install_local(&path, &config, backend, requested_scope, &options)
         }
-        source::PackageSource::GitSsh(url) | source::PackageSource::GitHttps(url) => {
+        source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
             let sha = git::resolve_head(tmp_dir.path())?;
             let options = install::InstallOptions {

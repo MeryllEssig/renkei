@@ -2,14 +2,14 @@
 pub enum PackageSource {
     Local(String),
     GitSsh(String),
-    GitHttps(String),
+    GitUrl(String),
 }
 
 pub fn parse_source(source: &str) -> PackageSource {
     if source.starts_with("git@") {
         PackageSource::GitSsh(source.to_string())
     } else if source.starts_with("https://") || source.starts_with("file://") {
-        PackageSource::GitHttps(source.to_string())
+        PackageSource::GitUrl(source.to_string())
     } else {
         PackageSource::Local(source.to_string())
     }
@@ -63,7 +63,7 @@ mod tests {
     fn test_git_https() {
         assert_eq!(
             parse_source("https://github.com/user/repo"),
-            PackageSource::GitHttps("https://github.com/user/repo".to_string())
+            PackageSource::GitUrl("https://github.com/user/repo".to_string())
         );
     }
 
@@ -71,7 +71,7 @@ mod tests {
     fn test_git_https_with_dot_git() {
         assert_eq!(
             parse_source("https://github.com/user/repo.git"),
-            PackageSource::GitHttps("https://github.com/user/repo.git".to_string())
+            PackageSource::GitUrl("https://github.com/user/repo.git".to_string())
         );
     }
 
@@ -79,7 +79,7 @@ mod tests {
     fn test_file_url_treated_as_git() {
         assert_eq!(
             parse_source("file:///tmp/bare-repo"),
-            PackageSource::GitHttps("file:///tmp/bare-repo".to_string())
+            PackageSource::GitUrl("file:///tmp/bare-repo".to_string())
         );
     }
 
