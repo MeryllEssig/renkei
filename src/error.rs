@@ -30,7 +30,10 @@ pub enum RenkeiError {
     #[error("Scope conflict: {message}")]
     ScopeConflict { message: String },
 
-    #[error("No project root detected (not inside a git repository).\nUse `rk install -g <source>` to install globally.")]
+    #[error("Package '{package}' is not installed in {scope} scope")]
+    PackageNotFound { package: String, scope: String },
+
+    #[error("No project root detected (not inside a git repository).\nUse the -g flag for global scope.")]
     NoProjectRoot,
 
     #[error("Git clone failed for {url}: {reason}")]
@@ -80,6 +83,37 @@ mod tests {
         assert!(msg.contains("cursor"));
         assert!(msg.contains("claude"));
         assert!(msg.contains("--force"));
+    }
+
+    #[test]
+    fn test_package_not_found_project_message() {
+        let err = RenkeiError::PackageNotFound {
+            package: "@acme/review".to_string(),
+            scope: "project".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("@acme/review"));
+        assert!(msg.contains("project"));
+        assert!(msg.contains("not installed"));
+    }
+
+    #[test]
+    fn test_package_not_found_global_message() {
+        let err = RenkeiError::PackageNotFound {
+            package: "@acme/deploy".to_string(),
+            scope: "global".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("@acme/deploy"));
+        assert!(msg.contains("global"));
+    }
+
+    #[test]
+    fn test_no_project_root_message_is_generic() {
+        let err = RenkeiError::NoProjectRoot;
+        let msg = err.to_string();
+        assert!(msg.contains("-g flag"));
+        assert!(!msg.contains("install"));
     }
 
     #[test]
