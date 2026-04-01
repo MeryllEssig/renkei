@@ -1,13 +1,17 @@
+use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
 
-use crate::artifact::{self, ArtifactKind};
+use crate::artifact::{self, Artifact, ArtifactKind};
 use crate::backend::{Backend, DeployedArtifact};
 use crate::cache;
 use crate::config::Config;
+use crate::conflict::{self, Conflict};
 use crate::env_check;
 use crate::error::{RenkeiError, Result};
+use crate::frontmatter;
 use crate::hook;
 use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::manifest::{self, Manifest, RequestedScope};
@@ -114,12 +118,63 @@ fn rollback(deployed: &[DeployedArtifact], config: &Config) {
     }
 }
 
+/// Prompt the user for a new artifact name using `inquire`.
+fn prompt_rename(conflict: &Conflict) -> Result<String> {
+    let kind_label = match conflict.artifact_kind {
+        ArtifactKind::Skill => "Skill",
+        ArtifactKind::Agent => "Agent",
+        _ => "Artifact",
+    };
+    let prompt = format!(
+        "{kind_label} '{}' conflicts with package '{}'. Enter a new name:",
+        conflict.artifact_name, conflict.owner_package,
+    );
+    inquire::Text::new(&prompt)
+        .with_help_message("The artifact will be deployed under this name")
+        .prompt()
+        .map_err(|e| RenkeiError::DeploymentFailed(format!("Prompt failed: {e}")))
+}
+
+/// Build the conflict resolver based on --force and TTY detection.
+fn default_resolver(force: bool) -> Box<dyn Fn(&Conflict) -> Result<Option<String>>> {
+    if force {
+        Box::new(|_: &Conflict| Ok(None))
+    } else if std::io::stdin().is_terminal() {
+        Box::new(|c: &Conflict| prompt_rename(c).map(Some))
+    } else {
+        Box::new(|c: &Conflict| {
+            Err(RenkeiError::ArtifactConflict {
+                kind: format!("{:?}", c.artifact_kind).to_lowercase(),
+                name: c.artifact_name.clone(),
+                owner: c.owner_package.clone(),
+            })
+        })
+    }
+}
+
 pub fn install_local(
     package_dir: &Path,
     config: &Config,
     backend: &dyn Backend,
     requested_scope: RequestedScope,
     options: &InstallOptions,
+) -> Result<()> {
+    let resolver = default_resolver(options.force);
+    install_local_with_resolver(package_dir, config, backend, requested_scope, options, &*resolver)
+}
+
+/// Inner implementation that accepts an injectable conflict resolver.
+/// The resolver receives a Conflict and returns:
+///   - `Ok(None)` → force overwrite (no rename)
+///   - `Ok(Some(new_name))` → rename the artifact
+///   - `Err(...)` → abort installation
+pub fn install_local_with_resolver(
+    package_dir: &Path,
+    config: &Config,
+    backend: &dyn Backend,
+    requested_scope: RequestedScope,
+    options: &InstallOptions,
+    conflict_resolver: &dyn Fn(&Conflict) -> Result<Option<String>>,
 ) -> Result<()> {
     let package_dir = package_dir
         .canonicalize()
@@ -160,11 +215,66 @@ pub fn install_local(
     let mut install_cache = InstallCache::load(config)?;
     cleanup_previous_installation(&manifest.full_name, &install_cache, config);
 
+    // --- Conflict detection ---
+    let conflicts = conflict::detect_conflicts(&artifacts, &install_cache, &manifest.full_name);
+
+    // Resolve conflicts: build a rename map (original_name -> new_name)
+    // and clean up previous owners when force-overwriting
+    let mut renames: HashMap<(ArtifactKind, String), String> = HashMap::new();
+    for c in &conflicts {
+        match conflict_resolver(c)? {
+            None => {
+                // Force overwrite: remove the artifact from the previous owner's cache
+                if let Some(owner_entry) = install_cache.packages.get_mut(&c.owner_package) {
+                    owner_entry.deployed_artifacts.retain(|a| {
+                        !(a.artifact_type == c.artifact_kind && a.name == c.artifact_name)
+                    });
+                }
+            }
+            Some(new_name) => {
+                renames.insert(
+                    (c.artifact_kind.clone(), c.artifact_name.clone()),
+                    new_name,
+                );
+            }
+        }
+    }
+
     let (archive_path, integrity) = cache::create_archive(&package_dir, &manifest, config)?;
+
+    // Build effective artifacts (apply renames)
+    let mut temp_files: Vec<tempfile::NamedTempFile> = Vec::new();
+    let effective_artifacts: Vec<(Artifact, Option<String>)> = artifacts
+        .iter()
+        .map(|art| {
+            let key = (art.kind.clone(), art.name.clone());
+            if let Some(new_name) = renames.get(&key) {
+                // Read source, rewrite frontmatter, write to temp file
+                let content = std::fs::read_to_string(&art.source_path)
+                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot read {}: {e}", art.source_path.display())))?;
+                let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
+
+                let mut tmp = tempfile::NamedTempFile::new()
+                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}")))?;
+                std::io::Write::write_all(&mut tmp, rewritten.as_bytes())
+                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}")))?;
+
+                let renamed_artifact = Artifact {
+                    kind: art.kind.clone(),
+                    name: new_name.to_string(),
+                    source_path: tmp.path().to_path_buf(),
+                };
+                temp_files.push(tmp);
+                Ok((renamed_artifact, Some(art.name.clone())))
+            } else {
+                Ok((art.clone(), None))
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let mut deployed = Vec::new();
 
-    for art in &artifacts {
+    for (art, _) in &effective_artifacts {
         let result = match art.kind {
             ArtifactKind::Skill => backend.deploy_skill(art, config),
             ArtifactKind::Agent => backend.deploy_agent(art, config),
@@ -193,12 +303,13 @@ pub fn install_local(
 
     let deployed_entries: Vec<DeployedArtifactEntry> = deployed
         .iter()
-        .map(|d| DeployedArtifactEntry {
+        .zip(effective_artifacts.iter())
+        .map(|(d, (_, original))| DeployedArtifactEntry {
             artifact_type: d.artifact_kind.clone(),
             name: d.artifact_name.clone(),
             deployed_path: d.deployed_path.to_string_lossy().to_string(),
             deployed_hooks: d.deployed_hooks.clone(),
-            original_name: None,
+            original_name: original.clone(),
         })
         .collect();
 
@@ -553,5 +664,216 @@ mod tests {
         let options = InstallOptions::local("/tmp".to_string());
         let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
         assert!(result.is_ok(), "Should succeed with at least one matching backend");
+    }
+
+    // --- Conflict management tests ---
+
+    fn make_pkg_with_skill(name: &str, skill_name: &str) -> tempfile::TempDir {
+        let pkg = tempdir().unwrap();
+        fs::write(
+            pkg.path().join("renkei.json"),
+            format!(
+                r#"{{"name":"{name}","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}}"#
+            ),
+        )
+        .unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(
+            skills.join(format!("{skill_name}.md")),
+            format!("---\nname: {skill_name}\ndescription: test\n---\nContent of {skill_name}"),
+        )
+        .unwrap();
+        pkg
+    }
+
+    fn force_resolver(_: &conflict::Conflict) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    fn error_resolver(c: &conflict::Conflict) -> Result<Option<String>> {
+        Err(RenkeiError::ArtifactConflict {
+            kind: format!("{:?}", c.artifact_kind).to_lowercase(),
+            name: c.artifact_name.clone(),
+            owner: c.owner_package.clone(),
+        })
+    }
+
+    fn rename_resolver(new_name: &str) -> impl Fn(&conflict::Conflict) -> Result<Option<String>> + '_ {
+        move |_| Ok(Some(new_name.to_string()))
+    }
+
+    #[test]
+    fn test_conflict_force_overwrites() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Install package A with skill "review"
+        let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
+        let opts_a = InstallOptions::local("/tmp/a".to_string());
+        install_local_with_resolver(
+            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_a, &force_resolver,
+        ).unwrap();
+
+        // Install package B with skill "review" using force resolver (overwrite)
+        let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
+        let opts_b = InstallOptions::local("/tmp/b".to_string());
+        install_local_with_resolver(
+            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &force_resolver,
+        ).unwrap();
+
+        // B's skill should be deployed
+        let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        assert!(skill_path.exists());
+        let content = fs::read_to_string(&skill_path).unwrap();
+        assert!(content.contains("Content of review"));
+
+        // A's cache should no longer list "review"
+        let cache = InstallCache::load(&config).unwrap();
+        let a_entry = &cache.packages["@test/conflict-a"];
+        assert!(
+            a_entry.deployed_artifacts.is_empty(),
+            "Package A should have no deployed artifacts after force overwrite"
+        );
+
+        // B's cache should list "review"
+        let b_entry = &cache.packages["@test/conflict-b"];
+        assert_eq!(b_entry.deployed_artifacts.len(), 1);
+        assert_eq!(b_entry.deployed_artifacts[0].name, "review");
+    }
+
+    #[test]
+    fn test_conflict_error_resolver_aborts() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Install package A
+        let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
+        let opts = InstallOptions::local("/tmp/a".to_string());
+        install_local_with_resolver(
+            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
+        ).unwrap();
+
+        // Install package B with error resolver
+        let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
+        let opts_b = InstallOptions::local("/tmp/b".to_string());
+        let result = install_local_with_resolver(
+            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &error_resolver,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("review"));
+        assert!(err.contains("@test/conflict-a"));
+    }
+
+    #[test]
+    fn test_conflict_rename_deploys_under_new_name() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Install package A with skill "review"
+        let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
+        let opts = InstallOptions::local("/tmp/a".to_string());
+        install_local_with_resolver(
+            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
+        ).unwrap();
+
+        // Install package B with skill "review", rename to "review-v2"
+        let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
+        let opts_b = InstallOptions::local("/tmp/b".to_string());
+        let resolver = rename_resolver("review-v2");
+        install_local_with_resolver(
+            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &resolver,
+        ).unwrap();
+
+        // Original skill (pkg A) should still exist
+        let a_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        assert!(a_path.exists());
+
+        // Renamed skill (pkg B) should exist under new name
+        let b_path = home.path().join(".claude/skills/renkei-review-v2/SKILL.md");
+        assert!(b_path.exists());
+
+        // Verify frontmatter was rewritten
+        let content = fs::read_to_string(&b_path).unwrap();
+        assert!(content.contains("name: review-v2"));
+        assert!(content.contains("Content of review"));
+    }
+
+    #[test]
+    fn test_conflict_rename_tracks_original_name_in_cache() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Install package A
+        let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
+        let opts = InstallOptions::local("/tmp/a".to_string());
+        install_local_with_resolver(
+            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
+        ).unwrap();
+
+        // Install package B with rename
+        let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
+        let opts_b = InstallOptions::local("/tmp/b".to_string());
+        let resolver = rename_resolver("review-v2");
+        install_local_with_resolver(
+            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &resolver,
+        ).unwrap();
+
+        // Check install-cache
+        let cache = InstallCache::load(&config).unwrap();
+        let b_entry = &cache.packages["@test/conflict-b"];
+        assert_eq!(b_entry.deployed_artifacts[0].name, "review-v2");
+        assert_eq!(
+            b_entry.deployed_artifacts[0].original_name.as_deref(),
+            Some("review")
+        );
+    }
+
+    #[test]
+    fn test_no_conflict_on_reinstall() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let pkg = make_pkg_with_skill("@test/pkg", "review");
+        let opts = InstallOptions::local("/tmp".to_string());
+
+        // Install, then reinstall — should succeed with error resolver
+        // (which would fail if any conflict was detected)
+        install_local_with_resolver(
+            pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &error_resolver,
+        ).unwrap();
+        install_local_with_resolver(
+            pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &error_resolver,
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_no_conflict_different_skill_names() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let pkg_a = make_pkg_with_skill("@test/pkg-a", "review");
+        let pkg_b = make_pkg_with_skill("@test/pkg-b", "lint");
+        let opts_a = InstallOptions::local("/tmp/a".to_string());
+        let opts_b = InstallOptions::local("/tmp/b".to_string());
+
+        // Both should succeed with error resolver (no conflicts)
+        install_local_with_resolver(
+            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_a, &error_resolver,
+        ).unwrap();
+        install_local_with_resolver(
+            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &error_resolver,
+        ).unwrap();
+
+        assert!(home.path().join(".claude/skills/renkei-review/SKILL.md").exists());
+        assert!(home.path().join(".claude/skills/renkei-lint/SKILL.md").exists());
     }
 }

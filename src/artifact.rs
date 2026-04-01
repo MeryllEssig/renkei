@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ArtifactKind {
     Skill,
