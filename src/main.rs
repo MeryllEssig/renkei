@@ -12,6 +12,7 @@ mod git;
 mod hook;
 mod install;
 mod install_cache;
+mod lockfile;
 mod json_file;
 mod list;
 mod manifest;
