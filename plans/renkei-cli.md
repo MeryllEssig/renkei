@@ -201,13 +201,13 @@ On rename: deploy under the new name (`renkei-<new>/SKILL.md`), update the `name
 
 ### Acceptance criteria
 
-- [ ] Installing 2 packages with a skill of the same name triggers conflict detection
-- [ ] In TTY mode, the prompt offers renaming and deploys under the new name
-- [ ] In non-TTY mode, error with exit code 1
-- [ ] With `--force`, last installed overwrites first
-- [ ] The renamed skill's frontmatter contains the new name
-- [ ] `install-cache.json` contains the rename mapping
-- [ ] Tests: conflict detection, frontmatter rename, mapping persistence
+- [x] Installing 2 packages with a skill of the same name triggers conflict detection
+- [x] In TTY mode, the prompt offers renaming and deploys under the new name
+- [x] In non-TTY mode, error with exit code 1
+- [x] With `--force`, last installed overwrites first
+- [x] The renamed skill's frontmatter contains the new name
+- [x] `install-cache.json` contains the rename mapping
+- [x] Tests: conflict detection, frontmatter rename, mapping persistence
 
 ---
 
