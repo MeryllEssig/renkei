@@ -41,4 +41,10 @@ pub enum Commands {
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
+    /// Run health checks on installed packages
+    Doctor {
+        /// Check globally installed packages instead of project-scoped
+        #[arg(short = 'g', long = "global")]
+        global: bool,
+    },
 }

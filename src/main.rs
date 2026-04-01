@@ -4,6 +4,7 @@ mod cache;
 mod cli;
 mod config;
 mod conflict;
+mod doctor;
 mod env_check;
 mod error;
 mod frontmatter;
@@ -85,6 +86,15 @@ fn run_list(global: bool) -> error::Result<()> {
     list::run_list(&config, global)
 }
 
+fn run_doctor(global: bool) -> error::Result<()> {
+    let config = build_config(global)?;
+    let healthy = doctor::run_doctor(&config, global)?;
+    if !healthy {
+        process::exit(1);
+    }
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
     let backend = ClaudeBackend;
@@ -97,6 +107,7 @@ fn main() {
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
         Commands::List { global } => run_list(global),
+        Commands::Doctor { global } => run_doctor(global),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
     };
 
