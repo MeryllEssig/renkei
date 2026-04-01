@@ -48,11 +48,48 @@ pub fn create_archive(
     Ok((archive_path, hash))
 }
 
-fn compute_sha256(path: &Path) -> Result<String> {
+pub(crate) fn compute_sha256(path: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut reader = BufReader::new(File::open(path)?);
     std::io::copy(&mut reader, &mut hasher)?;
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+pub(crate) fn compute_sha256_bytes(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn extract_file_from_archive(
+    archive_path: &Path,
+    inner_path: &str,
+) -> Result<Vec<u8>> {
+    let file = File::open(archive_path).map_err(|e| {
+        RenkeiError::CacheError(format!(
+            "Cannot open archive {}: {}",
+            archive_path.display(),
+            e
+        ))
+    })?;
+    let dec = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(dec);
+
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?.to_string_lossy().to_string();
+        if path == inner_path {
+            let mut buf = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut buf)?;
+            return Ok(buf);
+        }
+    }
+
+    Err(RenkeiError::CacheError(format!(
+        "File '{}' not found in archive {}",
+        inner_path,
+        archive_path.display()
+    )))
 }
 
 #[cfg(test)]
@@ -128,5 +165,66 @@ mod tests {
 
         assert!(entries.contains(&"renkei.json".to_string()));
         assert!(entries.iter().any(|e| e.contains("review.md")));
+    }
+
+    #[test]
+    fn test_compute_sha256_bytes() {
+        let hash = compute_sha256_bytes(b"hello world");
+        assert_eq!(hash.len(), 64);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+        // Same input should give same hash
+        assert_eq!(hash, compute_sha256_bytes(b"hello world"));
+        // Different input gives different hash
+        assert_ne!(hash, compute_sha256_bytes(b"hello world!"));
+    }
+
+    #[test]
+    fn test_extract_file_from_archive_valid() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+        setup_package(pkg.path());
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let content = extract_file_from_archive(&archive_path, "skills/review.md").unwrap();
+        assert_eq!(content, b"# Review");
+    }
+
+    #[test]
+    fn test_extract_file_from_archive_manifest() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+        setup_package(pkg.path());
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let content = extract_file_from_archive(&archive_path, "renkei.json").unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&content).unwrap();
+        assert_eq!(parsed["name"], "@test/sample");
+    }
+
+    #[test]
+    fn test_extract_file_from_archive_missing_inner_path() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+        setup_package(pkg.path());
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let err = extract_file_from_archive(&archive_path, "nonexistent.md").unwrap_err();
+        assert!(err.to_string().contains("not found in archive"));
+    }
+
+    #[test]
+    fn test_extract_file_from_archive_missing_archive() {
+        let err = extract_file_from_archive(Path::new("/nonexistent/archive.tar.gz"), "file.md")
+            .unwrap_err();
+        assert!(err.to_string().contains("Cannot open archive"));
     }
 }
