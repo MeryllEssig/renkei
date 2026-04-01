@@ -1,10 +1,17 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
+use crate::backend::Backend;
+use crate::cache;
+use crate::config::Config;
 use crate::error::{RenkeiError, Result};
+use crate::install;
 use crate::install_cache::PackageEntry;
+use crate::manifest::RequestedScope;
+use crate::source;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -81,11 +88,125 @@ impl LockfileEntry {
     }
 }
 
-pub fn install_from_lockfile(
-    _config: &crate::config::Config,
-    _backend: &dyn crate::backend::Backend,
+/// Compute the expected archive path for a lockfile entry.
+fn archive_path_for_entry(config: &Config, package_name: &str, entry: &LockfileEntry) -> PathBuf {
+    // package_name is @scope/short_name
+    let without_at = package_name.strip_prefix('@').unwrap_or(package_name);
+    let (scope, short_name) = without_at.split_once('/').unwrap_or(("unknown", without_at));
+    config
+        .archives_dir()
+        .join(format!("@{scope}"))
+        .join(short_name)
+        .join(format!("{}.tar.gz", entry.version))
+}
+
+/// Strip the "sha256-" prefix from a lockfile integrity string.
+fn strip_integrity_prefix(integrity: &str) -> &str {
+    integrity.strip_prefix("sha256-").unwrap_or(integrity)
+}
+
+pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<()> {
+    let scope_label = if config.project_root.is_some() {
+        "project"
+    } else {
+        "global"
+    };
+    let hint = if config.project_root.is_some() {
+        "Use `rk install <source>` to install a package."
+    } else {
+        "Use `rk install -g <source>` to install a package."
+    };
+
+    let lockfile_path = config.lockfile_path();
+    let lockfile = Lockfile::load_strict(&lockfile_path, hint)?;
+
+    if lockfile.packages.is_empty() {
+        println!("{} No packages in lockfile.", "Done.".green().bold());
+        return Ok(());
+    }
+
+    let requested_scope = if config.project_root.is_some() {
+        RequestedScope::Project
+    } else {
+        RequestedScope::Global
+    };
+
+    println!(
+        "{} {} package(s) from lockfile ({scope_label} scope)",
+        "Restoring".green().bold(),
+        lockfile.packages.len()
+    );
+
+    let mut names: Vec<&String> = lockfile.packages.keys().collect();
+    names.sort();
+
+    for name in names {
+        let entry = &lockfile.packages[name];
+        let archive = archive_path_for_entry(config, name, entry);
+
+        if archive.exists() {
+            // Verify integrity
+            let actual_hash = cache::compute_sha256(&archive)?;
+            let expected_hash = strip_integrity_prefix(&entry.integrity);
+            if actual_hash != expected_hash {
+                return Err(RenkeiError::IntegrityMismatch {
+                    package: name.clone(),
+                    expected: entry.integrity.clone(),
+                    actual: format!("sha256-{actual_hash}"),
+                });
+            }
+
+            // Extract archive to tempdir and install from it
+            let tmp = tempfile::tempdir().map_err(|e| {
+                RenkeiError::CacheError(format!("Cannot create temp dir: {e}"))
+            })?;
+            cache::extract_archive_to_dir(&archive, tmp.path())?;
+
+            let options = build_install_options(entry);
+            install::install_local(tmp.path(), config, backend, requested_scope, &options)?;
+        } else {
+            // No cached archive — re-install from source
+            install_from_source(config, backend, requested_scope, entry)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
+    match source::parse_source(&entry.source) {
+        source::PackageSource::GitSsh(_) | source::PackageSource::GitUrl(_) => {
+            install::InstallOptions::git(
+                entry.source.clone(),
+                entry.resolved.clone().unwrap_or_default(),
+                entry.tag.clone(),
+            )
+        }
+        source::PackageSource::Local(_) => {
+            install::InstallOptions::local(entry.source.clone())
+        }
+    }
+}
+
+fn install_from_source(
+    config: &Config,
+    backend: &dyn Backend,
+    requested_scope: RequestedScope,
+    entry: &LockfileEntry,
 ) -> Result<()> {
-    todo!("Step 6: implement install-from-lockfile")
+    match source::parse_source(&entry.source) {
+        source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
+            let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
+            let sha = crate::git::resolve_head(tmp_dir.path())?;
+            let options = install::InstallOptions::git(url, sha, entry.tag.clone());
+            install::install_local(tmp_dir.path(), config, backend, requested_scope, &options)
+        }
+        source::PackageSource::Local(path_str) => {
+            let path = PathBuf::from(&path_str);
+            let options = install::InstallOptions::local(path_str);
+            install::install_local(&path, config, backend, requested_scope, &options)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -317,5 +438,178 @@ mod tests {
         let json = serde_json::to_string_pretty(&lockfile).unwrap();
         assert!(!json.contains("\"tag\""));
         assert!(!json.contains("\"resolved\""));
+    }
+
+    // --- install_from_lockfile tests ---
+
+    use crate::backend::claude::ClaudeBackend;
+    use std::fs;
+
+    fn make_test_package(name: &str, skill_name: &str) -> tempfile::TempDir {
+        let pkg = tempdir().unwrap();
+        fs::write(
+            pkg.path().join("renkei.json"),
+            format!(
+                r#"{{"name":"{name}","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}}"#
+            ),
+        )
+        .unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(
+            skills.join(format!("{skill_name}.md")),
+            format!("---\nname: {skill_name}\ndescription: test\n---\nContent of {skill_name}"),
+        )
+        .unwrap();
+        pkg
+    }
+
+    #[test]
+    fn test_install_from_lockfile_with_cached_archive() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Step 1: install a package normally (creates archive + lockfile)
+        let pkg = make_test_package("@test/restore", "review");
+        let opts = install::InstallOptions::local(pkg.path().to_string_lossy().to_string());
+        install::install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+        )
+        .unwrap();
+
+        // Verify lockfile was created
+        let lockfile_path = config.lockfile_path();
+        assert!(lockfile_path.exists());
+
+        // Step 2: delete deployed skill (simulate clean state)
+        let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        assert!(skill_path.exists());
+        fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
+        assert!(!skill_path.exists());
+
+        // Step 3: install from lockfile
+        install_from_lockfile(&config, &ClaudeBackend).unwrap();
+
+        // Verify skill is re-deployed
+        assert!(skill_path.exists());
+    }
+
+    #[test]
+    fn test_install_from_lockfile_integrity_mismatch() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Install a package to create archive + lockfile
+        let pkg = make_test_package("@test/corrupt", "review");
+        let opts = install::InstallOptions::local(pkg.path().to_string_lossy().to_string());
+        install::install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+        )
+        .unwrap();
+
+        // Corrupt the lockfile integrity
+        let lockfile_path = config.lockfile_path();
+        let mut lockfile = Lockfile::load(&lockfile_path).unwrap();
+        let entry = lockfile.packages.get_mut("@test/corrupt").unwrap();
+        entry.integrity = "sha256-0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        lockfile.save(&lockfile_path).unwrap();
+
+        // Install from lockfile should fail with integrity error
+        let result = install_from_lockfile(&config, &ClaudeBackend);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Integrity check failed"));
+        assert!(err.contains("@test/corrupt"));
+    }
+
+    #[test]
+    fn test_install_from_lockfile_no_lockfile_global() {
+        let home = tempdir().unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let result = install_from_lockfile(&config, &ClaudeBackend);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No lockfile found"));
+        assert!(err.contains("rk install -g <source>"));
+    }
+
+    #[test]
+    fn test_install_from_lockfile_no_lockfile_project() {
+        let home = tempdir().unwrap();
+        let project = tempdir().unwrap();
+        let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
+
+        let result = install_from_lockfile(&config, &ClaudeBackend);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No lockfile found"));
+        assert!(err.contains("rk install <source>"));
+    }
+
+    #[test]
+    fn test_install_from_lockfile_local_source_fallback() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Create a package that stays on disk
+        let pkg = make_test_package("@test/local-fb", "review");
+
+        // Install it normally
+        let opts = install::InstallOptions::local(pkg.path().to_string_lossy().to_string());
+        install::install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+        )
+        .unwrap();
+
+        // Delete the archive to force fallback to source
+        fs::remove_dir_all(config.archives_dir()).unwrap();
+
+        // Delete deployed files
+        fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
+
+        // Install from lockfile — should fall back to local source
+        install_from_lockfile(&config, &ClaudeBackend).unwrap();
+
+        let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        assert!(skill_path.exists());
+    }
+
+    #[test]
+    fn test_archive_path_for_entry() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let entry = LockfileEntry {
+            version: "1.2.0".to_string(),
+            source: "git@github.com:user/repo".to_string(),
+            tag: None,
+            resolved: None,
+            integrity: "sha256-abc".to_string(),
+        };
+        let path = archive_path_for_entry(&config, "@test/pkg", &entry);
+        assert_eq!(
+            path,
+            PathBuf::from("/home/user/.renkei/archives/@test/pkg/1.2.0.tar.gz")
+        );
+    }
+
+    #[test]
+    fn test_strip_integrity_prefix() {
+        assert_eq!(strip_integrity_prefix("sha256-abc123"), "abc123");
+        assert_eq!(strip_integrity_prefix("abc123"), "abc123");
     }
 }

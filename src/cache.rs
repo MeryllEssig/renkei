@@ -89,6 +89,20 @@ pub(crate) fn extract_file_from_archive(archive_path: &Path, inner_path: &str) -
     )))
 }
 
+pub(crate) fn extract_archive_to_dir(archive_path: &Path, dest: &Path) -> Result<()> {
+    let file = File::open(archive_path).map_err(|e| {
+        RenkeiError::CacheError(format!(
+            "Cannot open archive {}: {}",
+            archive_path.display(),
+            e
+        ))
+    })?;
+    let dec = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(dec);
+    archive.unpack(dest)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +237,22 @@ mod tests {
         let err = extract_file_from_archive(Path::new("/nonexistent/archive.tar.gz"), "file.md")
             .unwrap_err();
         assert!(err.to_string().contains("Cannot open archive"));
+    }
+
+    #[test]
+    fn test_extract_archive_to_dir() {
+        let home = tempdir().unwrap();
+        let pkg = tempdir().unwrap();
+        setup_package(pkg.path());
+
+        let config = Config::with_home_dir(home.path().to_path_buf());
+        let manifest = make_test_manifest();
+        let (archive_path, _) = create_archive(pkg.path(), &manifest, &config).unwrap();
+
+        let dest = tempdir().unwrap();
+        extract_archive_to_dir(&archive_path, dest.path()).unwrap();
+
+        assert!(dest.path().join("renkei.json").exists());
+        assert!(dest.path().join("skills/review.md").exists());
     }
 }
