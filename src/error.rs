@@ -49,6 +49,16 @@ pub enum RenkeiError {
         owner: String,
     },
 
+    #[error("No lockfile found at {path}.\n{hint}")]
+    LockfileNotFound { path: String, hint: String },
+
+    #[error("Integrity check failed for '{package}': expected {expected}, got {actual}")]
+    IntegrityMismatch {
+        package: String,
+        expected: String,
+        actual: String,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -114,6 +124,30 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("-g flag"));
         assert!(!msg.contains("install"));
+    }
+
+    #[test]
+    fn test_lockfile_not_found_message() {
+        let err = RenkeiError::LockfileNotFound {
+            path: "/projects/foo/rk.lock".to_string(),
+            hint: "Use `rk install <source>` to install a package.".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("/projects/foo/rk.lock"));
+        assert!(msg.contains("rk install <source>"));
+    }
+
+    #[test]
+    fn test_integrity_mismatch_message() {
+        let err = RenkeiError::IntegrityMismatch {
+            package: "@test/pkg".to_string(),
+            expected: "sha256-aaa".to_string(),
+            actual: "sha256-bbb".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("@test/pkg"));
+        assert!(msg.contains("sha256-aaa"));
+        assert!(msg.contains("sha256-bbb"));
     }
 
     #[test]
