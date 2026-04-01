@@ -63,14 +63,14 @@ impl InstallOptions {
     }
 }
 
-pub(crate) fn remove_artifact_file(path: &Path) {
+fn remove_artifact_file(path: &Path) {
     let _ = std::fs::remove_file(path);
     if let Some(parent) = path.parent() {
         let _ = std::fs::remove_dir(parent);
     }
 }
 
-pub(crate) fn undo_artifact(
+fn undo_artifact(
     kind: &ArtifactKind,
     path: &Path,
     hooks: &[hook::DeployedHookEntry],

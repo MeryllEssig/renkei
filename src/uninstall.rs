@@ -39,11 +39,7 @@ pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
 
 fn remove_from_lockfile(package: &str, config: &Config) {
     let path = config.lockfile_path();
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-    let mut lockfile: serde_json::Value = match serde_json::from_str(&content) {
+    let mut lockfile = match json_file::read_json_or_empty(&path) {
         Ok(v) => v,
         Err(_) => return,
     };
