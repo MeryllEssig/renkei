@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use crate::error::{RenkeiError, Result};
 
@@ -9,13 +10,16 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn default_home_dir() -> PathBuf {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/tmp"))
+    }
+
     #[allow(dead_code)]
     pub fn new() -> Self {
-        let home_dir = std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/tmp"));
         Self {
-            home_dir,
+            home_dir: Self::default_home_dir(),
             project_root: None,
         }
     }
@@ -65,18 +69,19 @@ impl Config {
         self.home_dir.join(".claude")
     }
 
-    pub fn claude_skills_dir(&self) -> PathBuf {
+    fn claude_subdir(&self, name: &str) -> PathBuf {
         match self.project_root {
-            Some(ref root) => root.join(".claude").join("skills"),
-            None => self.claude_dir().join("skills"),
+            Some(ref root) => root.join(".claude").join(name),
+            None => self.claude_dir().join(name),
         }
     }
 
+    pub fn claude_skills_dir(&self) -> PathBuf {
+        self.claude_subdir("skills")
+    }
+
     pub fn claude_agents_dir(&self) -> PathBuf {
-        match self.project_root {
-            Some(ref root) => root.join(".claude").join("agents"),
-            None => self.claude_dir().join("agents"),
-        }
+        self.claude_subdir("agents")
     }
 
     pub fn claude_settings_path(&self) -> PathBuf {
@@ -91,6 +96,7 @@ impl Config {
 pub fn detect_project_root() -> Result<PathBuf> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
+        .stderr(Stdio::null())
         .output()
         .map_err(|_| RenkeiError::NoProjectRoot)?;
 

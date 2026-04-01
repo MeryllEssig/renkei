@@ -32,9 +32,7 @@ fn run_install(source: &str, global: bool, backend: &dyn Backend) -> error::Resu
         RequestedScope::Project
     };
 
-    let home_dir = std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"));
+    let home_dir = Config::default_home_dir();
 
     let config = if global {
         Config::with_home_dir(home_dir)

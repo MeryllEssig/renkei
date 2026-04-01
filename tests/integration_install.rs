@@ -770,6 +770,13 @@ fn init_git_repo(dir: &std::path::Path) {
         .expect("git init failed");
 }
 
+fn project_slug(dir: &std::path::Path) -> String {
+    let canonical = dir.canonicalize().unwrap();
+    let s = canonical.to_string_lossy();
+    let without_leading = s.strip_prefix('/').unwrap_or(&s);
+    without_leading.replace('/', "-")
+}
+
 #[test]
 fn test_install_project_scope_deploys_to_project_root() {
     let home = tempdir().unwrap();
@@ -801,14 +808,7 @@ fn test_install_project_scope_deploys_to_project_root() {
         .exists());
 
     // Install-cache is per-project
-    let slug = project
-        .path()
-        .canonicalize()
-        .unwrap()
-        .to_string_lossy()
-        .strip_prefix('/')
-        .unwrap_or(&project.path().to_string_lossy())
-        .replace('/', "-");
+    let slug = project_slug(project.path());
     let cache_path = home
         .path()
         .join(format!(".renkei/projects/{}/install-cache.json", slug));
@@ -1033,14 +1033,7 @@ fn test_reinstall_project_scope_cleans_up_old_artifacts() {
         .exists());
 
     // Only 1 entry in project install-cache
-    let slug = project
-        .path()
-        .canonicalize()
-        .unwrap()
-        .to_string_lossy()
-        .strip_prefix('/')
-        .unwrap_or(&project.path().to_string_lossy())
-        .replace('/', "-");
+    let slug = project_slug(project.path());
     let cache_path = home
         .path()
         .join(format!(".renkei/projects/{}/install-cache.json", slug));
