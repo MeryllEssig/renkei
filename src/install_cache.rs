@@ -22,6 +22,10 @@ pub struct PackageEntry {
     pub deployed_artifacts: Vec<DeployedArtifactEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deployed_mcp_servers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +101,8 @@ mod tests {
                     deployed_hooks: vec![],
                 }],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         cache.save(&config).unwrap();
@@ -127,6 +133,8 @@ mod tests {
                 archive_path: "/a.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         assert_eq!(cache.packages["@test/pkg"].version, "1.0.0");
@@ -141,6 +149,8 @@ mod tests {
                 archive_path: "/b.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         assert_eq!(cache.packages.len(), 1);
@@ -172,6 +182,8 @@ mod tests {
                     }],
                 }],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         cache.save(&config).unwrap();
@@ -240,6 +252,8 @@ mod tests {
                 archive_path: "/tmp/a.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec!["test-server".to_string(), "api-server".to_string()],
+                resolved: None,
+                tag: None,
             },
         );
         cache.save(&config).unwrap();
@@ -274,6 +288,8 @@ mod tests {
                 archive_path: "/tmp/a.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         cache.save(&config).unwrap();
@@ -311,6 +327,8 @@ mod tests {
                 archive_path: "/tmp/g.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         global_cache.save(&global_config).unwrap();
@@ -327,6 +345,8 @@ mod tests {
                 archive_path: "/tmp/p.tar.gz".to_string(),
                 deployed_artifacts: vec![],
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         project_cache.save(&project_config).unwrap();
@@ -341,5 +361,92 @@ mod tests {
         assert_eq!(loaded_project.packages.len(), 1);
         assert!(loaded_project.packages.contains_key("@test/project-pkg"));
         assert!(!loaded_project.packages.contains_key("@test/global-pkg"));
+    }
+
+    #[test]
+    fn test_save_and_load_with_git_fields() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/git-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "git".to_string(),
+                source_path: "git@github.com:user/repo".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
+                resolved: Some("abcdef1234567890abcdef1234567890abcdef12".to_string()),
+                tag: Some("v1.0.0".to_string()),
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/git-pkg"];
+        assert_eq!(entry.source, "git");
+        assert_eq!(
+            entry.resolved.as_deref(),
+            Some("abcdef1234567890abcdef1234567890abcdef12")
+        );
+        assert_eq!(entry.tag.as_deref(), Some("v1.0.0"));
+    }
+
+    #[test]
+    fn test_none_fields_omitted_from_json() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/local-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![],
+                deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let raw = std::fs::read_to_string(config.install_cache_path()).unwrap();
+        assert!(!raw.contains("\"resolved\""));
+        assert!(!raw.contains("\"tag\""));
+    }
+
+    #[test]
+    fn test_load_legacy_cache_without_git_fields() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let legacy_json = r#"{
+            "version": 1,
+            "packages": {
+                "@test/old-pkg": {
+                    "version": "1.0.0",
+                    "source": "local",
+                    "source_path": "/tmp",
+                    "integrity": "abc",
+                    "archive_path": "/tmp/a.tar.gz",
+                    "deployed_artifacts": []
+                }
+            }
+        }"#;
+        let cache_path = config.install_cache_path();
+        std::fs::create_dir_all(cache_path.parent().unwrap()).unwrap();
+        std::fs::write(&cache_path, legacy_json).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/old-pkg"];
+        assert!(entry.resolved.is_none());
+        assert!(entry.tag.is_none());
     }
 }

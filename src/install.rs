@@ -148,6 +148,8 @@ pub fn install_local(
             archive_path: archive_path.to_string_lossy().to_string(),
             deployed_artifacts: deployed_entries,
             deployed_mcp_servers,
+            resolved: None,
+            tag: None,
         },
     );
     install_cache.save(config)?;
@@ -203,6 +205,8 @@ mod tests {
                 archive_path: "/tmp/a.tar.gz".to_string(),
                 deployed_artifacts: deployed,
                 deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
             },
         );
         InstallCache {
