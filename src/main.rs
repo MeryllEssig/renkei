@@ -86,9 +86,9 @@ fn run_list(global: bool) -> error::Result<()> {
     list::run_list(&config, global)
 }
 
-fn run_doctor(global: bool) -> error::Result<()> {
+fn run_doctor(global: bool, backend: &dyn Backend) -> error::Result<()> {
     let config = build_config(global)?;
-    let healthy = doctor::run_doctor(&config, global)?;
+    let healthy = doctor::run_doctor(&config, global, backend)?;
     if !healthy {
         process::exit(1);
     }
@@ -107,7 +107,7 @@ fn main() {
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
         Commands::List { global } => run_list(global),
-        Commands::Doctor { global } => run_doctor(global),
+        Commands::Doctor { global } => run_doctor(global, &backend),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
     };
 

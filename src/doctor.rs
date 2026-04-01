@@ -3,6 +3,7 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 
 use crate::artifact::ArtifactKind;
+use crate::backend::Backend;
 use crate::cache;
 use crate::config::Config;
 use crate::env_check;
@@ -13,11 +14,9 @@ use crate::install_cache::{InstallCache, PackageEntry};
 pub enum DiagnosticKind {
     FileMissing {
         artifact_name: String,
-        path: String,
     },
     SkillModified {
         artifact_name: String,
-        path: String,
     },
     EnvVarMissing {
         var_name: String,
@@ -54,10 +53,6 @@ impl DoctorReport {
     }
 }
 
-fn check_backend(config: &Config) -> bool {
-    config.claude_dir().is_dir()
-}
-
 fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
     for artifact in &entry.deployed_artifacts {
@@ -66,7 +61,6 @@ fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
                 if !Path::new(&artifact.deployed_path).exists() {
                     issues.push(DiagnosticKind::FileMissing {
                         artifact_name: artifact.name.clone(),
-                        path: artifact.deployed_path.clone(),
                     });
                 }
             }
@@ -74,6 +68,21 @@ fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         }
     }
     issues
+}
+
+/// Result of reading the archive once per package — shared by skill and env checks.
+enum ArchiveState {
+    Available,
+    Missing(String),
+}
+
+fn check_archive(entry: &PackageEntry) -> ArchiveState {
+    let archive_path = Path::new(&entry.archive_path);
+    if archive_path.exists() {
+        ArchiveState::Available
+    } else {
+        ArchiveState::Missing(entry.archive_path.clone())
+    }
 }
 
 fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
@@ -86,7 +95,7 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         }
         let deployed_path = Path::new(&artifact.deployed_path);
         if !deployed_path.exists() {
-            continue; // already caught by check_deployed_files
+            continue;
         }
 
         let archive_name = artifact.original_name.as_deref().unwrap_or(&artifact.name);
@@ -94,12 +103,7 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
 
         let original_bytes = match cache::extract_file_from_archive(archive_path, &inner_path) {
             Ok(bytes) => bytes,
-            Err(_) => {
-                issues.push(DiagnosticKind::ArchiveMissing {
-                    archive_path: entry.archive_path.clone(),
-                });
-                break; // no point checking more skills from this archive
-            }
+            Err(_) => break,
         };
 
         let original_hash = cache::compute_sha256_bytes(&original_bytes);
@@ -111,7 +115,6 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         if original_hash != deployed_hash {
             issues.push(DiagnosticKind::SkillModified {
                 artifact_name: artifact.name.clone(),
-                path: artifact.deployed_path.clone(),
             });
         }
     }
@@ -123,10 +126,7 @@ fn check_env_vars(entry: &PackageEntry) -> Vec<DiagnosticKind> {
 
     let manifest_bytes = match cache::extract_file_from_archive(archive_path, "renkei.json") {
         Ok(bytes) => bytes,
-        Err(_) => {
-            // Archive missing already reported by check_skill_modifications
-            return vec![];
-        }
+        Err(_) => return vec![],
     };
 
     let manifest: serde_json::Value = match serde_json::from_slice(&manifest_bytes) {
@@ -230,42 +230,25 @@ fn format_report(report: &DoctorReport, scope_label: &str) -> String {
         out.push('\n');
         out.push_str(&format!("{} v{}\n", diag.package_name.bold(), diag.version));
 
-        let file_issues: Vec<_> = diag
-            .issues
-            .iter()
-            .filter(|i| matches!(i, DiagnosticKind::FileMissing { .. }))
-            .collect();
-        let skill_issues: Vec<_> = diag
-            .issues
-            .iter()
-            .filter(|i| {
-                matches!(
-                    i,
-                    DiagnosticKind::SkillModified { .. } | DiagnosticKind::ArchiveMissing { .. }
-                )
-            })
-            .collect();
-        let env_issues: Vec<_> = diag
-            .issues
-            .iter()
-            .filter(|i| matches!(i, DiagnosticKind::EnvVarMissing { .. }))
-            .collect();
-        let hook_issues: Vec<_> = diag
-            .issues
-            .iter()
-            .filter(|i| matches!(i, DiagnosticKind::HookMissing { .. }))
-            .collect();
-        let mcp_issues: Vec<_> = diag
-            .issues
-            .iter()
-            .filter(|i| matches!(i, DiagnosticKind::McpMissing { .. }))
-            .collect();
+        let (mut files, mut skills, mut envs, mut hooks, mut mcps) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        for issue in &diag.issues {
+            match issue {
+                DiagnosticKind::FileMissing { .. } => files.push(issue),
+                DiagnosticKind::SkillModified { .. } | DiagnosticKind::ArchiveMissing { .. } => {
+                    skills.push(issue)
+                }
+                DiagnosticKind::EnvVarMissing { .. } => envs.push(issue),
+                DiagnosticKind::HookMissing { .. } => hooks.push(issue),
+                DiagnosticKind::McpMissing { .. } => mcps.push(issue),
+            }
+        }
 
-        format_check_section(&mut out, "Deployed files", &file_issues);
-        format_check_section(&mut out, "Skill integrity", &skill_issues);
-        format_check_section(&mut out, "Environment variables", &env_issues);
-        format_check_section(&mut out, "Hooks", &hook_issues);
-        format_check_section(&mut out, "MCP servers", &mcp_issues);
+        format_check_section(&mut out, "Deployed files", &files);
+        format_check_section(&mut out, "Skill integrity", &skills);
+        format_check_section(&mut out, "Environment variables", &envs);
+        format_check_section(&mut out, "Hooks", &hooks);
+        format_check_section(&mut out, "MCP servers", &mcps);
     }
 
     // Summary
@@ -358,7 +341,7 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
     }
 }
 
-pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
+pub fn run_doctor(config: &Config, global: bool, backend: &dyn Backend) -> Result<bool> {
     let cache = InstallCache::load(config)?;
     let scope_label = if global { "global" } else { "project" };
 
@@ -367,7 +350,7 @@ pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
         return Ok(true);
     }
 
-    let backend_ok = check_backend(config);
+    let backend_ok = backend.detect_installed(config);
 
     let settings = crate::json_file::read_json_or_empty(&config.claude_settings_path())?;
     let claude_config = crate::json_file::read_json_or_empty(&config.claude_config_path())?;
@@ -379,8 +362,15 @@ pub fn run_doctor(config: &Config, global: bool) -> Result<bool> {
     for (name, entry) in &packages {
         let mut issues = Vec::new();
         issues.extend(check_deployed_files(entry));
-        issues.extend(check_skill_modifications(entry));
-        issues.extend(check_env_vars(entry));
+        match check_archive(entry) {
+            ArchiveState::Available => {
+                issues.extend(check_skill_modifications(entry));
+                issues.extend(check_env_vars(entry));
+            }
+            ArchiveState::Missing(path) => {
+                issues.push(DiagnosticKind::ArchiveMissing { archive_path: path });
+            }
+        }
         issues.extend(check_hooks(entry, &settings));
         issues.extend(check_mcp(entry, &claude_config));
         package_diagnostics.push(PackageDiagnostic {
@@ -409,21 +399,6 @@ mod tests {
     use crate::manifest::{ManifestScope, ValidatedManifest};
     use semver::Version;
     use tempfile::tempdir;
-
-    #[test]
-    fn test_check_backend_exists() {
-        let dir = tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
-        let config = Config::with_home_dir(dir.path().to_path_buf());
-        assert!(check_backend(&config));
-    }
-
-    #[test]
-    fn test_check_backend_missing() {
-        let dir = tempdir().unwrap();
-        let config = Config::with_home_dir(dir.path().to_path_buf());
-        assert!(!check_backend(&config));
-    }
 
     #[test]
     fn test_report_healthy() {
@@ -633,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn test_skill_modification_missing_archive() {
+    fn test_skill_modification_missing_archive_skips() {
         let deploy = tempdir().unwrap();
         let deployed_path = deploy.path().join("SKILL.md");
         std::fs::write(&deployed_path, "# Skill").unwrap();
@@ -645,9 +620,26 @@ mod tests {
         )]);
         entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
 
-        let issues = check_skill_modifications(&entry);
-        assert_eq!(issues.len(), 1);
-        assert!(matches!(&issues[0], DiagnosticKind::ArchiveMissing { .. }));
+        // ArchiveMissing is now emitted by run_doctor orchestration, not check_skill_modifications
+        assert!(check_skill_modifications(&entry).is_empty());
+    }
+
+    #[test]
+    fn test_check_archive_available() {
+        let dir = tempdir().unwrap();
+        let archive = dir.path().join("archive.tar.gz");
+        std::fs::write(&archive, "fake").unwrap();
+
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = archive.to_string_lossy().to_string();
+        assert!(matches!(check_archive(&entry), ArchiveState::Available));
+    }
+
+    #[test]
+    fn test_check_archive_missing() {
+        let mut entry = make_entry(vec![]);
+        entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
+        assert!(matches!(check_archive(&entry), ArchiveState::Missing(_)));
     }
 
     #[test]
@@ -958,7 +950,6 @@ mod tests {
                 issues: vec![
                     DiagnosticKind::FileMissing {
                         artifact_name: "review".to_string(),
-                        path: "/p/review".to_string(),
                     },
                     DiagnosticKind::McpMissing {
                         server_name: "srv".to_string(),
@@ -984,7 +975,6 @@ mod tests {
                 version: "1.0.0".to_string(),
                 issues: vec![DiagnosticKind::SkillModified {
                     artifact_name: "review".to_string(),
-                    path: "/p/review".to_string(),
                 }],
             }],
         };
