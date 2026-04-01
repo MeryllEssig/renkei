@@ -25,9 +25,13 @@ use std::process;
 use backend::claude::ClaudeBackend;
 use backend::Backend;
 
-fn run_install(source: &str, global: bool, backend: &dyn Backend) -> error::Result<()> {
-    let path = PathBuf::from(source);
-
+fn run_install(
+    source: &str,
+    global: bool,
+    tag: Option<&str>,
+    force: bool,
+    backend: &dyn Backend,
+) -> error::Result<()> {
     let requested_scope = if global {
         RequestedScope::Global
     } else {
@@ -43,8 +47,25 @@ fn run_install(source: &str, global: bool, backend: &dyn Backend) -> error::Resu
         Config::for_project(home_dir, project_root)
     };
 
-    let options = install::InstallOptions::local(source.to_string());
-    install::install_local(&path, &config, backend, requested_scope, &options)
+    match source::parse_source(source) {
+        source::PackageSource::Local(path_str) => {
+            let path = PathBuf::from(&path_str);
+            let options = install::InstallOptions {
+                force,
+                ..install::InstallOptions::local(path_str)
+            };
+            install::install_local(&path, &config, backend, requested_scope, &options)
+        }
+        source::PackageSource::GitSsh(url) | source::PackageSource::GitHttps(url) => {
+            let tmp_dir = git::clone_repo(&url, tag)?;
+            let sha = git::resolve_head(tmp_dir.path())?;
+            let options = install::InstallOptions {
+                force,
+                ..install::InstallOptions::git(url, sha, tag.map(String::from))
+            };
+            install::install_local(tmp_dir.path(), &config, backend, requested_scope, &options)
+        }
+    }
 }
 
 fn main() {
@@ -52,7 +73,12 @@ fn main() {
     let backend = ClaudeBackend;
 
     let result: error::Result<()> = match cli.command {
-        Commands::Install { source, global } => run_install(&source, global, &backend),
+        Commands::Install {
+            source,
+            global,
+            tag,
+            force,
+        } => run_install(&source, global, tag.as_deref(), force, &backend),
     };
 
     if let Err(e) = result {

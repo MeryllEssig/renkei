@@ -20,5 +20,11 @@ pub enum Commands {
         /// Install globally (to ~/.claude/) instead of project-locally
         #[arg(short = 'g', long = "global")]
         global: bool,
+        /// Git tag or branch to clone
+        #[arg(long = "tag")]
+        tag: Option<String>,
+        /// Force installation (bypass backend detection)
+        #[arg(long = "force")]
+        force: bool,
     },
 }
