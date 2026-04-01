@@ -314,14 +314,14 @@ Integrity check: hash of the cached archive vs lockfile hash.
 
 ### Acceptance criteria
 
-- [ ] `rk install <source>` generates/updates `rk.lock` at the project root
-- [ ] `rk install -g <source>` generates/updates `~/.renkei/rk.lock`
-- [ ] The lockfile contains version, source, tag, resolved (SHA), integrity (SHA-256)
-- [ ] `rk install` (no args) with project `rk.lock` installs in project scope
-- [ ] `rk install -g` (no args) with global `rk.lock` installs in global scope
-- [ ] Corrupted archive in cache → integrity error
-- [ ] `rk install` without args and without `rk.lock` → explicit error
-- [ ] Tests: lockfile serialization/deserialization, SHA-256 computation, round-trip install → lockfile → clean → install-from-lockfile (both scopes), integrity check
+- [x] `rk install <source>` generates/updates `rk.lock` at the project root
+- [x] `rk install -g <source>` generates/updates `~/.renkei/rk.lock`
+- [x] The lockfile contains version, source, tag, resolved (SHA), integrity (SHA-256)
+- [x] `rk install` (no args) with project `rk.lock` installs in project scope
+- [x] `rk install -g` (no args) with global `rk.lock` installs in global scope
+- [x] Corrupted archive in cache → integrity error
+- [x] `rk install` without args and without `rk.lock` → explicit error
+- [x] Tests: lockfile serialization/deserialization, SHA-256 computation, round-trip install → lockfile → clean → install-from-lockfile (both scopes), integrity check
 
 ---
 
