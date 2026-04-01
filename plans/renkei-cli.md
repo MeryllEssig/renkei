@@ -251,14 +251,14 @@ Visual distinction between Git sources (`[git]`) and local sources (`[local]`). 
 
 ### Acceptance criteria
 
-- [ ] `rk uninstall @scope/pkg` removes project-scoped skills/agents from `.claude/`
-- [ ] `rk uninstall @scope/pkg` removes hooks/MCP entries from `~/.claude/settings.json` and `~/.claude.json`
-- [ ] `rk uninstall -g @scope/pkg` removes all artifacts from `~/.claude/`
-- [ ] Install-cache is updated (package entry removed)
-- [ ] Lockfile is updated if present (package entry removed)
-- [ ] Uninstalling a package not in the requested scope → error with clear message
-- [ ] Uninstalling a package leaves other packages' artifacts untouched
-- [ ] Tests: project uninstall, global uninstall, hook removal, MCP removal, not-found error, lockfile update, no side effects on other packages
+- [x] `rk uninstall @scope/pkg` removes project-scoped skills/agents from `.claude/`
+- [x] `rk uninstall @scope/pkg` removes hooks/MCP entries from `~/.claude/settings.json` and `~/.claude.json`
+- [x] `rk uninstall -g @scope/pkg` removes all artifacts from `~/.claude/`
+- [x] Install-cache is updated (package entry removed)
+- [x] Lockfile is updated if present (package entry removed)
+- [x] Uninstalling a package not in the requested scope → error with clear message
+- [x] Uninstalling a package leaves other packages' artifacts untouched
+- [x] Tests: project uninstall, global uninstall, hook removal, MCP removal, not-found error, lockfile update, no side effects on other packages
 
 ---
 
