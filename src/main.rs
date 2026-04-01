@@ -77,6 +77,11 @@ fn run_install(
     }
 }
 
+fn run_install_from_lockfile(global: bool, backend: &dyn Backend) -> error::Result<()> {
+    let config = build_config(global)?;
+    lockfile::install_from_lockfile(&config, backend)
+}
+
 fn run_uninstall(package: &str, global: bool) -> error::Result<()> {
     let config = build_config(global)?;
     uninstall::run_uninstall(package, &config)
@@ -102,11 +107,16 @@ fn main() {
 
     let result: error::Result<()> = match cli.command {
         Commands::Install {
-            source,
+            source: Some(source),
             global,
             tag,
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
+        Commands::Install {
+            source: None,
+            global,
+            ..
+        } => run_install_from_lockfile(global, &backend),
         Commands::List { global } => run_list(global),
         Commands::Doctor { global } => run_doctor(global, &backend),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),

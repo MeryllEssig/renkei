@@ -81,6 +81,13 @@ impl LockfileEntry {
     }
 }
 
+pub fn install_from_lockfile(
+    _config: &crate::config::Config,
+    _backend: &dyn crate::backend::Backend,
+) -> Result<()> {
+    todo!("Step 6: implement install-from-lockfile")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

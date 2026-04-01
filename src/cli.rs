@@ -15,8 +15,8 @@ pub struct Cli {
 pub enum Commands {
     /// Install a workflow package from a local path or git URL
     Install {
-        /// Path to a local package directory, or a git URL
-        source: String,
+        /// Path to a local package directory, or a git URL. Omit to install from rk.lock.
+        source: Option<String>,
         /// Install globally (to ~/.claude/) instead of project-locally
         #[arg(short = 'g', long = "global")]
         global: bool,
