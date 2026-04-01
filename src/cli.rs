@@ -27,4 +27,10 @@ pub enum Commands {
         #[arg(long = "force")]
         force: bool,
     },
+    /// List installed packages
+    List {
+        /// List globally installed packages instead of project-scoped
+        #[arg(short = 'g', long = "global")]
+        global: bool,
+    },
 }
