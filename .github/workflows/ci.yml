@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v3
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-targets
 
   clippy:
@@ -24,7 +24,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v3
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -- -D warnings
 
   fmt:
