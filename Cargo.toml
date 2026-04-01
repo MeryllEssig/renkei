@@ -20,6 +20,7 @@ sha2 = "0.10"
 thiserror = "2"
 owo-colors = "4"
 tempfile = "3"
+inquire = "0.7"
 
 [dev-dependencies]
 assert_cmd = "2"
