@@ -223,12 +223,12 @@ Visual distinction between Git sources (`[git]`) and local sources (`[local]`). 
 
 ### Acceptance criteria
 
-- [ ] `rk list` displays project-scoped installed packages
-- [ ] `rk list -g` displays globally installed packages
-- [ ] Git and local packages are visually distinguished
-- [ ] With no installed packages, explicit message
-- [ ] Exit code 0 in all cases
-- [ ] Tests: output formatting, empty case, mixed sources, scope filtering
+- [x] `rk list` displays project-scoped installed packages
+- [x] `rk list -g` displays globally installed packages
+- [x] Git and local packages are visually distinguished
+- [x] With no installed packages, explicit message
+- [x] Exit code 0 in all cases
+- [x] Tests: output formatting, empty case, mixed sources, scope filtering
 
 ---
 
