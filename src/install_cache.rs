@@ -35,6 +35,8 @@ pub struct DeployedArtifactEntry {
     pub deployed_path: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deployed_hooks: Vec<DeployedHookEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_name: Option<String>,
 }
 
 impl InstallCache {
@@ -99,6 +101,7 @@ mod tests {
                     name: "review".to_string(),
                     deployed_path: "/home/.claude/skills/renkei-review/SKILL.md".to_string(),
                     deployed_hooks: vec![],
+                    original_name: None,
                 }],
                 deployed_mcp_servers: vec![],
                 resolved: None,
@@ -180,6 +183,7 @@ mod tests {
                         matcher: Some("bash".to_string()),
                         command: "lint.sh".to_string(),
                     }],
+                    original_name: None,
                 }],
                 deployed_mcp_servers: vec![],
                 resolved: None,
@@ -448,5 +452,103 @@ mod tests {
         let entry = &loaded.packages["@test/old-pkg"];
         assert!(entry.resolved.is_none());
         assert!(entry.tag.is_none());
+    }
+
+    #[test]
+    fn test_original_name_roundtrip() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/renamed-pkg",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![DeployedArtifactEntry {
+                    artifact_type: ArtifactKind::Skill,
+                    name: "review-v2".to_string(),
+                    deployed_path: "/home/.claude/skills/renkei-review-v2/SKILL.md".to_string(),
+                    deployed_hooks: vec![],
+                    original_name: Some("review".to_string()),
+                }],
+                deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/renamed-pkg"];
+        assert_eq!(
+            entry.deployed_artifacts[0].original_name.as_deref(),
+            Some("review")
+        );
+        assert_eq!(entry.deployed_artifacts[0].name, "review-v2");
+    }
+
+    #[test]
+    fn test_original_name_none_omitted_from_json() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let mut cache = InstallCache::load(&config).unwrap();
+        cache.upsert_package(
+            "@test/no-rename",
+            PackageEntry {
+                version: "1.0.0".to_string(),
+                source: "local".to_string(),
+                source_path: "/tmp/pkg".to_string(),
+                integrity: "abc".to_string(),
+                archive_path: "/tmp/a.tar.gz".to_string(),
+                deployed_artifacts: vec![DeployedArtifactEntry {
+                    artifact_type: ArtifactKind::Skill,
+                    name: "review".to_string(),
+                    deployed_path: "/p".to_string(),
+                    deployed_hooks: vec![],
+                    original_name: None,
+                }],
+                deployed_mcp_servers: vec![],
+                resolved: None,
+                tag: None,
+            },
+        );
+        cache.save(&config).unwrap();
+
+        let raw = std::fs::read_to_string(config.install_cache_path()).unwrap();
+        assert!(!raw.contains("\"original_name\""));
+    }
+
+    #[test]
+    fn test_legacy_cache_without_original_name_loads() {
+        let dir = tempdir().unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+
+        let legacy_json = r#"{
+            "version": 1,
+            "packages": {
+                "@test/legacy-no-rename": {
+                    "version": "1.0.0",
+                    "source": "local",
+                    "source_path": "/tmp",
+                    "integrity": "abc",
+                    "archive_path": "/tmp/a.tar.gz",
+                    "deployed_artifacts": [
+                        {"artifact_type": "skill", "name": "review", "deployed_path": "/p"}
+                    ]
+                }
+            }
+        }"#;
+        let cache_path = config.install_cache_path();
+        std::fs::create_dir_all(cache_path.parent().unwrap()).unwrap();
+        std::fs::write(&cache_path, legacy_json).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = &loaded.packages["@test/legacy-no-rename"];
+        assert!(entry.deployed_artifacts[0].original_name.is_none());
     }
 }

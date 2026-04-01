@@ -198,6 +198,7 @@ pub fn install_local(
             name: d.artifact_name.clone(),
             deployed_path: d.deployed_path.to_string_lossy().to_string(),
             deployed_hooks: d.deployed_hooks.clone(),
+            original_name: None,
         })
         .collect();
 
@@ -258,6 +259,7 @@ mod tests {
                 name: name.to_string(),
                 deployed_path: path.to_string(),
                 deployed_hooks: vec![],
+                original_name: None,
             })
             .collect();
         let mut packages = HashMap::new();
