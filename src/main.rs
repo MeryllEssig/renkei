@@ -20,6 +20,7 @@ mod package;
 mod mcp;
 mod source;
 mod uninstall;
+mod workspace;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -60,20 +61,62 @@ fn run_install(
     match source::parse_source(source) {
         source::PackageSource::Local(path_str) => {
             let path = PathBuf::from(&path_str);
-            let options = install::InstallOptions {
-                force,
-                ..install::InstallOptions::local(path_str)
-            };
-            install::install_local(&path, &config, backend, requested_scope, &options)
+            if let Some(members) = manifest::try_load_workspace(&path) {
+                let ws_options = workspace::WorkspaceInstallOptions {
+                    force,
+                    source_kind: install::SourceKind::Local,
+                    source_url: path_str,
+                    resolved: None,
+                    tag: None,
+                };
+                workspace::install_workspace(
+                    &path,
+                    &members,
+                    &config,
+                    backend,
+                    requested_scope,
+                    &ws_options,
+                )
+            } else {
+                let options = install::InstallOptions {
+                    force,
+                    ..install::InstallOptions::local(path_str)
+                };
+                install::install_local(&path, &config, backend, requested_scope, &options)
+            }
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
             let sha = git::resolve_head(tmp_dir.path())?;
-            let options = install::InstallOptions {
-                force,
-                ..install::InstallOptions::git(url, sha, tag.map(String::from))
-            };
-            install::install_local(tmp_dir.path(), &config, backend, requested_scope, &options)
+            if let Some(members) = manifest::try_load_workspace(tmp_dir.path()) {
+                let ws_options = workspace::WorkspaceInstallOptions {
+                    force,
+                    source_kind: install::SourceKind::Git,
+                    source_url: url,
+                    resolved: Some(sha),
+                    tag: tag.map(String::from),
+                };
+                workspace::install_workspace(
+                    tmp_dir.path(),
+                    &members,
+                    &config,
+                    backend,
+                    requested_scope,
+                    &ws_options,
+                )
+            } else {
+                let options = install::InstallOptions {
+                    force,
+                    ..install::InstallOptions::git(url, sha, tag.map(String::from))
+                };
+                install::install_local(
+                    tmp_dir.path(),
+                    &config,
+                    backend,
+                    requested_scope,
+                    &options,
+                )
+            }
         }
     }
 }

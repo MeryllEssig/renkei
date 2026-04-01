@@ -114,6 +114,22 @@ impl Manifest {
     }
 }
 
+/// Minimal struct for workspace root manifests (only the `workspace` field).
+#[derive(Debug, Deserialize)]
+struct WorkspaceManifest {
+    workspace: Option<Vec<String>>,
+}
+
+/// Try to load a workspace member list from a directory's `renkei.json`.
+/// Returns `Some(members)` if the manifest has a non-empty `workspace` field,
+/// `None` otherwise.
+pub fn try_load_workspace(path: &Path) -> Option<Vec<String>> {
+    let manifest_path = path.join("renkei.json");
+    let content = std::fs::read_to_string(manifest_path).ok()?;
+    let ws: WorkspaceManifest = serde_json::from_str(&content).ok()?;
+    ws.workspace.filter(|members| !members.is_empty())
+}
+
 pub fn parse_scoped_name(name: &str) -> Result<(String, String)> {
     let invalid = || RenkeiError::InvalidScope {
         name: name.to_string(),
@@ -313,5 +329,41 @@ mod tests {
     fn test_validate_scope_project_with_global_fails() {
         let err = validate_scope(&ManifestScope::Project, RequestedScope::Global).unwrap_err();
         assert!(err.to_string().contains("project-only"));
+    }
+
+    #[test]
+    fn test_try_load_workspace_returns_members() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("renkei.json"),
+            r#"{ "workspace": ["member-a", "member-b"] }"#,
+        )
+        .unwrap();
+        let members = try_load_workspace(dir.path()).unwrap();
+        assert_eq!(members, vec!["member-a", "member-b"]);
+    }
+
+    #[test]
+    fn test_try_load_workspace_returns_none_for_normal_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("renkei.json"), valid_json()).unwrap();
+        assert!(try_load_workspace(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_try_load_workspace_returns_none_for_empty_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("renkei.json"),
+            r#"{ "workspace": [] }"#,
+        )
+        .unwrap();
+        assert!(try_load_workspace(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_try_load_workspace_returns_none_for_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(try_load_workspace(dir.path()).is_none());
     }
 }

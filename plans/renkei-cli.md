@@ -362,11 +362,11 @@ Workspace detection: a root `renkei.json` with a `workspace` field listing membe
 
 ### Acceptance criteria
 
-- [ ] `rk install ./workspace/` installs all members listed in the `workspace` field
-- [ ] Each member appears independently in `rk list`
-- [ ] Each member has its own lockfile entry
-- [ ] `rk install` without args in a workspace without lockfile → error with guidance
-- [ ] Tests: workspace detection, member enumeration, independent installation, error message
+- [x] `rk install ./workspace/` installs all members listed in the `workspace` field
+- [x] Each member appears independently in `rk list`
+- [x] Each member has its own lockfile entry
+- [x] `rk install` without args in a workspace without lockfile → error with guidance
+- [x] Tests: workspace detection, member enumeration, independent installation, error message
 
 ---
 

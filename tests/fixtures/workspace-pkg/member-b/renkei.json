@@ -1,0 +1,8 @@
+{
+  "name": "@test/member-b",
+  "version": "1.0.0",
+  "description": "Workspace member B",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}
