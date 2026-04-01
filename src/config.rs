@@ -65,6 +65,13 @@ impl Config {
         without_leading.replace('/', "-")
     }
 
+    pub fn lockfile_path(&self) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join("rk.lock"),
+            None => self.renkei_dir().join("rk.lock"),
+        }
+    }
+
     pub fn claude_dir(&self) -> PathBuf {
         self.home_dir.join(".claude")
     }
@@ -181,6 +188,27 @@ mod tests {
     #[test]
     fn test_slug_no_leading_slash() {
         assert_eq!(Config::slug(Path::new("tmp")), "tmp");
+    }
+
+    #[test]
+    fn test_lockfile_path_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.lockfile_path(),
+            PathBuf::from("/home/user/.renkei/rk.lock")
+        );
+    }
+
+    #[test]
+    fn test_lockfile_path_project() {
+        let config = Config::for_project(
+            PathBuf::from("/home/user"),
+            PathBuf::from("/projects/foo"),
+        );
+        assert_eq!(
+            config.lockfile_path(),
+            PathBuf::from("/projects/foo/rk.lock")
+        );
     }
 
     #[test]

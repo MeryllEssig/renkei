@@ -27,6 +27,14 @@ pub enum Commands {
         #[arg(long = "force")]
         force: bool,
     },
+    /// Uninstall a workflow package
+    Uninstall {
+        /// Package name (e.g., @scope/name)
+        package: String,
+        /// Uninstall from global scope instead of project scope
+        #[arg(short = 'g', long = "global")]
+        global: bool,
+    },
     /// List installed packages
     List {
         /// List globally installed packages instead of project-scoped

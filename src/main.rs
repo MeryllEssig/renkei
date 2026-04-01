@@ -91,6 +91,7 @@ fn main() {
             force,
         } => run_install(&source, global, tag.as_deref(), force, &backend),
         Commands::List { global } => run_list(global),
+        Commands::Uninstall { .. } => todo!("uninstall not yet implemented"),
     };
 
     if let Err(e) = result {
