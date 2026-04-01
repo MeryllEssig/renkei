@@ -1,0 +1,8 @@
+{
+  "name": "@test/conflict-multi-a",
+  "version": "1.0.0",
+  "description": "Multi-skill conflict test",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

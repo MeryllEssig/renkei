@@ -1151,7 +1151,9 @@ fn setup_bare_repo(tag: Option<&str>) -> (tempfile::TempDir, String) {
         .current_dir(work.path())
         .output()
         .unwrap();
-    let branch = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+    let branch = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
 
     std::process::Command::new("git")
         .args(["push", "origin", &branch, "--tags"])
@@ -1331,4 +1333,198 @@ fn test_install_git_tempdir_cleaned_up() {
         .path()
         .join(".renkei/archives/@test/git-pkg/1.0.0.tar.gz");
     assert!(archive.exists(), "Archive should be created from git clone");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: Conflict management integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_conflict_force_overwrites() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install package A (has skill "review")
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("conflict-pkg-a"))
+        .assert()
+        .success();
+
+    // Verify A's skill is deployed
+    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    assert!(skill_path.exists());
+    let content_a = fs::read_to_string(&skill_path).unwrap();
+    assert!(content_a.contains("package A"));
+
+    // Install package B (also has skill "review") with --force
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg("--force")
+        .arg(fixture_path("conflict-pkg-b"))
+        .assert()
+        .success();
+
+    // B's skill should now be deployed (overwritten A)
+    let content_b = fs::read_to_string(&skill_path).unwrap();
+    assert!(content_b.contains("package B"));
+
+    // Check install-cache: A should have lost the "review" artifact
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
+    let a_artifacts = &cache["packages"]["@test/conflict-a"]["deployed_artifacts"];
+    assert_eq!(
+        a_artifacts.as_array().unwrap().len(),
+        0,
+        "A should have no artifacts after force overwrite"
+    );
+    let b_artifacts = &cache["packages"]["@test/conflict-b"]["deployed_artifacts"];
+    assert_eq!(b_artifacts.as_array().unwrap().len(), 1);
+    assert_eq!(b_artifacts[0]["name"], "review");
+}
+
+#[test]
+fn test_conflict_non_tty_fails() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install package A
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("conflict-pkg-a"))
+        .assert()
+        .success();
+
+    // Install package B without --force (non-TTY, piped stdin)
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("conflict-pkg-b"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("review"))
+        .stderr(predicate::str::contains("@test/conflict-a"));
+}
+
+#[test]
+fn test_no_conflict_different_skill_names_integration() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install conflict-pkg-a (skill "review")
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("conflict-pkg-a"))
+        .assert()
+        .success();
+
+    // Install env-only (skill "check") — no conflict
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("env-only"))
+        .assert()
+        .success();
+
+    // Both skills exist
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-check/SKILL.md")
+        .exists());
+}
+
+#[test]
+fn test_reinstall_same_package_no_conflict() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install conflict-pkg-a twice — second time should succeed (reinstall, not conflict)
+    for _ in 0..2 {
+        Command::cargo_bin("rk")
+            .unwrap()
+            .env("HOME", home.path())
+            .arg("install")
+            .arg("-g")
+            .arg(fixture_path("conflict-pkg-a"))
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn test_force_preserves_other_artifacts() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install conflict-multi-a (skills "review" + "lint")
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("conflict-multi-a"))
+        .assert()
+        .success();
+
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
+
+    // Install conflict-pkg-b (skill "review" only) with --force
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg("--force")
+        .arg(fixture_path("conflict-pkg-b"))
+        .assert()
+        .success();
+
+    // conflict-multi-a should still have "lint"
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-lint/SKILL.md")
+        .exists());
+
+    // "review" should now be from conflict-pkg-b
+    let review =
+        fs::read_to_string(home.path().join(".claude/skills/renkei-review/SKILL.md")).unwrap();
+    assert!(review.contains("package B"));
+
+    // Check cache: conflict-multi-a should still have "lint" but NOT "review"
+    let cache_path = home.path().join(".renkei/install-cache.json");
+    let cache: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
+    let multi_artifacts = cache["packages"]["@test/conflict-multi-a"]["deployed_artifacts"]
+        .as_array()
+        .unwrap();
+    assert_eq!(multi_artifacts.len(), 1, "Should only have 'lint' left");
+    assert_eq!(multi_artifacts[0]["name"], "lint");
 }

@@ -93,9 +93,6 @@ mod tests {
 
     #[test]
     fn test_empty_string() {
-        assert_eq!(
-            parse_source(""),
-            PackageSource::Local("".to_string())
-        );
+        assert_eq!(parse_source(""), PackageSource::Local("".to_string()));
     }
 }

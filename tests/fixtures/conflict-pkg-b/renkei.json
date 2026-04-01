@@ -1,0 +1,8 @@
+{
+  "name": "@test/conflict-b",
+  "version": "1.0.0",
+  "description": "Conflict test package B",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"]
+}

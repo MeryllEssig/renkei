@@ -135,8 +135,10 @@ fn prompt_rename(conflict: &Conflict) -> Result<String> {
         .map_err(|e| RenkeiError::DeploymentFailed(format!("Prompt failed: {e}")))
 }
 
+type ConflictResolver = dyn Fn(&Conflict) -> Result<Option<String>>;
+
 /// Build the conflict resolver based on --force and TTY detection.
-fn default_resolver(force: bool) -> Box<dyn Fn(&Conflict) -> Result<Option<String>>> {
+fn default_resolver(force: bool) -> Box<ConflictResolver> {
     if force {
         Box::new(|_: &Conflict| Ok(None))
     } else if std::io::stdin().is_terminal() {
@@ -160,7 +162,14 @@ pub fn install_local(
     options: &InstallOptions,
 ) -> Result<()> {
     let resolver = default_resolver(options.force);
-    install_local_with_resolver(package_dir, config, backend, requested_scope, options, &*resolver)
+    install_local_with_resolver(
+        package_dir,
+        config,
+        backend,
+        requested_scope,
+        options,
+        &*resolver,
+    )
 }
 
 /// Inner implementation that accepts an injectable conflict resolver.
@@ -232,10 +241,7 @@ pub fn install_local_with_resolver(
                 }
             }
             Some(new_name) => {
-                renames.insert(
-                    (c.artifact_kind.clone(), c.artifact_name.clone()),
-                    new_name,
-                );
+                renames.insert((c.artifact_kind.clone(), c.artifact_name.clone()), new_name);
             }
         }
     }
@@ -250,14 +256,20 @@ pub fn install_local_with_resolver(
             let key = (art.kind.clone(), art.name.clone());
             if let Some(new_name) = renames.get(&key) {
                 // Read source, rewrite frontmatter, write to temp file
-                let content = std::fs::read_to_string(&art.source_path)
-                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot read {}: {e}", art.source_path.display())))?;
+                let content = std::fs::read_to_string(&art.source_path).map_err(|e| {
+                    RenkeiError::DeploymentFailed(format!(
+                        "Cannot read {}: {e}",
+                        art.source_path.display()
+                    ))
+                })?;
                 let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
 
-                let mut tmp = tempfile::NamedTempFile::new()
-                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}")))?;
-                std::io::Write::write_all(&mut tmp, rewritten.as_bytes())
-                    .map_err(|e| RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}")))?;
+                let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
+                    RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}"))
+                })?;
+                std::io::Write::write_all(&mut tmp, rewritten.as_bytes()).map_err(|e| {
+                    RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}"))
+                })?;
 
                 let renamed_artifact = Artifact {
                     kind: art.kind.clone(),
@@ -589,7 +601,13 @@ mod tests {
             force: true,
             ..InstallOptions::local("/tmp".to_string())
         };
-        let result = install_local(pkg.path(), &config, &backend, RequestedScope::Global, &options);
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &backend,
+            RequestedScope::Global,
+            &options,
+        );
         assert!(result.is_err());
 
         assert!(!home.path().join(".claude/agents/deploy.md").exists());
@@ -622,7 +640,13 @@ mod tests {
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
-        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &options,
+        );
         assert!(result.is_ok());
     }
 
@@ -633,7 +657,13 @@ mod tests {
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
-        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &options,
+        );
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No compatible backend"));
@@ -650,7 +680,13 @@ mod tests {
             force: true,
             ..InstallOptions::local("/tmp".to_string())
         };
-        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &options,
+        );
         assert!(result.is_ok());
     }
 
@@ -662,8 +698,17 @@ mod tests {
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
-        let result = install_local(pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &options);
-        assert!(result.is_ok(), "Should succeed with at least one matching backend");
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &options,
+        );
+        assert!(
+            result.is_ok(),
+            "Should succeed with at least one matching backend"
+        );
     }
 
     // --- Conflict management tests ---
@@ -699,7 +744,9 @@ mod tests {
         })
     }
 
-    fn rename_resolver(new_name: &str) -> impl Fn(&conflict::Conflict) -> Result<Option<String>> + '_ {
+    fn rename_resolver(
+        new_name: &str,
+    ) -> impl Fn(&conflict::Conflict) -> Result<Option<String>> + '_ {
         move |_| Ok(Some(new_name.to_string()))
     }
 
@@ -713,15 +760,27 @@ mod tests {
         let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
         let opts_a = InstallOptions::local("/tmp/a".to_string());
         install_local_with_resolver(
-            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_a, &force_resolver,
-        ).unwrap();
+            pkg_a.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_a,
+            &force_resolver,
+        )
+        .unwrap();
 
         // Install package B with skill "review" using force resolver (overwrite)
         let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
         let opts_b = InstallOptions::local("/tmp/b".to_string());
         install_local_with_resolver(
-            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &force_resolver,
-        ).unwrap();
+            pkg_b.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_b,
+            &force_resolver,
+        )
+        .unwrap();
 
         // B's skill should be deployed
         let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
@@ -753,14 +812,25 @@ mod tests {
         let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
         let opts = InstallOptions::local("/tmp/a".to_string());
         install_local_with_resolver(
-            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
-        ).unwrap();
+            pkg_a.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+            &force_resolver,
+        )
+        .unwrap();
 
         // Install package B with error resolver
         let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
         let opts_b = InstallOptions::local("/tmp/b".to_string());
         let result = install_local_with_resolver(
-            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &error_resolver,
+            pkg_b.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_b,
+            &error_resolver,
         );
 
         assert!(result.is_err());
@@ -779,16 +849,28 @@ mod tests {
         let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
         let opts = InstallOptions::local("/tmp/a".to_string());
         install_local_with_resolver(
-            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
-        ).unwrap();
+            pkg_a.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+            &force_resolver,
+        )
+        .unwrap();
 
         // Install package B with skill "review", rename to "review-v2"
         let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
         let opts_b = InstallOptions::local("/tmp/b".to_string());
         let resolver = rename_resolver("review-v2");
         install_local_with_resolver(
-            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &resolver,
-        ).unwrap();
+            pkg_b.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_b,
+            &resolver,
+        )
+        .unwrap();
 
         // Original skill (pkg A) should still exist
         let a_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
@@ -814,16 +896,28 @@ mod tests {
         let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
         let opts = InstallOptions::local("/tmp/a".to_string());
         install_local_with_resolver(
-            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &force_resolver,
-        ).unwrap();
+            pkg_a.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+            &force_resolver,
+        )
+        .unwrap();
 
         // Install package B with rename
         let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
         let opts_b = InstallOptions::local("/tmp/b".to_string());
         let resolver = rename_resolver("review-v2");
         install_local_with_resolver(
-            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &resolver,
-        ).unwrap();
+            pkg_b.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_b,
+            &resolver,
+        )
+        .unwrap();
 
         // Check install-cache
         let cache = InstallCache::load(&config).unwrap();
@@ -847,11 +941,23 @@ mod tests {
         // Install, then reinstall — should succeed with error resolver
         // (which would fail if any conflict was detected)
         install_local_with_resolver(
-            pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &error_resolver,
-        ).unwrap();
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+            &error_resolver,
+        )
+        .unwrap();
         install_local_with_resolver(
-            pkg.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts, &error_resolver,
-        ).unwrap();
+            pkg.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts,
+            &error_resolver,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -867,13 +973,31 @@ mod tests {
 
         // Both should succeed with error resolver (no conflicts)
         install_local_with_resolver(
-            pkg_a.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_a, &error_resolver,
-        ).unwrap();
+            pkg_a.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_a,
+            &error_resolver,
+        )
+        .unwrap();
         install_local_with_resolver(
-            pkg_b.path(), &config, &ClaudeBackend, RequestedScope::Global, &opts_b, &error_resolver,
-        ).unwrap();
+            pkg_b.path(),
+            &config,
+            &ClaudeBackend,
+            RequestedScope::Global,
+            &opts_b,
+            &error_resolver,
+        )
+        .unwrap();
 
-        assert!(home.path().join(".claude/skills/renkei-review/SKILL.md").exists());
-        assert!(home.path().join(".claude/skills/renkei-lint/SKILL.md").exists());
+        assert!(home
+            .path()
+            .join(".claude/skills/renkei-review/SKILL.md")
+            .exists());
+        assert!(home
+            .path()
+            .join(".claude/skills/renkei-lint/SKILL.md")
+            .exists());
     }
 }

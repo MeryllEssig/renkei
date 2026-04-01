@@ -127,7 +127,9 @@ mod tests {
             .current_dir(work.path())
             .output()
             .unwrap();
-        let branch = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+        let branch = String::from_utf8_lossy(&branch_output.stdout)
+            .trim()
+            .to_string();
 
         Command::new("git")
             .args(["push", "origin", &branch, "--tags"])
@@ -141,7 +143,9 @@ mod tests {
             .current_dir(work.path())
             .output()
             .unwrap();
-        let sha = String::from_utf8_lossy(&sha_output.stdout).trim().to_string();
+        let sha = String::from_utf8_lossy(&sha_output.stdout)
+            .trim()
+            .to_string();
 
         let url = format!("file://{}", bare.path().display());
         (bare, url, sha)
