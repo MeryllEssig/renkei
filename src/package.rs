@@ -16,16 +16,14 @@ const PACKAGE_DIRS: &[&str] = &["skills", "hooks", "agents", "scripts"];
 pub fn run_package(bump: Option<BumpLevel>) -> Result<()> {
     let cwd = std::env::current_dir()?;
 
-    let manifest = Manifest::from_path(&cwd)?;
-    manifest.validate()?;
-
-    if let Some(level) = &bump {
+    let validated = if let Some(level) = &bump {
+        let manifest = Manifest::from_path(&cwd)?;
+        manifest.validate()?;
         bump_version(&cwd.join("renkei.json"), level)?;
-    }
-
-    // Re-read after potential bump
-    let manifest = Manifest::from_path(&cwd)?;
-    let validated = manifest.validate()?;
+        Manifest::from_path(&cwd)?.validate()?
+    } else {
+        Manifest::from_path(&cwd)?.validate()?
+    };
 
     let (archive_path, entries) = create_package_archive(&cwd, &validated)?;
     let hash = compute_sha256(&archive_path)?;
@@ -112,8 +110,10 @@ fn create_package_archive(
 }
 
 fn collect_dir_entries(dir: &Path, prefix: &str, entries: &mut Vec<String>) -> Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
+    let mut dir_entries: Vec<_> = fs::read_dir(dir)?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    dir_entries.sort_by_key(|e| e.file_name());
+    for entry in dir_entries {
         let path = entry.path();
         let rel = format!("{}/{}", prefix, entry.file_name().to_string_lossy());
         if path.is_file() {
@@ -148,7 +148,7 @@ fn print_summary(
         if entries.len() == 1 { "file" } else { "files" },
         format_size(size)
     );
-    println!("{} {}", "SHA-256:".dimmed(), &hash[..16]);
+    println!("{} {}", "SHA-256:".dimmed(), hash.get(..16).unwrap_or(hash));
     println!(
         "\n{} {}",
         "Created".green().bold(),
@@ -156,7 +156,7 @@ fn print_summary(
     );
 }
 
-pub(crate) fn format_size(bytes: u64) -> String {
+fn format_size(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{} B", bytes)
     } else if bytes < 1024 * 1024 {
