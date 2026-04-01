@@ -4,7 +4,7 @@ use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 use crate::install;
 use crate::install_cache::InstallCache;
-use crate::json_file;
+use crate::lockfile::Lockfile;
 
 pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
     let scope_label = if config.project_root.is_some() {
@@ -35,14 +35,12 @@ pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
 
 fn remove_from_lockfile(package: &str, config: &Config) {
     let path = config.lockfile_path();
-    let mut lockfile = match json_file::read_json_or_empty(&path) {
-        Ok(v) => v,
+    let mut lockfile = match Lockfile::load(&path) {
+        Ok(lf) => lf,
         Err(_) => return,
     };
-    if let Some(packages) = lockfile.get_mut("packages").and_then(|p| p.as_object_mut()) {
-        packages.remove(package);
-    }
-    let _ = json_file::write_json_pretty(&path, &lockfile);
+    lockfile.remove(package);
+    let _ = lockfile.save(&path);
 }
 
 #[cfg(test)]
