@@ -16,6 +16,7 @@ mod list;
 mod manifest;
 mod mcp;
 mod source;
+mod uninstall;
 
 use clap::Parser;
 use cli::{Cli, Commands};
