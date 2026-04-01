@@ -173,14 +173,14 @@ Extract the commit SHA from the clone for future use (lockfile).
 
 ### Acceptance criteria
 
-- [ ] `rk install git@github.com:user/repo` clones and installs
-- [ ] `rk install https://github.com/user/repo` clones and installs
-- [ ] `rk install git@... --tag v1.0.0` clones the specific tag
-- [ ] The tempdir is cleaned up after installation (success or failure)
-- [ ] A package with `backends: ["cursor"]` on a machine without Cursor fails with a clear message
-- [ ] `--force` allows installation despite backend incompatibility
-- [ ] The commit SHA is extracted and stored
-- [ ] Tests: source parsing (SSH, HTTPS, local), backend detection, compatibility, force override
+- [x] `rk install git@github.com:user/repo` clones and installs
+- [x] `rk install https://github.com/user/repo` clones and installs
+- [x] `rk install git@... --tag v1.0.0` clones the specific tag
+- [x] The tempdir is cleaned up after installation (success or failure)
+- [x] A package with `backends: ["cursor"]` on a machine without Cursor fails with a clear message
+- [x] `--force` allows installation despite backend incompatibility
+- [x] The commit SHA is extracted and stored
+- [x] Tests: source parsing (SSH, HTTPS, local), backend detection, compatibility, force override
 
 ---
 
