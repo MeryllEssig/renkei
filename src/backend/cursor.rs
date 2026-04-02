@@ -65,9 +65,8 @@ impl Backend for CursorBackend {
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Cursor);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
-        let translated = hook::translate_hooks_cursor(&renkei_hooks)?;
         let hooks_path = dirs.hooks_path.unwrap();
-        let deployed_entries = hook::write_cursor_hooks(&hooks_path, &translated)?;
+        let deployed_entries = hook::deploy(&hook::CURSOR, &renkei_hooks, &hooks_path)?;
 
         Ok(DeployedArtifact {
             artifact_kind: ArtifactKind::Hook,

@@ -41,9 +41,8 @@ impl Backend for ClaudeBackend {
 
         let dirs = config.backend(BackendId::Claude);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
-        let translated = hook::translate_hooks(&renkei_hooks)?;
         let settings_path = dirs.settings_path.unwrap();
-        let deployed_entries = hook::merge_hooks_into_settings(&settings_path, &translated)?;
+        let deployed_entries = hook::deploy(&hook::CLAUDE, &renkei_hooks, &settings_path)?;
 
         Ok(DeployedArtifact {
             artifact_kind: ArtifactKind::Hook,

@@ -79,9 +79,8 @@ impl Backend for CodexBackend {
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Codex);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
-        let translated = hook::translate_hooks_with(&renkei_hooks, hook::translate_event_codex)?;
         let hooks_path = dirs.hooks_path.unwrap();
-        let deployed_entries = hook::write_standalone_hooks(&hooks_path, &translated)?;
+        let deployed_entries = hook::deploy(&hook::CODEX, &renkei_hooks, &hooks_path)?;
 
         Ok(DeployedArtifact {
             artifact_kind: ArtifactKind::Hook,

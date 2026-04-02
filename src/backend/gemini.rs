@@ -43,9 +43,8 @@ impl Backend for GeminiBackend {
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Gemini);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
-        let translated = hook::translate_hooks_with(&renkei_hooks, hook::translate_event_gemini)?;
         let settings_path = dirs.settings_path.unwrap();
-        let deployed_entries = hook::merge_hooks_into_settings(&settings_path, &translated)?;
+        let deployed_entries = hook::deploy(&hook::GEMINI, &renkei_hooks, &settings_path)?;
 
         Ok(DeployedArtifact {
             artifact_kind: ArtifactKind::Hook,
