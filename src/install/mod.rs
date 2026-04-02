@@ -1,145 +1,26 @@
-use std::collections::HashMap;
+mod cleanup;
+mod deploy;
+mod resolve;
+mod types;
+
+pub use types::{ConflictResolver, InstallOptions, SourceKind};
+pub(crate) use cleanup::cleanup_previous_installation;
+
 use std::io::IsTerminal;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
 
-use crate::artifact::{self, Artifact, ArtifactKind};
-use crate::backend::{Backend, DeployedArtifact};
+use crate::artifact;
+use crate::backend::Backend;
 use crate::cache;
 use crate::config::Config;
-use crate::conflict::{self, Conflict};
+use crate::conflict::Conflict;
 use crate::env_check;
 use crate::error::{RenkeiError, Result};
-use crate::frontmatter;
-use crate::hook;
-use crate::install_cache::{self, DeployedArtifactEntry, InstallCache, PackageEntry};
+use crate::install_cache::{InstallCache, PackageEntry};
 use crate::lockfile::{Lockfile, LockfileEntry};
 use crate::manifest::{self, Manifest, RequestedScope};
-use crate::mcp;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SourceKind {
-    Local,
-    Git,
-}
-
-impl SourceKind {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SourceKind::Local => "local",
-            SourceKind::Git => "git",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InstallOptions {
-    pub force: bool,
-    pub source_kind: SourceKind,
-    pub source_url: String,
-    pub resolved: Option<String>,
-    pub tag: Option<String>,
-    /// Skip archive creation and lockfile write (used during lockfile replay).
-    pub from_lockfile: bool,
-}
-
-impl InstallOptions {
-    pub fn local(source_path: String) -> Self {
-        Self {
-            force: false,
-            source_kind: SourceKind::Local,
-            source_url: source_path,
-            resolved: None,
-            tag: None,
-            from_lockfile: false,
-        }
-    }
-
-    pub fn git(url: String, resolved: String, tag: Option<String>) -> Self {
-        Self {
-            force: false,
-            source_kind: SourceKind::Git,
-            source_url: url,
-            resolved: Some(resolved),
-            tag,
-            from_lockfile: false,
-        }
-    }
-}
-
-/// Check if an artifact kind is known to be unsupported for a backend.
-/// This allows graceful skipping instead of hard errors during multi-backend deploy.
-fn is_unsupported_for_backend(backend_name: &str, kind: &ArtifactKind) -> bool {
-    match backend_name {
-        "agents" => matches!(kind, ArtifactKind::Agent | ArtifactKind::Hook),
-        _ => false,
-    }
-}
-
-/// Check if MCP registration is known to be unsupported for a backend.
-fn is_mcp_unsupported(backend_name: &str) -> bool {
-    matches!(backend_name, "agents")
-}
-
-fn remove_artifact_file(path: &Path) {
-    let _ = std::fs::remove_file(path);
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::remove_dir(parent);
-    }
-}
-
-fn undo_artifact(
-    kind: &ArtifactKind,
-    path: &Path,
-    hooks: &[hook::DeployedHookEntry],
-    config: &Config,
-) {
-    match kind {
-        ArtifactKind::Hook => {
-            let _ = hook::remove_hooks_from_settings(&config.claude_settings_path(), hooks);
-        }
-        _ => remove_artifact_file(path),
-    }
-}
-
-pub(crate) fn cleanup_previous_installation(
-    full_name: &str,
-    install_cache: &InstallCache,
-    config: &Config,
-) {
-    if let Some(entry) = install_cache.packages.get(full_name) {
-        for artifact in entry.all_artifacts() {
-            undo_artifact(
-                &artifact.artifact_type,
-                Path::new(&artifact.deployed_path),
-                &artifact.deployed_hooks,
-                config,
-            );
-        }
-        let mcp_servers = entry.all_mcp_servers();
-        if !mcp_servers.is_empty() {
-            let mcp_entries: Vec<mcp::DeployedMcpEntry> = mcp_servers
-                .iter()
-                .map(|name| mcp::DeployedMcpEntry {
-                    server_name: name.to_string(),
-                })
-                .collect();
-            let _ = mcp::remove_mcp_from_config(&config.claude_config_path(), &mcp_entries);
-        }
-    }
-}
-
-fn rollback(deployed: &[DeployedArtifact], config: &Config) {
-    for artifact in deployed.iter().rev() {
-        undo_artifact(
-            &artifact.artifact_kind,
-            &artifact.deployed_path,
-            &artifact.deployed_hooks,
-            config,
-        );
-    }
-}
 
 fn prompt_rename(conflict: &Conflict) -> Result<String> {
     let prompt = format!(
@@ -151,8 +32,6 @@ fn prompt_rename(conflict: &Conflict) -> Result<String> {
         .prompt()
         .map_err(|e| RenkeiError::DeploymentFailed(format!("Prompt failed: {e}")))
 }
-
-type ConflictResolver = dyn Fn(&Conflict) -> Result<Option<String>>;
 
 /// Build the conflict resolver based on --force and TTY detection.
 fn default_resolver(force: bool) -> Box<ConflictResolver> {
@@ -244,29 +123,13 @@ pub(crate) fn install_local_with_resolver(
     let mut install_cache = InstallCache::load(config)?;
     cleanup_previous_installation(&manifest.full_name, &install_cache, config);
 
-    // --- Conflict detection ---
-    let conflicts = conflict::detect_conflicts(&artifacts, &install_cache, &manifest.full_name);
-
-    // Resolve conflicts: build a rename map (original_name -> new_name)
-    // and clean up previous owners when force-overwriting
-    let mut renames: HashMap<(ArtifactKind, String), String> = HashMap::new();
-    for c in &conflicts {
-        match conflict_resolver(c)? {
-            None => {
-                // Force overwrite: remove the artifact from the previous owner's cache
-                if let Some(owner_entry) = install_cache.packages.get_mut(&c.owner_package) {
-                    for deployment in owner_entry.deployed.values_mut() {
-                        deployment.artifacts.retain(|a| {
-                            !(a.artifact_type == c.artifact_kind && a.name == c.artifact_name)
-                        });
-                    }
-                }
-            }
-            Some(new_name) => {
-                renames.insert((c.artifact_kind.clone(), c.artifact_name.clone()), new_name);
-            }
-        }
-    }
+    // --- Conflict resolution + rename ---
+    let resolved = resolve::resolve_conflicts_and_rename(
+        artifacts,
+        &mut install_cache,
+        &manifest.full_name,
+        conflict_resolver,
+    )?;
 
     let (archive_path, integrity) = if options.from_lockfile {
         let path = cache::archive_path(
@@ -285,122 +148,13 @@ pub(crate) fn install_local_with_resolver(
         cache::create_archive(&package_dir, &manifest, config)?
     };
 
-    // Build effective artifacts (apply renames).
-    // Hold temp files alive until deployment completes (they are deleted on Drop).
-    let mut temp_files: Vec<tempfile::NamedTempFile> = Vec::new();
-    let effective_artifacts: Vec<(Artifact, Option<String>)> = artifacts
-        .into_iter()
-        .map(|art| {
-            let key = (art.kind.clone(), art.name.clone());
-            if let Some(new_name) = renames.get(&key) {
-                // Read source, rewrite frontmatter, write to temp file
-                let content = std::fs::read_to_string(&art.source_path).map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!(
-                        "Cannot read {}: {e}",
-                        art.source_path.display()
-                    ))
-                })?;
-                let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
-
-                let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}"))
-                })?;
-                std::io::Write::write_all(&mut tmp, rewritten.as_bytes()).map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}"))
-                })?;
-
-                let original_name = art.name;
-                let renamed_artifact = Artifact {
-                    kind: art.kind,
-                    name: new_name.to_string(),
-                    source_path: tmp.path().to_path_buf(),
-                };
-                temp_files.push(tmp);
-                Ok((renamed_artifact, Some(original_name)))
-            } else {
-                Ok((art, None))
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    // Deploy to all backends, collecting results per backend
-    let mut all_deployed: Vec<DeployedArtifact> = Vec::new();
-    let mut deployed_map: HashMap<String, install_cache::BackendDeployment> = HashMap::new();
-
-    let has_agents = active_backends.iter().any(|b| b.name() == "agents");
-
-    for backend in &active_backends {
-        let mut backend_deployed = Vec::new();
-
-        for (art, _) in &effective_artifacts {
-            // Deduplication: if the agents backend is also active and this backend reads from
-            // .agents/skills/, skip the skill deploy to avoid double-deploying the same file.
-            // The agents backend will handle the actual deployment.
-            if art.kind == ArtifactKind::Skill && backend.reads_agents_skills() && has_agents {
-                continue;
-            }
-
-            let result = match art.kind {
-                ArtifactKind::Skill => backend.deploy_skill(art, config),
-                ArtifactKind::Agent => backend.deploy_agent(art, config),
-                ArtifactKind::Hook => backend.deploy_hook(art, config),
-            };
-            match result {
-                Ok(d) => backend_deployed.push(d),
-                Err(_) if is_unsupported_for_backend(backend.name(), &art.kind) => {
-                    // Skip unsupported artifact types for this backend
-                    continue;
-                }
-                Err(e) => {
-                    // Rollback everything deployed so far (all backends + current)
-                    rollback(&all_deployed, config);
-                    rollback(&backend_deployed, config);
-                    return Err(e);
-                }
-            }
-        }
-
-        let mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
-            match backend.register_mcp(mcp, config) {
-                Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
-                Err(_) if is_mcp_unsupported(backend.name()) => vec![],
-                Err(e) => {
-                    rollback(&all_deployed, config);
-                    rollback(&backend_deployed, config);
-                    return Err(e);
-                }
-            }
-        } else {
-            vec![]
-        };
-
-        let deployed_entries: Vec<DeployedArtifactEntry> = backend_deployed
-            .iter()
-            .map(|d| {
-                let original = effective_artifacts
-                    .iter()
-                    .find(|(art, _)| art.name == d.artifact_name && art.kind == d.artifact_kind)
-                    .and_then(|(_, orig)| orig.clone());
-                DeployedArtifactEntry {
-                    artifact_type: d.artifact_kind.clone(),
-                    name: d.artifact_name.clone(),
-                    deployed_path: d.deployed_path.to_string_lossy().to_string(),
-                    deployed_hooks: d.deployed_hooks.clone(),
-                    original_name: original,
-                }
-            })
-            .collect();
-
-        deployed_map.insert(
-            backend.name().to_string(),
-            install_cache::BackendDeployment {
-                artifacts: deployed_entries,
-                mcp_servers,
-            },
-        );
-
-        all_deployed.extend(backend_deployed);
-    }
+    // --- Deploy to all backends ---
+    let deployment = deploy::deploy_to_backends(
+        &resolved.effective,
+        &active_backends,
+        &raw_manifest,
+        config,
+    )?;
 
     install_cache.upsert_package(
         &manifest.full_name,
@@ -413,7 +167,7 @@ pub(crate) fn install_local_with_resolver(
             },
             integrity,
             archive_path: archive_path.to_string_lossy().to_string(),
-            deployed: deployed_map,
+            deployed: deployment.deployed_map,
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
         },
@@ -435,10 +189,10 @@ pub(crate) fn install_local_with_resolver(
     println!(
         "{} Deployed {} artifact(s) for {}",
         "Done.".green().bold(),
-        all_deployed.len(),
+        deployment.all_deployed.len(),
         manifest.full_name
     );
-    for d in &all_deployed {
+    for d in &deployment.all_deployed {
         println!("  {} {}", "→".dimmed(), d.deployed_path.display());
     }
 
@@ -458,7 +212,10 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    use crate::artifact::ArtifactKind;
+    use crate::artifact::{Artifact, ArtifactKind};
+    use crate::backend::{Backend, DeployedArtifact};
+    use crate::conflict;
+    use crate::hook::DeployedHookEntry;
     use crate::install_cache::{
         BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry,
     };
@@ -574,7 +331,7 @@ mod tests {
             },
         ];
 
-        rollback(&deployed, &config);
+        cleanup::rollback(&deployed, &config);
         assert!(!file1.exists());
         assert!(!file2.exists());
     }
@@ -596,7 +353,7 @@ mod tests {
             deployed_hooks: vec![],
         }];
 
-        rollback(&deployed, &config);
+        cleanup::rollback(&deployed, &config);
         assert!(!file.exists());
         assert!(!skill_dir.exists());
     }
@@ -615,10 +372,9 @@ mod tests {
             deployed_hooks: vec![],
         }];
 
-        rollback(&deployed, &config);
+        cleanup::rollback(&deployed, &config);
     }
 
-    use crate::artifact::Artifact;
     use crate::backend::claude::ClaudeBackend;
     use std::cell::Cell;
 
