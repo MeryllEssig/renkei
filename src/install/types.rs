@@ -52,3 +52,14 @@ impl InstallOptions {
 }
 
 pub type ConflictResolver = dyn Fn(&Conflict) -> Result<Option<String>>;
+
+/// Source metadata for lockfile-based installs.
+/// Contains only the fields needed to reconstruct a PackageEntry,
+/// without the `force`/`from_lockfile` control flags of InstallOptions.
+#[derive(Debug, Clone)]
+pub struct SourceInfo {
+    pub source_kind: SourceKind,
+    pub source_url: String,
+    pub resolved: Option<String>,
+    pub tag: Option<String>,
+}

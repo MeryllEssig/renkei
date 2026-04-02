@@ -5,6 +5,7 @@ use tempfile::tempdir;
 use crate::backend::{claude::ClaudeBackend, Backend};
 use crate::config::Config;
 use crate::install::pipeline::CorePipeline;
+use crate::install::{install_from_lock_entry, install_local_with_resolver, InstallOptions, SourceInfo, SourceKind};
 use crate::manifest::RequestedScope;
 use crate::package_store::PackageStore;
 
@@ -197,5 +198,105 @@ fn test_pipeline_cleanup_removes_previous_install() {
     let deployment2 = resolved2.deploy(&config).unwrap();
 
     assert!(!deployment2.all_deployed.is_empty());
+    assert!(skill_path.exists());
+}
+
+// --- install_from_lock_entry tests ---
+
+#[test]
+fn test_install_from_lock_entry_deploys_skill() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    let pkg = make_pkg_with_skill("@test/lock-entry", "review");
+    let source = SourceInfo {
+        source_kind: SourceKind::Local,
+        source_url: pkg.path().to_string_lossy().to_string(),
+        resolved: None,
+        tag: None,
+    };
+
+    install_from_lock_entry(
+        pkg.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &source,
+    )
+    .unwrap();
+
+    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    assert!(skill_path.exists());
+}
+
+#[test]
+fn test_install_from_lock_entry_does_not_update_lockfile() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    let pkg = make_pkg_with_skill("@test/lock-entry", "review");
+    let source = SourceInfo {
+        source_kind: SourceKind::Local,
+        source_url: pkg.path().to_string_lossy().to_string(),
+        resolved: None,
+        tag: None,
+    };
+
+    install_from_lock_entry(
+        pkg.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &source,
+    )
+    .unwrap();
+
+    // Lockfile should exist but have no entries (from_lockfile=true skips lockfile upsert)
+    let store = PackageStore::load(&config).unwrap();
+    assert!(store.lockfile().packages.is_empty());
+    // But cache should have the entry
+    assert!(store.contains("@test/lock-entry"));
+}
+
+#[test]
+fn test_install_from_lock_entry_force_overwrites_conflicts() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    // Install first package normally
+    let pkg_a = make_pkg_with_skill("@test/conflict-a", "review");
+    let opts = InstallOptions::local("/tmp/a".to_string());
+    install_local_with_resolver(
+        pkg_a.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts,
+        &force_resolver,
+    )
+    .unwrap();
+
+    // Install conflicting package via lock entry — should force overwrite
+    let pkg_b = make_pkg_with_skill("@test/conflict-b", "review");
+    let source = SourceInfo {
+        source_kind: SourceKind::Local,
+        source_url: "/tmp/b".to_string(),
+        resolved: None,
+        tag: None,
+    };
+
+    install_from_lock_entry(
+        pkg_b.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &source,
+    )
+    .unwrap();
+
+    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
     assert!(skill_path.exists());
 }

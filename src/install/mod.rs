@@ -4,7 +4,7 @@ pub(crate) mod pipeline;
 mod resolve;
 mod types;
 
-pub use types::{ConflictResolver, InstallOptions, SourceKind};
+pub use types::{ConflictResolver, InstallOptions, SourceInfo, SourceKind};
 pub(crate) use cleanup::cleanup_previous_installation;
 
 use std::io::IsTerminal;
@@ -127,6 +127,85 @@ pub(crate) fn install_local_with_resolver(
             tag: options.tag.clone(),
         },
         options.from_lockfile,
+    );
+    store.save(config)?;
+
+    println!(
+        "{} Deployed {} artifact(s) for {}",
+        "Done.".green().bold(),
+        deployment.all_deployed.len(),
+        resolved.manifest.full_name
+    );
+    for d in &deployment.all_deployed {
+        println!("  {} {}", "→".dimmed(), d.deployed_path.display());
+    }
+
+    if let Some(ref env) = resolved.raw_manifest.required_env {
+        let missing = env_check::check_required_env(env);
+        if !missing.is_empty() {
+            env_check::print_env_warnings(&missing);
+        }
+    }
+
+    Ok(())
+}
+
+/// Install a package from a lockfile entry.
+///
+/// Unlike `install_local`, this function:
+/// - Always force-overwrites conflicts (no interactive prompt)
+/// - Reuses the cached archive instead of creating a new one
+/// - Does not update the lockfile (avoids cycles during lockfile replay)
+pub fn install_from_lock_entry(
+    package_dir: &Path,
+    config: &Config,
+    backends: &[&dyn Backend],
+    requested_scope: RequestedScope,
+    source: &SourceInfo,
+) -> Result<()> {
+    let force_resolver: Box<ConflictResolver> = Box::new(|_: &Conflict| Ok(None));
+
+    let pipeline = CorePipeline::discover(package_dir, backends, false)?;
+    manifest::validate_scope(&pipeline.manifest.install_scope, requested_scope)?;
+
+    println!(
+        "{} {} v{}",
+        "Installing".green().bold(),
+        pipeline.manifest.full_name,
+        pipeline.manifest.version
+    );
+
+    let mut store = PackageStore::load(config)?;
+    let resolved = pipeline.cleanup_and_resolve(&mut store, &*force_resolver, config)?;
+
+    // Reuse cached archive (no new archive creation for lockfile installs)
+    let archive_path = cache::archive_path(
+        config,
+        &resolved.manifest.scope,
+        &resolved.manifest.short_name,
+        &resolved.manifest.version,
+    );
+    let integrity = if archive_path.exists() {
+        cache::compute_sha256(&archive_path)?
+    } else {
+        String::new()
+    };
+
+    let deployment = resolved.deploy(config)?;
+
+    store.record_install(
+        &resolved.manifest.full_name,
+        PackageEntry {
+            version: resolved.manifest.version.to_string(),
+            source: source.source_kind.as_str().to_string(),
+            source_path: source.source_url.clone(),
+            integrity,
+            archive_path: archive_path.to_string_lossy().to_string(),
+            deployed: deployment.deployed_map,
+            resolved: source.resolved.clone(),
+            tag: source.tag.clone(),
+        },
+        true, // from_lockfile: skip lockfile update
     );
     store.save(config)?;
 
