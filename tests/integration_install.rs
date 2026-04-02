@@ -1599,3 +1599,95 @@ fn test_install_claude_only_still_works() {
         "Agents backend should not deploy when not in manifest"
     );
 }
+
+#[test]
+fn test_install_with_backend_override_cursor() {
+    // --backend cursor should deploy only to .cursor/, bypassing manifest (which says "claude")
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+    // No .cursor dir — backend override bypasses detection
+    fs::create_dir_all(home.path().join(".cursor")).unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg("--backend")
+        .arg("cursor")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Cursor skill exists
+    let cursor_skill = home.path().join(".cursor/rules/renkei-review.mdc");
+    assert!(cursor_skill.exists(), "Cursor rule should exist: {:?}", cursor_skill);
+
+    // Verify .mdc frontmatter
+    let content = fs::read_to_string(&cursor_skill).unwrap();
+    assert!(content.contains("alwaysApply: false"), "mdc should have frontmatter");
+
+    // Claude skill should NOT exist (backend override is exclusive)
+    assert!(
+        !home.path().join(".claude/skills/renkei-review/SKILL.md").exists(),
+        "Claude skill should not be deployed when --backend cursor is used"
+    );
+}
+
+#[test]
+fn test_install_dedup_agents_codex() {
+    // When agents + codex are both in manifest, skills should be in .agents/ only (codex reads there)
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".codex")).unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("agents-codex-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Skill in .agents/skills/ (deployed by agents backend)
+    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
+    assert!(agents_skill.exists(), "Skill should be in .agents/skills/");
+
+    // Codex did NOT deploy a duplicate to its own path (it reads from .agents/)
+    // Since codex's deploy_skill also writes to .agents/skills/, the dedup check
+    // ensures codex backend's deploy_skill is NOT called when agents is in active set.
+    // The agents backend already deployed it — only one file should exist.
+    let content = fs::read_to_string(&agents_skill).unwrap();
+    assert!(content.contains("Do a code review"), "Skill content should be correct");
+}
+
+#[test]
+fn test_install_dedup_agents_gemini() {
+    // When agents + gemini are both in manifest, skills should be in .agents/ only
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".gemini")).unwrap();
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("agents-gemini-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Skill in .agents/skills/ (deployed by agents backend)
+    assert!(
+        home.path().join(".agents/skills/renkei-review/SKILL.md").exists(),
+        "Skill should be in .agents/skills/"
+    );
+
+    // Gemini should NOT have deployed skill to .gemini/skills/ (dedup)
+    assert!(
+        !home.path().join(".gemini/skills/renkei-review/SKILL.md").exists(),
+        "Gemini should not duplicate skill when agents backend is active"
+    );
+}

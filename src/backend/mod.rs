@@ -1,5 +1,8 @@
 pub mod agents;
 pub mod claude;
+pub mod codex;
+pub mod cursor;
+pub mod gemini;
 
 use std::path::PathBuf;
 
@@ -21,6 +24,12 @@ pub struct DeployedArtifact {
 pub trait Backend {
     fn name(&self) -> &str;
     fn detect_installed(&self, config: &Config) -> bool;
+    /// Returns true if this backend reads skills from the `.agents/skills/` directory
+    /// (e.g. Codex, Gemini). Used for deduplication: when `agents` backend is also
+    /// in the active set, skills for this backend are skipped to avoid double-deploy.
+    fn reads_agents_skills(&self) -> bool {
+        false
+    }
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact>;
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact>;
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact>;
@@ -33,7 +42,7 @@ pub trait Backend {
 
 /// All known backend names.
 #[allow(dead_code)]
-pub const ALL_BACKEND_NAMES: &[&str] = &["claude", "agents"];
+pub const ALL_BACKEND_NAMES: &[&str] = &["claude", "agents", "cursor", "codex", "gemini"];
 
 pub struct BackendRegistry {
     backends: Vec<Box<dyn Backend>>,
@@ -46,6 +55,9 @@ impl BackendRegistry {
             backends: vec![
                 Box::new(claude::ClaudeBackend),
                 Box::new(agents::AgentsBackend),
+                Box::new(cursor::CursorBackend),
+                Box::new(codex::CodexBackend),
+                Box::new(gemini::GeminiBackend),
             ],
         }
     }
@@ -147,6 +159,27 @@ mod tests {
         let names: Vec<&str> = registry.backends.iter().map(|b| b.name()).collect();
         assert!(names.contains(&"claude"));
         assert!(names.contains(&"agents"));
+    }
+
+    #[test]
+    fn test_registry_all_contains_five_backends() {
+        let registry = BackendRegistry::all();
+        assert_eq!(registry.backends.len(), 5);
+        let names: Vec<&str> = registry.backends.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"cursor"));
+        assert!(names.contains(&"codex"));
+        assert!(names.contains(&"gemini"));
+    }
+
+    #[test]
+    fn test_reads_agents_skills_defaults_false() {
+        let registry = BackendRegistry::all();
+        let claude = registry.get("claude").unwrap();
+        let agents = registry.get("agents").unwrap();
+        let cursor = registry.get("cursor").unwrap();
+        assert!(!claude.reads_agents_skills());
+        assert!(!agents.reads_agents_skills());
+        assert!(!cursor.reads_agents_skills());
     }
 
     #[test]

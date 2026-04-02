@@ -1,0 +1,8 @@
+{
+  "name": "@test/agents-gemini",
+  "version": "1.0.0",
+  "description": "Package targeting agents and gemini backends",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["agents", "gemini"]
+}

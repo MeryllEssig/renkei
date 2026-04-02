@@ -43,6 +43,41 @@ pub fn translate_event(renkei_event: &str) -> Option<&'static str> {
     }
 }
 
+pub fn translate_event_cursor(renkei_event: &str) -> Option<&'static str> {
+    match renkei_event {
+        "before_tool" => Some("preToolUse"),
+        "after_tool" => Some("postToolUse"),
+        "after_tool_failure" => Some("postToolUseFailure"),
+        "on_session_start" => Some("sessionStart"),
+        "on_session_end" => Some("sessionEnd"),
+        "on_stop" => Some("stop"),
+        "user_prompt" => Some("beforeSubmitPrompt"),
+        _ => None,
+    }
+}
+
+pub fn translate_event_codex(renkei_event: &str) -> Option<&'static str> {
+    match renkei_event {
+        "before_tool" => Some("PreToolUse"),
+        "after_tool" => Some("PostToolUse"),
+        "on_session_start" => Some("SessionStart"),
+        "on_stop" => Some("Stop"),
+        "user_prompt" => Some("UserPromptSubmit"),
+        _ => None,
+    }
+}
+
+pub fn translate_event_gemini(renkei_event: &str) -> Option<&'static str> {
+    match renkei_event {
+        "before_tool" => Some("BeforeTool"),
+        "after_tool" => Some("AfterTool"),
+        "on_session_start" => Some("SessionStart"),
+        "on_session_end" => Some("SessionEnd"),
+        "on_notification" => Some("Notification"),
+        _ => None,
+    }
+}
+
 pub fn parse_hook_file(path: &Path) -> Result<Vec<RenkeiHook>> {
     let content = std::fs::read_to_string(path)?;
     let hooks: Vec<RenkeiHook> = serde_json::from_str(&content).map_err(|e| {
@@ -67,13 +102,19 @@ pub struct ClaudeHookGroup {
     pub hooks: Vec<ClaudeHookEntry>,
 }
 
-pub fn translate_hooks(
+/// Translate Renkei hooks to the nested group format (Claude/Codex/Gemini), using the
+/// provided event translation function.
+pub fn translate_hooks_with<F>(
     renkei_hooks: &[RenkeiHook],
-) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>> {
+    translate_fn: F,
+) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>>
+where
+    F: Fn(&str) -> Option<&'static str>,
+{
     let mut result: BTreeMap<String, Vec<ClaudeHookGroup>> = BTreeMap::new();
 
     for hook in renkei_hooks {
-        let claude_event = translate_event(&hook.event)
+        let translated_event = translate_fn(&hook.event)
             .ok_or_else(|| {
                 RenkeiError::InvalidManifest(format!("Unknown hook event '{}'", hook.event))
             })?
@@ -85,7 +126,7 @@ pub fn translate_hooks(
             timeout: hook.timeout,
         };
 
-        let groups = result.entry(claude_event).or_default();
+        let groups = result.entry(translated_event).or_default();
 
         let existing = groups.iter_mut().find(|g| g.matcher == hook.matcher);
         match existing {
@@ -98,6 +139,193 @@ pub fn translate_hooks(
     }
 
     Ok(result)
+}
+
+pub fn translate_hooks(
+    renkei_hooks: &[RenkeiHook],
+) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>> {
+    translate_hooks_with(renkei_hooks, translate_event)
+}
+
+/// Cursor hook entry — flat format (no nested `hooks` array).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CursorHookEntry {
+    pub command: String,
+    #[serde(rename = "type")]
+    pub hook_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matcher: Option<String>,
+}
+
+/// Translate Renkei hooks to Cursor's flat-entry format.
+pub fn translate_hooks_cursor(
+    renkei_hooks: &[RenkeiHook],
+) -> Result<BTreeMap<String, Vec<CursorHookEntry>>> {
+    let mut result: BTreeMap<String, Vec<CursorHookEntry>> = BTreeMap::new();
+
+    for hook in renkei_hooks {
+        let event = translate_event_cursor(&hook.event)
+            .ok_or_else(|| {
+                RenkeiError::InvalidManifest(format!("Unknown hook event '{}'", hook.event))
+            })?
+            .to_string();
+
+        result.entry(event).or_default().push(CursorHookEntry {
+            command: hook.command.clone(),
+            hook_type: HOOK_TYPE_COMMAND.to_string(),
+            timeout: hook.timeout,
+            matcher: hook.matcher.clone(),
+        });
+    }
+
+    Ok(result)
+}
+
+/// Write/merge translated cursor hooks into a standalone `hooks.json` file.
+/// Returns deployed entries for tracking.
+pub fn write_cursor_hooks(
+    hooks_path: &Path,
+    translated: &BTreeMap<String, Vec<CursorHookEntry>>,
+) -> Result<Vec<DeployedHookEntry>> {
+    let mut file: serde_json::Value = json_file::read_json_or_empty(hooks_path)?;
+
+    let obj = file.as_object_mut().ok_or_else(|| {
+        RenkeiError::DeploymentFailed("cursor hooks.json is not a JSON object".into())
+    })?;
+
+    // Ensure version field
+    obj.entry("version").or_insert(serde_json::json!(1));
+
+    let hooks_obj = obj
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}));
+
+    let hooks_map = hooks_obj.as_object_mut().ok_or_else(|| {
+        RenkeiError::DeploymentFailed("cursor hooks.json 'hooks' is not a JSON object".into())
+    })?;
+
+    let mut deployed = Vec::new();
+
+    for (event, entries) in translated {
+        let event_array = hooks_map
+            .entry(event)
+            .or_insert_with(|| serde_json::json!([]));
+        let arr = event_array.as_array_mut().ok_or_else(|| {
+            RenkeiError::DeploymentFailed(format!("cursor hooks.json hooks.{event} is not an array"))
+        })?;
+
+        for entry in entries {
+            arr.push(serde_json::to_value(entry)?);
+            deployed.push(DeployedHookEntry {
+                event: event.clone(),
+                matcher: entry.matcher.clone(),
+                command: entry.command.clone(),
+            });
+        }
+    }
+
+    json_file::write_json_pretty(hooks_path, &file)?;
+    Ok(deployed)
+}
+
+/// Remove cursor hook entries from a standalone `hooks.json` file.
+#[allow(dead_code)]
+pub fn remove_cursor_hooks(hooks_path: &Path, entries_to_remove: &[DeployedHookEntry]) -> Result<()> {
+    let mut file: serde_json::Value = match std::fs::read_to_string(hooks_path) {
+        Ok(content) => serde_json::from_str(&content)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+
+    let hooks_map = match file
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|h| h.as_object_mut())
+    {
+        Some(h) => h,
+        None => return Ok(()),
+    };
+
+    for entry in entries_to_remove {
+        if let Some(event_array) = hooks_map
+            .get_mut(&entry.event)
+            .and_then(|v| v.as_array_mut())
+        {
+            event_array.retain(|item| {
+                let cmd_match =
+                    item.get("command").and_then(|c| c.as_str()) != Some(&entry.command);
+                let matcher_match = item
+                    .get("matcher")
+                    .and_then(|m| m.as_str())
+                    .map(String::from)
+                    != entry.matcher;
+                // Keep if either command or matcher differs
+                cmd_match || matcher_match
+            });
+        }
+    }
+
+    hooks_map.retain(|_, v| v.as_array().is_none_or(|a| !a.is_empty()));
+
+    json_file::write_json_pretty(hooks_path, &file)?;
+    Ok(())
+}
+
+/// Write/merge translated hooks (nested format) to a standalone `hooks.json` file.
+/// Used by Codex backend. Returns deployed entries for tracking.
+pub fn write_standalone_hooks(
+    hooks_path: &Path,
+    translated: &BTreeMap<String, Vec<ClaudeHookGroup>>,
+) -> Result<Vec<DeployedHookEntry>> {
+    let mut file: serde_json::Value = json_file::read_json_or_empty(hooks_path)?;
+
+    let obj = file.as_object_mut().ok_or_else(|| {
+        RenkeiError::DeploymentFailed("hooks.json is not a JSON object".into())
+    })?;
+
+    let hooks_obj = obj
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}));
+
+    let hooks_map = hooks_obj.as_object_mut().ok_or_else(|| {
+        RenkeiError::DeploymentFailed("hooks.json 'hooks' is not a JSON object".into())
+    })?;
+
+    let mut deployed = Vec::new();
+
+    for (event, groups) in translated {
+        let event_array = hooks_map
+            .entry(event)
+            .or_insert_with(|| serde_json::json!([]));
+        let arr = event_array.as_array_mut().ok_or_else(|| {
+            RenkeiError::DeploymentFailed(format!("hooks.json hooks.{event} is not an array"))
+        })?;
+
+        for group in groups {
+            arr.push(serde_json::to_value(group)?);
+            for hook_entry in &group.hooks {
+                deployed.push(DeployedHookEntry {
+                    event: event.clone(),
+                    matcher: group.matcher.clone(),
+                    command: hook_entry.command.clone(),
+                });
+            }
+        }
+    }
+
+    json_file::write_json_pretty(hooks_path, &file)?;
+    Ok(deployed)
+}
+
+/// Remove hook entries from a standalone `hooks.json` file (Codex format).
+#[allow(dead_code)]
+pub fn remove_standalone_hooks(
+    hooks_path: &Path,
+    entries_to_remove: &[DeployedHookEntry],
+) -> Result<()> {
+    remove_hooks_from_settings(hooks_path, entries_to_remove)
 }
 
 fn read_settings(path: &Path) -> Result<serde_json::Value> {

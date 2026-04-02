@@ -121,6 +121,79 @@ impl Config {
     pub fn agents_skills_dir(&self) -> PathBuf {
         self.agents_dir().join("skills")
     }
+
+    pub fn cursor_dir(&self) -> PathBuf {
+        self.home_dir.join(".cursor")
+    }
+
+    fn cursor_subdir(&self, name: &str) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join(".cursor").join(name),
+            None => self.cursor_dir().join(name),
+        }
+    }
+
+    pub fn cursor_rules_dir(&self) -> PathBuf {
+        self.cursor_subdir("rules")
+    }
+
+    pub fn cursor_agents_dir(&self) -> PathBuf {
+        self.cursor_subdir("agents")
+    }
+
+    pub fn cursor_hooks_path(&self) -> PathBuf {
+        self.cursor_subdir("hooks.json")
+    }
+
+    pub fn cursor_mcp_path(&self) -> PathBuf {
+        self.cursor_subdir("mcp.json")
+    }
+
+    pub fn codex_dir(&self) -> PathBuf {
+        self.home_dir.join(".codex")
+    }
+
+    fn codex_subdir(&self, name: &str) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join(".codex").join(name),
+            None => self.codex_dir().join(name),
+        }
+    }
+
+    pub fn codex_agents_dir(&self) -> PathBuf {
+        self.codex_subdir("agents")
+    }
+
+    pub fn codex_hooks_path(&self) -> PathBuf {
+        self.codex_subdir("hooks.json")
+    }
+
+    pub fn codex_config_path(&self) -> PathBuf {
+        self.codex_subdir("config.toml")
+    }
+
+    pub fn gemini_dir(&self) -> PathBuf {
+        self.home_dir.join(".gemini")
+    }
+
+    fn gemini_subdir(&self, name: &str) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join(".gemini").join(name),
+            None => self.gemini_dir().join(name),
+        }
+    }
+
+    pub fn gemini_skills_dir(&self) -> PathBuf {
+        self.gemini_subdir("skills")
+    }
+
+    pub fn gemini_agents_dir(&self) -> PathBuf {
+        self.gemini_subdir("agents")
+    }
+
+    pub fn gemini_settings_path(&self) -> PathBuf {
+        self.gemini_subdir("settings.json")
+    }
 }
 
 pub fn detect_project_root() -> Result<PathBuf> {
@@ -284,6 +357,114 @@ mod tests {
             PathBuf::from(
                 "/home/user/.renkei/projects/Users-meryll-Projects-foo/install-cache.json"
             )
+        );
+    }
+
+    #[test]
+    fn test_cursor_dir_always_global() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(config.cursor_dir(), PathBuf::from("/home/user/.cursor"));
+    }
+
+    #[test]
+    fn test_cursor_rules_dir_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.cursor_rules_dir(),
+            PathBuf::from("/projects/foo/.cursor/rules")
+        );
+    }
+
+    #[test]
+    fn test_cursor_rules_dir_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.cursor_rules_dir(),
+            PathBuf::from("/home/user/.cursor/rules")
+        );
+    }
+
+    #[test]
+    fn test_cursor_hooks_path_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.cursor_hooks_path(),
+            PathBuf::from("/projects/foo/.cursor/hooks.json")
+        );
+    }
+
+    #[test]
+    fn test_cursor_mcp_path_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.cursor_mcp_path(),
+            PathBuf::from("/home/user/.cursor/mcp.json")
+        );
+    }
+
+    #[test]
+    fn test_codex_dir_always_global() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(config.codex_dir(), PathBuf::from("/home/user/.codex"));
+    }
+
+    #[test]
+    fn test_codex_agents_dir_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.codex_agents_dir(),
+            PathBuf::from("/projects/foo/.codex/agents")
+        );
+    }
+
+    #[test]
+    fn test_codex_config_path_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.codex_config_path(),
+            PathBuf::from("/projects/foo/.codex/config.toml")
+        );
+    }
+
+    #[test]
+    fn test_gemini_dir_always_global() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(config.gemini_dir(), PathBuf::from("/home/user/.gemini"));
+    }
+
+    #[test]
+    fn test_gemini_skills_dir_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.gemini_skills_dir(),
+            PathBuf::from("/projects/foo/.gemini/skills")
+        );
+    }
+
+    #[test]
+    fn test_gemini_settings_path_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.gemini_settings_path(),
+            PathBuf::from("/projects/foo/.gemini/settings.json")
+        );
+    }
+
+    #[test]
+    fn test_gemini_settings_path_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.gemini_settings_path(),
+            PathBuf::from("/home/user/.gemini/settings.json")
         );
     }
 }

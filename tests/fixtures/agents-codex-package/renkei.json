@@ -1,0 +1,8 @@
+{
+  "name": "@test/agents-codex",
+  "version": "1.0.0",
+  "description": "Package targeting agents and codex backends",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["agents", "codex"]
+}

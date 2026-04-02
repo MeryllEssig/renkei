@@ -331,6 +331,16 @@ pub(crate) fn install_local_with_resolver(
         let mut backend_deployed = Vec::new();
 
         for (art, _) in &effective_artifacts {
+            // Deduplication: if the agents backend is also active and this backend reads from
+            // .agents/skills/, skip the skill deploy to avoid double-deploying the same file.
+            // The agents backend will handle the actual deployment.
+            if art.kind == ArtifactKind::Skill
+                && backend.reads_agents_skills()
+                && active_backends.iter().any(|b| b.name() == "agents")
+            {
+                continue;
+            }
+
             let result = match art.kind {
                 ArtifactKind::Skill => backend.deploy_skill(art, config),
                 ArtifactKind::Agent => backend.deploy_agent(art, config),
@@ -1091,6 +1101,239 @@ mod tests {
             .path()
             .join(".claude/skills/renkei-lint/SKILL.md")
             .exists());
+    }
+
+    // --- Deduplication tests ---
+
+    struct ReadsAgentsSkillsBackend;
+
+    impl Backend for ReadsAgentsSkillsBackend {
+        fn name(&self) -> &str {
+            "reads-agents"
+        }
+
+        fn detect_installed(&self, _config: &Config) -> bool {
+            true
+        }
+
+        fn reads_agents_skills(&self) -> bool {
+            true
+        }
+
+        fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            // Deploy to .agents/skills/ path (same as agents backend) — should not be called
+            // when agents backend is also active (dedup).
+            ClaudeBackend.deploy_skill(artifact, config)
+        }
+
+        fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            ClaudeBackend.deploy_agent(artifact, config)
+        }
+
+        fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            ClaudeBackend.deploy_hook(artifact, config)
+        }
+
+        fn register_mcp(
+            &self,
+            mcp_config: &serde_json::Value,
+            config: &Config,
+        ) -> Result<Vec<crate::mcp::DeployedMcpEntry>> {
+            ClaudeBackend.register_mcp(mcp_config, config)
+        }
+    }
+
+    struct AgentsFakeBackend;
+
+    impl Backend for AgentsFakeBackend {
+        fn name(&self) -> &str {
+            "agents"
+        }
+
+        fn detect_installed(&self, _: &Config) -> bool {
+            true
+        }
+
+        fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+            ClaudeBackend.deploy_skill(artifact, config)
+        }
+
+        fn deploy_agent(&self, _artifact: &Artifact, _config: &Config) -> Result<DeployedArtifact> {
+            Err(RenkeiError::DeploymentFailed("agents: unsupported".into()))
+        }
+
+        fn deploy_hook(&self, _artifact: &Artifact, _config: &Config) -> Result<DeployedArtifact> {
+            Err(RenkeiError::DeploymentFailed("agents: unsupported".into()))
+        }
+
+        fn register_mcp(
+            &self,
+            _mcp_config: &serde_json::Value,
+            _config: &Config,
+        ) -> Result<Vec<crate::mcp::DeployedMcpEntry>> {
+            Err(RenkeiError::DeploymentFailed("agents: unsupported".into()))
+        }
+    }
+
+    fn make_multi_backend_pkg(backends_json: &str) -> tempfile::TempDir {
+        let pkg = tempdir().unwrap();
+        fs::write(
+            pkg.path().join("renkei.json"),
+            format!(
+                r#"{{"name":"@test/pkg","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":{backends_json}}}"#
+            ),
+        )
+        .unwrap();
+        let skills = pkg.path().join("skills");
+        fs::create_dir_all(&skills).unwrap();
+        fs::write(skills.join("check.md"), "# Check").unwrap();
+        let agents = pkg.path().join("agents");
+        fs::create_dir_all(&agents).unwrap();
+        fs::write(agents.join("helper.md"), "# Helper").unwrap();
+        pkg
+    }
+
+    #[test]
+    fn test_dedup_skips_skill_when_agents_and_reads_agents_backend() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let pkg = make_multi_backend_pkg(r#"["agents","reads-agents"]"#);
+        let opts = InstallOptions {
+            force: true,
+            ..InstallOptions::local("/tmp".to_string())
+        };
+
+        // Use a flag to detect if deploy_skill was called on reads-agents backend
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct TrackingBackend {
+            skill_deploy_count: Arc<AtomicUsize>,
+        }
+
+        impl Backend for TrackingBackend {
+            fn name(&self) -> &str {
+                "agents"
+            }
+
+            fn detect_installed(&self, _: &Config) -> bool {
+                true
+            }
+
+            fn deploy_skill(
+                &self,
+                artifact: &Artifact,
+                config: &Config,
+            ) -> Result<DeployedArtifact> {
+                self.skill_deploy_count.fetch_add(1, Ordering::SeqCst);
+                ClaudeBackend.deploy_skill(artifact, config)
+            }
+
+            fn deploy_agent(
+                &self,
+                _: &Artifact,
+                _: &Config,
+            ) -> Result<DeployedArtifact> {
+                Err(RenkeiError::DeploymentFailed("unsupported".into()))
+            }
+
+            fn deploy_hook(
+                &self,
+                _: &Artifact,
+                _: &Config,
+            ) -> Result<DeployedArtifact> {
+                Err(RenkeiError::DeploymentFailed("unsupported".into()))
+            }
+
+            fn register_mcp(
+                &self,
+                _: &serde_json::Value,
+                _: &Config,
+            ) -> Result<Vec<crate::mcp::DeployedMcpEntry>> {
+                Err(RenkeiError::DeploymentFailed("unsupported".into()))
+            }
+        }
+
+        let agents_skill_count = Arc::new(AtomicUsize::new(0));
+        let agents_backend = TrackingBackend {
+            skill_deploy_count: agents_skill_count.clone(),
+        };
+
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &[&agents_backend as &dyn Backend, &ReadsAgentsSkillsBackend as &dyn Backend],
+            RequestedScope::Global,
+            &opts,
+        );
+        assert!(result.is_ok(), "{:?}", result);
+
+        // agents backend deploys the skill once; reads-agents backend skips it
+        assert_eq!(
+            agents_skill_count.load(Ordering::SeqCst),
+            1,
+            "Agents backend should deploy skill once"
+        );
+    }
+
+    #[test]
+    fn test_no_dedup_when_agents_not_in_active_set() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Only reads-agents backend, no agents backend — should deploy skill normally
+        let pkg = make_multi_backend_pkg(r#"["reads-agents"]"#);
+        let opts = InstallOptions {
+            force: true,
+            ..InstallOptions::local("/tmp".to_string())
+        };
+
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &[&ReadsAgentsSkillsBackend as &dyn Backend],
+            RequestedScope::Global,
+            &opts,
+        );
+        // ReadsAgentsSkillsBackend.deploy_skill calls ClaudeBackend.deploy_skill which
+        // writes to .claude/skills/ — skill file should exist
+        assert!(result.is_ok(), "{:?}", result);
+        assert!(home
+            .path()
+            .join(".claude/skills/renkei-check/SKILL.md")
+            .exists());
+    }
+
+    #[test]
+    fn test_no_dedup_for_agent_artifacts() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        // Even with agents + reads-agents, agents should still be deployed to reads-agents
+        let pkg = make_multi_backend_pkg(r#"["agents","reads-agents"]"#);
+        let opts = InstallOptions {
+            force: true,
+            ..InstallOptions::local("/tmp".to_string())
+        };
+
+        let result = install_local(
+            pkg.path(),
+            &config,
+            &[
+                &AgentsFakeBackend as &dyn Backend,
+                &ReadsAgentsSkillsBackend as &dyn Backend,
+            ],
+            RequestedScope::Global,
+            &opts,
+        );
+        assert!(result.is_ok(), "{:?}", result);
+
+        // reads-agents deployed agent via ClaudeBackend pattern
+        assert!(home.path().join(".claude/agents/helper.md").exists());
     }
 
     // --- Lockfile tests ---

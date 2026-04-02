@@ -33,6 +33,9 @@ pub enum Commands {
         /// Force installation (bypass backend detection)
         #[arg(long = "force")]
         force: bool,
+        /// Force a specific backend, bypassing manifest and config (e.g. --backend cursor)
+        #[arg(long = "backend")]
+        backend: Option<String>,
     },
     /// Uninstall a workflow package
     Uninstall {
@@ -65,4 +68,27 @@ pub enum Commands {
         /// Path to the directory to migrate
         path: String,
     },
+    /// Manage renkei configuration
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigAction {
+    /// Set a config value (e.g. defaults.backends claude,cursor)
+    Set {
+        /// Dot-notation key (e.g. defaults.backends)
+        key: String,
+        /// Value to set (comma-separated for lists, e.g. claude,cursor)
+        value: String,
+    },
+    /// Get a config value
+    Get {
+        /// Dot-notation key (e.g. defaults.backends)
+        key: String,
+    },
+    /// List all configuration
+    List,
 }

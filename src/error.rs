@@ -42,6 +42,9 @@ pub enum RenkeiError {
     #[error("No compatible backend detected. Package requires: {required}. Detected: {detected}.\nUse --force to override.")]
     BackendNotDetected { required: String, detected: String },
 
+    #[error("Unknown backend '{0}'. Known backends: claude, agents, cursor, codex, gemini.")]
+    BackendNotFound(String),
+
     #[error("Conflict: {kind} '{name}' is already deployed by package '{owner}'.\nUse --force to overwrite, or rename interactively in a TTY.")]
     ArtifactConflict {
         kind: ArtifactKind,
