@@ -1,6 +1,6 @@
 # Refactoring Plan: install.rs Module Deepening
 
-**Status**: ✅ Implemented (steps 1-6), Step 7 (test reorg) deferred
+**Status**: ✅ Complete (all 7 steps)
 
 ## Problem
 
@@ -45,11 +45,10 @@ Converted `src/install.rs` into `src/install/` directory module with 5 files:
 9. Output + env warnings
 ```
 
-## Deferred: Step 7 — Test Reorganization
-
-- [ ] Move mock backends (`FailingBackend`, `TrackingBackend`, `ReadsAgentsSkillsBackend`, `AgentsFakeBackend`) to shared test helpers
-- [ ] Distribute test functions by topic into separate files
-- [ ] Add per-submodule boundary tests for `resolve.rs` and `deploy.rs`
+### Step 7: Reorganize tests ✅
+- Mock backends (`FailingBackend`, `ReadsAgentsSkillsBackend`, `AgentsFakeBackend`) + fixture builders + resolvers extracted to `tests/helpers.rs`
+- Tests distributed by topic: `cleanup_tests.rs`, `conflict_tests.rs`, `deploy_tests.rs`, `lockfile_tests.rs`
+- `mod.rs` shrunk from 1,219 to 210 LOC
 
 ## Dependency Category
 
