@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{RenkeiError, Result};
 use crate::hook::DeployedHookEntry;
 use crate::mcp::DeployedMcpEntry;
 
@@ -29,4 +29,242 @@ pub trait Backend {
         mcp_config: &serde_json::Value,
         config: &Config,
     ) -> Result<Vec<DeployedMcpEntry>>;
+}
+
+/// All known backend names.
+pub const ALL_BACKEND_NAMES: &[&str] = &["claude", "agents"];
+
+pub struct BackendRegistry {
+    backends: Vec<Box<dyn Backend>>,
+}
+
+impl BackendRegistry {
+    /// Create a registry with all known backends.
+    pub fn all() -> Self {
+        Self {
+            backends: vec![
+                Box::new(claude::ClaudeBackend),
+                Box::new(agents::AgentsBackend),
+            ],
+        }
+    }
+
+    /// Return only backends that are detected as installed.
+    pub fn detect(&self, config: &Config) -> Vec<&dyn Backend> {
+        self.backends
+            .iter()
+            .filter(|b| b.detect_installed(config))
+            .map(|b| b.as_ref())
+            .collect()
+    }
+
+    /// Resolve which backends to use for a given install.
+    ///
+    /// - `manifest_backends`: the `backends` field from renkei.json
+    /// - `force`: if true, skip manifest intersection (use all detected)
+    /// - `warnings`: collects warning messages for backends in manifest but not detected
+    pub fn resolve(
+        &self,
+        config: &Config,
+        manifest_backends: &[String],
+        force: bool,
+        warnings: &mut Vec<String>,
+    ) -> Result<Vec<&dyn Backend>> {
+        let detected = self.detect(config);
+        let detected_names: Vec<&str> = detected.iter().map(|b| b.name()).collect();
+
+        if force {
+            // Force bypasses manifest intersection but NOT detection filter
+            return if detected.is_empty() {
+                Err(RenkeiError::BackendNotDetected {
+                    required: manifest_backends.join(", "),
+                    detected: "none".to_string(),
+                })
+            } else {
+                Ok(detected)
+            };
+        }
+
+        // Warn for each manifest backend that is not detected
+        for mb in manifest_backends {
+            if !detected_names.contains(&mb.as_str()) {
+                warnings.push(format!(
+                    "Backend '{}' listed in manifest but not detected",
+                    mb
+                ));
+            }
+        }
+
+        // Intersect manifest with detected
+        let resolved: Vec<&dyn Backend> = detected
+            .into_iter()
+            .filter(|b| manifest_backends.iter().any(|mb| mb == b.name()))
+            .collect();
+
+        if resolved.is_empty() {
+            return Err(RenkeiError::BackendNotDetected {
+                required: manifest_backends.join(", "),
+                detected: if detected_names.is_empty() {
+                    "none".to_string()
+                } else {
+                    detected_names.join(", ")
+                },
+            });
+        }
+
+        Ok(resolved)
+    }
+
+    /// Get a backend by name (for uninstall/doctor lookups).
+    #[allow(dead_code)]
+    pub fn get(&self, name: &str) -> Option<&dyn Backend> {
+        self.backends
+            .iter()
+            .find(|b| b.name() == name)
+            .map(|b| b.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_registry_all_contains_known_backends() {
+        let registry = BackendRegistry::all();
+        let names: Vec<&str> = registry.backends.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"claude"));
+        assert!(names.contains(&"agents"));
+    }
+
+    #[test]
+    fn test_detect_returns_only_installed() {
+        let dir = tempdir().unwrap();
+        // No .claude dir → claude not detected, but agents always detected
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let detected = registry.detect(&config);
+        let names: Vec<&str> = detected.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"agents"));
+        assert!(!names.contains(&"claude"));
+    }
+
+    #[test]
+    fn test_detect_with_claude_installed() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let detected = registry.detect(&config);
+        let names: Vec<&str> = detected.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"claude"));
+        assert!(names.contains(&"agents"));
+    }
+
+    #[test]
+    fn test_resolve_intersects_manifest_and_detected() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let mut warnings = Vec::new();
+
+        let resolved = registry
+            .resolve(
+                &config,
+                &["claude".to_string(), "agents".to_string()],
+                false,
+                &mut warnings,
+            )
+            .unwrap();
+
+        let names: Vec<&str> = resolved.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"claude"));
+        assert!(names.contains(&"agents"));
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_empty_intersection_errors() {
+        let dir = tempdir().unwrap();
+        // No .claude dir, manifest only asks for claude
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let mut warnings = Vec::new();
+
+        let result = registry.resolve(&config, &["claude".to_string()], false, &mut warnings);
+
+        let err = result.err().expect("should be an error").to_string();
+        assert!(err.contains("claude"));
+    }
+
+    #[test]
+    fn test_resolve_force_bypasses_manifest() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let mut warnings = Vec::new();
+
+        // Manifest says only "agents", but force=true → returns all detected
+        let resolved = registry
+            .resolve(&config, &["agents".to_string()], true, &mut warnings)
+            .unwrap();
+
+        let names: Vec<&str> = resolved.iter().map(|b| b.name()).collect();
+        assert!(names.contains(&"claude"));
+        assert!(names.contains(&"agents"));
+    }
+
+    #[test]
+    fn test_resolve_force_does_not_bypass_detection() {
+        let dir = tempdir().unwrap();
+        // No .claude dir → claude not detected even with force
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let mut warnings = Vec::new();
+
+        let resolved = registry
+            .resolve(&config, &["claude".to_string()], true, &mut warnings)
+            .unwrap();
+
+        let names: Vec<&str> = resolved.iter().map(|b| b.name()).collect();
+        assert!(!names.contains(&"claude"));
+        assert!(names.contains(&"agents")); // agents always detected
+    }
+
+    #[test]
+    fn test_resolve_warns_per_undetected_backend() {
+        let dir = tempdir().unwrap();
+        // No .claude dir
+        let config = Config::with_home_dir(dir.path().to_path_buf());
+        let registry = BackendRegistry::all();
+        let mut warnings = Vec::new();
+
+        // Ask for claude+agents, only agents detected
+        let resolved = registry
+            .resolve(
+                &config,
+                &["claude".to_string(), "agents".to_string()],
+                false,
+                &mut warnings,
+            )
+            .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].name(), "agents");
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("claude"));
+        assert!(warnings[0].contains("not detected"));
+    }
+
+    #[test]
+    fn test_get_backend_by_name() {
+        let registry = BackendRegistry::all();
+        assert_eq!(registry.get("claude").unwrap().name(), "claude");
+        assert_eq!(registry.get("agents").unwrap().name(), "agents");
+        assert!(registry.get("nonexistent").is_none());
+    }
 }
