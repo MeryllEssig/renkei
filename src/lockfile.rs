@@ -35,7 +35,7 @@ pub struct LockfileEntry {
 
 impl Lockfile {
     /// Load from disk, returning an empty lockfile if the file does not exist.
-    pub fn load(path: &Path) -> Result<Self> {
+    pub(crate) fn load(path: &Path) -> Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(content) => Ok(serde_json::from_str(&content)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
@@ -47,7 +47,7 @@ impl Lockfile {
     }
 
     /// Load from disk, returning LockfileNotFound if the file does not exist.
-    pub fn load_strict(path: &Path, scope_hint: &str) -> Result<Self> {
+    pub(crate) fn load_strict(path: &Path, scope_hint: &str) -> Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(content) => Ok(serde_json::from_str(&content)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -60,7 +60,7 @@ impl Lockfile {
         }
     }
 
-    pub fn save(&self, path: &Path) -> Result<()> {
+    pub(crate) fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -69,11 +69,11 @@ impl Lockfile {
         Ok(())
     }
 
-    pub fn upsert(&mut self, name: &str, entry: LockfileEntry) {
+    pub(crate) fn upsert(&mut self, name: &str, entry: LockfileEntry) {
         self.packages.insert(name.to_string(), entry);
     }
 
-    pub fn remove(&mut self, name: &str) {
+    pub(crate) fn remove(&mut self, name: &str) {
         self.packages.remove(name);
     }
 }

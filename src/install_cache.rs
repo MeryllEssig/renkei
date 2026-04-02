@@ -87,7 +87,7 @@ impl PackageEntry {
 }
 
 impl InstallCache {
-    pub fn load(config: &Config) -> Result<Self> {
+    pub(crate) fn load(config: &Config) -> Result<Self> {
         let path = config.install_cache_path();
         if !path.exists() {
             return Ok(Self {
@@ -148,7 +148,7 @@ impl InstallCache {
         }
     }
 
-    pub fn save(&self, config: &Config) -> Result<()> {
+    pub(crate) fn save(&self, config: &Config) -> Result<()> {
         let path = config.install_cache_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -158,7 +158,7 @@ impl InstallCache {
         Ok(())
     }
 
-    pub fn upsert_package(&mut self, full_name: &str, entry: PackageEntry) {
+    pub(crate) fn upsert_package(&mut self, full_name: &str, entry: PackageEntry) {
         self.packages.insert(full_name.to_string(), entry);
     }
 }
