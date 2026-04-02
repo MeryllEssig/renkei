@@ -110,6 +110,17 @@ impl Config {
     pub fn claude_config_path(&self) -> PathBuf {
         self.home_dir.join(".claude.json")
     }
+
+    pub fn agents_dir(&self) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join(".agents"),
+            None => self.home_dir.join(".agents"),
+        }
+    }
+
+    pub fn agents_skills_dir(&self) -> PathBuf {
+        self.agents_dir().join("skills")
+    }
 }
 
 pub fn detect_project_root() -> Result<PathBuf> {
@@ -227,6 +238,38 @@ mod tests {
         assert_eq!(
             config.install_cache_path(),
             PathBuf::from("/home/user/.renkei/install-cache.json")
+        );
+    }
+
+    #[test]
+    fn test_agents_dir_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(config.agents_dir(), PathBuf::from("/home/user/.agents"));
+    }
+
+    #[test]
+    fn test_agents_dir_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(config.agents_dir(), PathBuf::from("/projects/foo/.agents"));
+    }
+
+    #[test]
+    fn test_agents_skills_dir_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        assert_eq!(
+            config.agents_skills_dir(),
+            PathBuf::from("/home/user/.agents/skills")
+        );
+    }
+
+    #[test]
+    fn test_agents_skills_dir_project() {
+        let config =
+            Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        assert_eq!(
+            config.agents_skills_dir(),
+            PathBuf::from("/projects/foo/.agents/skills")
         );
     }
 
