@@ -16,6 +16,7 @@ mod install_cache;
 mod json_file;
 mod list;
 mod lockfile;
+mod package_store;
 mod manifest;
 mod mcp;
 mod migrate;
