@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPO="meryll/renkei"
+REPO="MeryllEssig/renkei"
 INSTALL_DIR="${RK_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY="rk"
 

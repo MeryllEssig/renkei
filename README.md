@@ -6,7 +6,7 @@
 
 *A package manager for AI agentic workflows*
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/meryll/renkei/ci.yml?style=flat-square&label=Build)](https://github.com/meryll/renkei/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/MeryllEssig/renkei/ci.yml?style=flat-square&label=Build)](https://github.com/MeryllEssig/renkei/actions)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 ![Rust](https://img.shields.io/badge/Rust-1.94+-orange?style=flat-square&logo=rust&logoColor=white)
 
@@ -39,7 +39,7 @@ rk doctor                                        # Run health checks
 ### Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/meryll/renkei/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/MeryllEssig/renkei/main/install.sh | sh
 ```
 
 Auto-detects your OS and architecture. Installs to `~/.local/bin` by default (override with `RK_INSTALL_DIR`).
@@ -47,7 +47,7 @@ Auto-detects your OS and architecture. Installs to `~/.local/bin` by default (ov
 ### From source
 
 ```bash
-git clone git@github.com:meryll/renkei.git
+git clone git@github.com:MeryllEssig/renkei.git
 cd renkei
 cargo install --path .
 ```
