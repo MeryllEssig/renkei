@@ -10,32 +10,6 @@ use super::{Backend, DeployedArtifact};
 
 pub struct CursorBackend;
 
-impl CursorBackend {
-    fn deploy_file(
-        &self,
-        artifact: &Artifact,
-        dest_dir: std::path::PathBuf,
-        dest_filename: &str,
-    ) -> Result<DeployedArtifact> {
-        fs::create_dir_all(&dest_dir)?;
-        let dest = dest_dir.join(dest_filename);
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-        Ok(DeployedArtifact {
-            artifact_kind: artifact.kind.clone(),
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-            deployed_hooks: vec![],
-        })
-    }
-}
-
 impl Backend for CursorBackend {
     fn name(&self) -> &str {
         "cursor"
@@ -79,7 +53,7 @@ impl Backend for CursorBackend {
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dest_filename = format!("{}.md", artifact.name);
-        self.deploy_file(artifact, config.cursor_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, config.cursor_agents_dir(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
@@ -109,43 +83,8 @@ impl Backend for CursorBackend {
 mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
+    use crate::backend::test_helpers::{make_agent_artifact, make_hook_artifact, make_skill_artifact};
     use tempfile::tempdir;
-
-    fn make_skill_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let skills_dir = pkg_dir.join("skills");
-        fs::create_dir_all(&skills_dir).unwrap();
-        let source = skills_dir.join(format!("{name}.md"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Skill,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
-
-    fn make_agent_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let agents_dir = pkg_dir.join("agents");
-        fs::create_dir_all(&agents_dir).unwrap();
-        let source = agents_dir.join(format!("{name}.md"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Agent,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
-
-    fn make_hook_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let hooks_dir = pkg_dir.join("hooks");
-        fs::create_dir_all(&hooks_dir).unwrap();
-        let source = hooks_dir.join(format!("{name}.json"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Hook,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
 
     #[test]
     fn test_cursor_detect_with_dir() {

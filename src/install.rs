@@ -327,6 +327,8 @@ pub(crate) fn install_local_with_resolver(
     let mut all_deployed: Vec<DeployedArtifact> = Vec::new();
     let mut deployed_map: HashMap<String, install_cache::BackendDeployment> = HashMap::new();
 
+    let has_agents = active_backends.iter().any(|b| b.name() == "agents");
+
     for backend in &active_backends {
         let mut backend_deployed = Vec::new();
 
@@ -334,10 +336,7 @@ pub(crate) fn install_local_with_resolver(
             // Deduplication: if the agents backend is also active and this backend reads from
             // .agents/skills/, skip the skill deploy to avoid double-deploying the same file.
             // The agents backend will handle the actual deployment.
-            if art.kind == ArtifactKind::Skill
-                && backend.reads_agents_skills()
-                && active_backends.iter().any(|b| b.name() == "agents")
-            {
+            if art.kind == ArtifactKind::Skill && backend.reads_agents_skills() && has_agents {
                 continue;
             }
 

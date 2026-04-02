@@ -1,42 +1,12 @@
-use std::fs;
-use std::path::PathBuf;
-
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
-use crate::error::{RenkeiError, Result};
+use crate::error::Result;
 use crate::mcp::{self, DeployedMcpEntry};
 
 use super::{Backend, DeployedArtifact};
 
 pub struct ClaudeBackend;
 
-impl ClaudeBackend {
-    fn deploy_file(
-        &self,
-        artifact: &Artifact,
-        dest_dir: PathBuf,
-        dest_filename: &str,
-    ) -> Result<DeployedArtifact> {
-        fs::create_dir_all(&dest_dir)?;
-
-        let dest = dest_dir.join(dest_filename);
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-
-        Ok(DeployedArtifact {
-            artifact_kind: artifact.kind.clone(),
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-            deployed_hooks: vec![],
-        })
-    }
-}
 
 impl Backend for ClaudeBackend {
     fn name(&self) -> &str {
@@ -51,12 +21,12 @@ impl Backend for ClaudeBackend {
         let skill_dir = config
             .claude_skills_dir()
             .join(format!("renkei-{}", artifact.name));
-        self.deploy_file(artifact, skill_dir, "SKILL.md")
+        super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dest_filename = format!("{}.md", artifact.name);
-        self.deploy_file(artifact, config.claude_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, config.claude_agents_dir(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
@@ -87,6 +57,8 @@ impl Backend for ClaudeBackend {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use crate::artifact::ArtifactKind;
     use tempfile::tempdir;

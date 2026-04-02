@@ -1,40 +1,12 @@
-use std::fs;
-
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::Config;
-use crate::error::{RenkeiError, Result};
+use crate::error::Result;
 use crate::hook;
 use crate::mcp::{self, DeployedMcpEntry};
 
 use super::{Backend, DeployedArtifact};
 
 pub struct GeminiBackend;
-
-impl GeminiBackend {
-    fn deploy_file(
-        &self,
-        artifact: &Artifact,
-        dest_dir: std::path::PathBuf,
-        dest_filename: &str,
-    ) -> Result<DeployedArtifact> {
-        fs::create_dir_all(&dest_dir)?;
-        let dest = dest_dir.join(dest_filename);
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-        Ok(DeployedArtifact {
-            artifact_kind: artifact.kind.clone(),
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-            deployed_hooks: vec![],
-        })
-    }
-}
 
 impl Backend for GeminiBackend {
     fn name(&self) -> &str {
@@ -49,20 +21,16 @@ impl Backend for GeminiBackend {
         true
     }
 
-    /// Deploy skill to `.gemini/skills/renkei-{name}/SKILL.md`.
-    /// Only called when the agents backend is NOT in the active set (dedup prevents this
-    /// otherwise). Gemini also reads `.agents/skills/` but when deploying standalone we
-    /// use the `.gemini/skills/` path.
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let skill_dir = config
             .gemini_skills_dir()
             .join(format!("renkei-{}", artifact.name));
-        self.deploy_file(artifact, skill_dir, "SKILL.md")
+        super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dest_filename = format!("{}.md", artifact.name);
-        self.deploy_file(artifact, config.gemini_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, config.gemini_agents_dir(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
@@ -91,45 +59,12 @@ impl Backend for GeminiBackend {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use crate::artifact::ArtifactKind;
+    use crate::backend::test_helpers::{make_agent_artifact, make_hook_artifact, make_skill_artifact};
     use tempfile::tempdir;
-
-    fn make_skill_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let skills_dir = pkg_dir.join("skills");
-        fs::create_dir_all(&skills_dir).unwrap();
-        let source = skills_dir.join(format!("{name}.md"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Skill,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
-
-    fn make_agent_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let agents_dir = pkg_dir.join("agents");
-        fs::create_dir_all(&agents_dir).unwrap();
-        let source = agents_dir.join(format!("{name}.md"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Agent,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
-
-    fn make_hook_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let hooks_dir = pkg_dir.join("hooks");
-        fs::create_dir_all(&hooks_dir).unwrap();
-        let source = hooks_dir.join(format!("{name}.json"));
-        fs::write(&source, content).unwrap();
-        Artifact {
-            kind: ArtifactKind::Hook,
-            name: name.to_string(),
-            source_path: source,
-        }
-    }
 
     #[test]
     fn test_gemini_detect_with_dir() {

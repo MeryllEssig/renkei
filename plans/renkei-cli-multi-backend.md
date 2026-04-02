@@ -220,17 +220,17 @@ Add the 3 remaining backends (Cursor, Codex, Gemini), implement deduplication lo
 
 ### Acceptance criteria
 
-- [ ] Cursor backend deploys `.mdc` rules, agents, hooks, MCP to correct paths
-- [ ] Codex backend deploys TOML agents and embedded MCP config
-- [ ] Gemini backend deploys to `.gemini/` with embedded settings format
-- [ ] When `agents` + `codex` both resolved, skills only deployed once to `.agents/`
-- [ ] When `agents` + `gemini` both resolved, same dedup applies
-- [ ] `--backend cursor` deploys only to Cursor regardless of config/manifest
-- [ ] `rk config` launches TUI multi-select with detection status
-- [ ] `rk config set/get/list` work programmatically
-- [ ] Config persists to `~/.renkei/config.json`
-- [ ] Resolution pipeline uses config when present, falls back to auto-detect
-- [ ] All Phase 1 tests still pass
+- [x] Cursor backend deploys `.mdc` rules, agents, hooks, MCP to correct paths
+- [x] Codex backend deploys TOML agents and embedded MCP config
+- [x] Gemini backend deploys to `.gemini/` with embedded settings format
+- [x] When `agents` + `codex` both resolved, skills only deployed once to `.agents/`
+- [x] When `agents` + `gemini` both resolved, same dedup applies
+- [x] `--backend cursor` deploys only to Cursor regardless of config/manifest
+- [x] `rk config` launches TUI multi-select with detection status
+- [x] `rk config set/get/list` work programmatically
+- [x] Config persists to `~/.renkei/config.json`
+- [x] Resolution pipeline uses config when present, falls back to auto-detect
+- [x] All Phase 1 tests still pass
 
 ---
 

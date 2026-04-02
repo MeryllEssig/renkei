@@ -20,6 +20,31 @@ pub struct DeployedArtifact {
     pub deployed_hooks: Vec<DeployedHookEntry>,
 }
 
+/// Copy an artifact source file to `dest_dir/dest_filename`, creating dirs as needed.
+/// Shared by all backends that do simple file copies (skills, agents).
+pub(super) fn deploy_file(
+    artifact: &Artifact,
+    dest_dir: PathBuf,
+    dest_filename: &str,
+) -> Result<DeployedArtifact> {
+    std::fs::create_dir_all(&dest_dir)?;
+    let dest = dest_dir.join(dest_filename);
+    std::fs::copy(&artifact.source_path, &dest).map_err(|e| {
+        RenkeiError::DeploymentFailed(format!(
+            "Failed to copy {} to {}: {}",
+            artifact.source_path.display(),
+            dest.display(),
+            e
+        ))
+    })?;
+    Ok(DeployedArtifact {
+        artifact_kind: artifact.kind.clone(),
+        artifact_name: artifact.name.clone(),
+        deployed_path: dest,
+        deployed_hooks: vec![],
+    })
+}
+
 #[allow(dead_code)]
 pub trait Backend {
     fn name(&self) -> &str;
@@ -144,6 +169,49 @@ impl BackendRegistry {
             .iter()
             .find(|b| b.name() == name)
             .map(|b| b.as_ref())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use std::fs;
+
+    use crate::artifact::{Artifact, ArtifactKind};
+
+    pub fn make_skill_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
+        let skills_dir = pkg_dir.join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+        let source = skills_dir.join(format!("{name}.md"));
+        fs::write(&source, content).unwrap();
+        Artifact {
+            kind: ArtifactKind::Skill,
+            name: name.to_string(),
+            source_path: source,
+        }
+    }
+
+    pub fn make_agent_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
+        let agents_dir = pkg_dir.join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        let source = agents_dir.join(format!("{name}.md"));
+        fs::write(&source, content).unwrap();
+        Artifact {
+            kind: ArtifactKind::Agent,
+            name: name.to_string(),
+            source_path: source,
+        }
+    }
+
+    pub fn make_hook_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
+        let hooks_dir = pkg_dir.join("hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        let source = hooks_dir.join(format!("{name}.json"));
+        fs::write(&source, content).unwrap();
+        Artifact {
+            kind: ArtifactKind::Hook,
+            name: name.to_string(),
+            source_path: source,
+        }
     }
 }
 
