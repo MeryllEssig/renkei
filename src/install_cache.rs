@@ -111,7 +111,7 @@ impl InstallCache {
 
         // v1 → v2 migration
         let v1: V1Cache = serde_json::from_value(raw)?;
-        let mut cache = Self::migrate_v1(v1);
+        let cache = Self::migrate_v1(v1);
 
         // Save migrated cache
         cache.save(config)?;

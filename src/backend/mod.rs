@@ -32,6 +32,7 @@ pub trait Backend {
 }
 
 /// All known backend names.
+#[allow(dead_code)]
 pub const ALL_BACKEND_NAMES: &[&str] = &["claude", "agents"];
 
 pub struct BackendRegistry {
@@ -63,6 +64,7 @@ impl BackendRegistry {
     /// - `manifest_backends`: the `backends` field from renkei.json
     /// - `force`: if true, skip manifest intersection (use all detected)
     /// - `warnings`: collects warning messages for backends in manifest but not detected
+    #[allow(dead_code)]
     pub fn resolve(
         &self,
         config: &Config,
