@@ -18,9 +18,9 @@ use crate::config::Config;
 use crate::conflict::Conflict;
 use crate::env_check;
 use crate::error::{RenkeiError, Result};
-use crate::install_cache::{InstallCache, PackageEntry};
-use crate::lockfile::{Lockfile, LockfileEntry};
+use crate::install_cache::PackageEntry;
 use crate::manifest::{self, Manifest, RequestedScope};
+use crate::package_store::PackageStore;
 
 fn prompt_rename(conflict: &Conflict) -> Result<String> {
     let prompt = format!(
@@ -120,13 +120,13 @@ pub(crate) fn install_local_with_resolver(
         return Err(RenkeiError::NoArtifactsFound(package_dir));
     }
 
-    let mut install_cache = InstallCache::load(config)?;
-    cleanup_previous_installation(&manifest.full_name, &install_cache, config);
+    let mut store = PackageStore::load(config)?;
+    cleanup_previous_installation(&manifest.full_name, store.cache(), config);
 
     // --- Conflict resolution + rename ---
     let resolved = resolve::resolve_conflicts_and_rename(
         artifacts,
-        &mut install_cache,
+        store.cache_mut(),
         &manifest.full_name,
         conflict_resolver,
     )?;
@@ -156,7 +156,7 @@ pub(crate) fn install_local_with_resolver(
         config,
     )?;
 
-    install_cache.upsert_package(
+    store.record_install(
         &manifest.full_name,
         PackageEntry {
             version: manifest.version.to_string(),
@@ -171,20 +171,9 @@ pub(crate) fn install_local_with_resolver(
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
         },
+        options.from_lockfile,
     );
-    install_cache.save(config)?;
-
-    if !options.from_lockfile {
-        let lockfile_path = config.lockfile_path();
-        let mut lockfile = Lockfile::load(&lockfile_path)?;
-        lockfile.upsert(
-            &manifest.full_name,
-            LockfileEntry::from_package_entry(
-                install_cache.packages.get(&manifest.full_name).unwrap(),
-            ),
-        );
-        lockfile.save(&lockfile_path)?;
-    }
+    store.save(config)?;
 
     println!(
         "{} Deployed {} artifact(s) for {}",
