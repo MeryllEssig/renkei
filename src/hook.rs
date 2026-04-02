@@ -107,6 +107,8 @@ impl HookProfile {
 }
 
 /// Translate renkei hooks to backend-specific JSON using the given profile.
+/// Used for dry-run / preview; no I/O.
+#[allow(dead_code)]
 pub fn translate(
     profile: &HookProfile,
     renkei_hooks: &[RenkeiHook],
@@ -179,57 +181,6 @@ pub struct DeployedHookEntry {
     pub command: String,
 }
 
-fn translate_event(renkei_event: &str) -> Option<&'static str> {
-    match renkei_event {
-        "before_tool" => Some("PreToolUse"),
-        "after_tool" => Some("PostToolUse"),
-        "after_tool_failure" => Some("PostToolUseFailure"),
-        "on_notification" => Some("Notification"),
-        "on_session_start" => Some("SessionStart"),
-        "on_session_end" => Some("SessionEnd"),
-        "on_stop" => Some("Stop"),
-        "on_stop_failure" => Some("StopFailure"),
-        "on_subagent_start" => Some("SubagentStart"),
-        "on_subagent_stop" => Some("SubagentStop"),
-        "on_elicitation" => Some("Elicitation"),
-        _ => None,
-    }
-}
-
-fn translate_event_cursor(renkei_event: &str) -> Option<&'static str> {
-    match renkei_event {
-        "before_tool" => Some("preToolUse"),
-        "after_tool" => Some("postToolUse"),
-        "after_tool_failure" => Some("postToolUseFailure"),
-        "on_session_start" => Some("sessionStart"),
-        "on_session_end" => Some("sessionEnd"),
-        "on_stop" => Some("stop"),
-        "user_prompt" => Some("beforeSubmitPrompt"),
-        _ => None,
-    }
-}
-
-fn translate_event_codex(renkei_event: &str) -> Option<&'static str> {
-    match renkei_event {
-        "before_tool" => Some("PreToolUse"),
-        "after_tool" => Some("PostToolUse"),
-        "on_session_start" => Some("SessionStart"),
-        "on_stop" => Some("Stop"),
-        "user_prompt" => Some("UserPromptSubmit"),
-        _ => None,
-    }
-}
-
-fn translate_event_gemini(renkei_event: &str) -> Option<&'static str> {
-    match renkei_event {
-        "before_tool" => Some("BeforeTool"),
-        "after_tool" => Some("AfterTool"),
-        "on_session_start" => Some("SessionStart"),
-        "on_session_end" => Some("SessionEnd"),
-        "on_notification" => Some("Notification"),
-        _ => None,
-    }
-}
 
 pub fn parse_hook_file(path: &Path) -> Result<Vec<RenkeiHook>> {
     let content = std::fs::read_to_string(path)?;
@@ -294,11 +245,6 @@ where
     Ok(result)
 }
 
-fn translate_hooks(
-    renkei_hooks: &[RenkeiHook],
-) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>> {
-    translate_hooks_with(renkei_hooks, translate_event)
-}
 
 /// Cursor hook entry — flat format (no nested `hooks` array).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -340,12 +286,6 @@ where
     Ok(result)
 }
 
-/// Translate Renkei hooks to Cursor's flat-entry format.
-fn translate_hooks_cursor(
-    renkei_hooks: &[RenkeiHook],
-) -> Result<BTreeMap<String, Vec<CursorHookEntry>>> {
-    translate_hooks_cursor_with(renkei_hooks, translate_event_cursor)
-}
 
 /// Write/merge translated cursor hooks into a standalone `hooks.json` file.
 /// Returns deployed entries for tracking.
@@ -482,14 +422,6 @@ fn write_standalone_hooks(
     Ok(deployed)
 }
 
-/// Remove hook entries from a standalone `hooks.json` file (Codex format).
-fn remove_standalone_hooks(
-    hooks_path: &Path,
-    entries_to_remove: &[DeployedHookEntry],
-) -> Result<()> {
-    remove_hooks_from_settings(hooks_path, entries_to_remove)
-}
-
 fn read_settings(path: &Path) -> Result<serde_json::Value> {
     json_file::read_json_or_empty(path)
 }
@@ -606,33 +538,6 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_translate_all_11_events() {
-        let mappings = [
-            ("before_tool", "PreToolUse"),
-            ("after_tool", "PostToolUse"),
-            ("after_tool_failure", "PostToolUseFailure"),
-            ("on_notification", "Notification"),
-            ("on_session_start", "SessionStart"),
-            ("on_session_end", "SessionEnd"),
-            ("on_stop", "Stop"),
-            ("on_stop_failure", "StopFailure"),
-            ("on_subagent_start", "SubagentStart"),
-            ("on_subagent_stop", "SubagentStop"),
-            ("on_elicitation", "Elicitation"),
-        ];
-        for (renkei, claude) in mappings {
-            assert_eq!(translate_event(renkei), Some(claude), "Failed for {renkei}");
-        }
-    }
-
-    #[test]
-    fn test_translate_unknown_event_returns_none() {
-        assert_eq!(translate_event("unknown_event"), None);
-        assert_eq!(translate_event(""), None);
-        assert_eq!(translate_event("PreToolUse"), None);
-    }
-
-    #[test]
     fn test_parse_valid_hook_file() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lint.json");
@@ -738,200 +643,103 @@ mod tests {
     }
 
     #[test]
-    fn test_translate_hooks_single() {
-        let hooks = vec![make_renkei_hook(
-            "before_tool",
-            Some("bash"),
-            "lint.sh",
-            Some(5),
-        )];
-        let result = translate_hooks(&hooks).unwrap();
-
-        assert_eq!(result.len(), 1);
-        let groups = &result["PreToolUse"];
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].matcher, Some("bash".to_string()));
-        assert_eq!(groups[0].hooks.len(), 1);
-        assert_eq!(groups[0].hooks[0].hook_type, "command");
-        assert_eq!(groups[0].hooks[0].command, "lint.sh");
-        assert_eq!(groups[0].hooks[0].timeout, Some(5));
-    }
-
-    #[test]
-    fn test_translate_hooks_same_event_different_matcher() {
+    fn test_nested_translate_same_event_different_matcher() {
         let hooks = vec![
             make_renkei_hook("before_tool", Some("bash"), "lint.sh", None),
             make_renkei_hook("before_tool", Some("Write"), "check.sh", None),
         ];
-        let result = translate_hooks(&hooks).unwrap();
+        let result = translate(&CLAUDE, &hooks).unwrap();
 
-        let groups = &result["PreToolUse"];
+        let groups = result["PreToolUse"].as_array().unwrap();
         assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].matcher, Some("bash".to_string()));
-        assert_eq!(groups[1].matcher, Some("Write".to_string()));
+        assert_eq!(groups[0]["matcher"], "bash");
+        assert_eq!(groups[1]["matcher"], "Write");
     }
 
     #[test]
-    fn test_translate_hooks_same_event_same_matcher_grouped() {
+    fn test_nested_translate_same_event_same_matcher_grouped() {
         let hooks = vec![
             make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5)),
             make_renkei_hook("before_tool", Some("bash"), "format.sh", Some(3)),
         ];
-        let result = translate_hooks(&hooks).unwrap();
+        let result = translate(&CLAUDE, &hooks).unwrap();
 
-        let groups = &result["PreToolUse"];
+        let groups = result["PreToolUse"].as_array().unwrap();
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].hooks.len(), 2);
-        assert_eq!(groups[0].hooks[0].command, "lint.sh");
-        assert_eq!(groups[0].hooks[1].command, "format.sh");
+        let hooks_arr = groups[0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks_arr.len(), 2);
+        assert_eq!(hooks_arr[0]["command"], "lint.sh");
+        assert_eq!(hooks_arr[1]["command"], "format.sh");
     }
 
     #[test]
-    fn test_translate_hooks_multiple_events() {
-        let hooks = vec![
-            make_renkei_hook("before_tool", Some("bash"), "lint.sh", None),
-            make_renkei_hook("on_stop", None, "cleanup.sh", None),
-        ];
-        let result = translate_hooks(&hooks).unwrap();
-
-        assert_eq!(result.len(), 2);
-        assert!(result.contains_key("PreToolUse"));
-        assert!(result.contains_key("Stop"));
-    }
-
-    #[test]
-    fn test_translate_hooks_no_matcher() {
-        let hooks = vec![make_renkei_hook("on_stop", None, "cleanup.sh", None)];
-        let result = translate_hooks(&hooks).unwrap();
-
-        let groups = &result["Stop"];
-        assert_eq!(groups[0].matcher, None);
-    }
-
-    #[test]
-    fn test_translate_hooks_unknown_event_fails() {
-        let hooks = vec![make_renkei_hook("on_magic", None, "magic.sh", None)];
-        let err = translate_hooks(&hooks).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("Unknown hook event 'on_magic'"), "Got: {msg}");
-    }
-
-    #[test]
-    fn test_merge_into_empty_settings() {
+    fn test_deploy_into_empty_settings() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
+        let path = dir.path().join("settings.json");
 
-        let mut translated = BTreeMap::new();
-        translated.insert(
-            "PreToolUse".to_string(),
-            vec![ClaudeHookGroup {
-                matcher: Some("bash".to_string()),
-                hooks: vec![ClaudeHookEntry {
-                    hook_type: "command".to_string(),
-                    command: "lint.sh".to_string(),
-                    timeout: Some(5),
-                }],
-            }],
-        );
-
-        let entries = merge_hooks_into_settings(&settings_path, &translated).unwrap();
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "PreToolUse");
         assert_eq!(entries[0].command, "lint.sh");
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(settings["hooks"]["PreToolUse"].is_array());
         assert_eq!(settings["hooks"]["PreToolUse"][0]["matcher"], "bash");
     }
 
     #[test]
-    fn test_merge_into_nonexistent_creates_file() {
+    fn test_deploy_into_nonexistent_creates_file() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join(".claude").join("settings.json");
+        let path = dir.path().join(".claude").join("settings.json");
 
-        let mut translated = BTreeMap::new();
-        translated.insert(
-            "Stop".to_string(),
-            vec![ClaudeHookGroup {
-                matcher: None,
-                hooks: vec![ClaudeHookEntry {
-                    hook_type: "command".to_string(),
-                    command: "cleanup.sh".to_string(),
-                    timeout: None,
-                }],
-            }],
-        );
-
-        merge_hooks_into_settings(&settings_path, &translated).unwrap();
-        assert!(settings_path.exists());
+        let hooks = vec![make_renkei_hook("on_stop", None, "cleanup.sh", None)];
+        deploy(&CLAUDE, &hooks, &path).unwrap();
+        assert!(path.exists());
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let stop = &settings["hooks"]["Stop"][0];
         assert!(stop.get("matcher").is_none());
         assert_eq!(stop["hooks"][0]["command"], "cleanup.sh");
     }
 
     #[test]
-    fn test_merge_preserves_existing_settings_keys() {
+    fn test_deploy_preserves_existing_settings_keys() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
+        let path = dir.path().join("settings.json");
         fs::write(
-            &settings_path,
+            &path,
             r#"{"permissions":{"allow":["Bash"]},"language":"French"}"#,
         )
         .unwrap();
 
-        let mut translated = BTreeMap::new();
-        translated.insert(
-            "PreToolUse".to_string(),
-            vec![ClaudeHookGroup {
-                matcher: Some("bash".to_string()),
-                hooks: vec![ClaudeHookEntry {
-                    hook_type: "command".to_string(),
-                    command: "lint.sh".to_string(),
-                    timeout: None,
-                }],
-            }],
-        );
-
-        merge_hooks_into_settings(&settings_path, &translated).unwrap();
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        deploy(&CLAUDE, &hooks, &path).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(settings["language"], "French");
         assert!(settings["permissions"]["allow"].is_array());
         assert!(settings["hooks"]["PreToolUse"].is_array());
     }
 
     #[test]
-    fn test_merge_appends_to_existing_event_array() {
+    fn test_deploy_appends_to_existing_event_array() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
+        let path = dir.path().join("settings.json");
         fs::write(
-            &settings_path,
+            &path,
             r#"{"hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"existing.sh"}]}]}}"#,
         )
         .unwrap();
 
-        let mut translated = BTreeMap::new();
-        translated.insert(
-            "PreToolUse".to_string(),
-            vec![ClaudeHookGroup {
-                matcher: Some("bash".to_string()),
-                hooks: vec![ClaudeHookEntry {
-                    hook_type: "command".to_string(),
-                    command: "lint.sh".to_string(),
-                    timeout: None,
-                }],
-            }],
-        );
-
-        merge_hooks_into_settings(&settings_path, &translated).unwrap();
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        deploy(&CLAUDE, &hooks, &path).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let pre_tool = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(pre_tool.len(), 2);
         assert_eq!(pre_tool[0]["matcher"], "Write");
@@ -941,46 +749,38 @@ mod tests {
     #[test]
     fn test_remove_specific_hooks() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
-        fs::write(
-            &settings_path,
-            r#"{"hooks":{"PreToolUse":[{"matcher":"bash","hooks":[{"type":"command","command":"lint.sh"}]}]}}"#,
-        )
-        .unwrap();
+        let path = dir.path().join("settings.json");
 
-        let entries = vec![DeployedHookEntry {
-            event: "PreToolUse".to_string(),
-            matcher: Some("bash".to_string()),
-            command: "lint.sh".to_string(),
-        }];
-
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
+        remove(&CLAUDE, &path, &entries).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(settings.get("hooks").is_none());
     }
 
     #[test]
     fn test_remove_leaves_other_events() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
-        fs::write(
-            &settings_path,
-            r#"{"hooks":{"PreToolUse":[{"matcher":"bash","hooks":[{"type":"command","command":"lint.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"cleanup.sh"}]}]}}"#,
-        )
-        .unwrap();
+        let path = dir.path().join("settings.json");
 
-        let entries = vec![DeployedHookEntry {
-            event: "PreToolUse".to_string(),
-            matcher: Some("bash".to_string()),
-            command: "lint.sh".to_string(),
-        }];
+        let hooks = vec![
+            make_renkei_hook("before_tool", Some("bash"), "lint.sh", None),
+            make_renkei_hook("on_stop", None, "cleanup.sh", None),
+        ];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
 
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
+        // Remove only the PreToolUse entry
+        let to_remove: Vec<_> = entries
+            .iter()
+            .filter(|e| e.event == "PreToolUse")
+            .cloned()
+            .collect();
+        remove(&CLAUDE, &path, &to_remove).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(settings["hooks"].get("PreToolUse").is_none());
         assert!(settings["hooks"]["Stop"].is_array());
     }
@@ -988,23 +788,25 @@ mod tests {
     #[test]
     fn test_remove_leaves_other_groups_in_same_event() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
-        fs::write(
-            &settings_path,
-            r#"{"hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"existing.sh"}]},{"matcher":"bash","hooks":[{"type":"command","command":"lint.sh"}]}]}}"#,
-        )
-        .unwrap();
+        let path = dir.path().join("settings.json");
 
-        let entries = vec![DeployedHookEntry {
-            event: "PreToolUse".to_string(),
-            matcher: Some("bash".to_string()),
-            command: "lint.sh".to_string(),
-        }];
+        // Deploy two hooks for same event, different matchers
+        let hooks = vec![
+            make_renkei_hook("before_tool", Some("Write"), "existing.sh", None),
+            make_renkei_hook("before_tool", Some("bash"), "lint.sh", None),
+        ];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
 
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
+        // Remove only the bash matcher entry
+        let to_remove: Vec<_> = entries
+            .iter()
+            .filter(|e| e.matcher.as_deref() == Some("bash"))
+            .cloned()
+            .collect();
+        remove(&CLAUDE, &path, &to_remove).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let pre_tool = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(pre_tool.len(), 1);
         assert_eq!(pre_tool[0]["matcher"], "Write");
@@ -1013,63 +815,26 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_file_is_noop() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("missing.json");
+        let path = dir.path().join("missing.json");
         let entries = vec![DeployedHookEntry {
             event: "Stop".to_string(),
             matcher: None,
             command: "cleanup.sh".to_string(),
         }];
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
-    }
-
-    #[test]
-    fn test_merge_then_remove_roundtrip() {
-        let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
-        fs::write(&settings_path, r#"{"language":"French"}"#).unwrap();
-
-        let mut translated = BTreeMap::new();
-        translated.insert(
-            "PreToolUse".to_string(),
-            vec![ClaudeHookGroup {
-                matcher: Some("bash".to_string()),
-                hooks: vec![ClaudeHookEntry {
-                    hook_type: "command".to_string(),
-                    command: "lint.sh".to_string(),
-                    timeout: Some(5),
-                }],
-            }],
-        );
-
-        let entries = merge_hooks_into_settings(&settings_path, &translated).unwrap();
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
-
-        let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
-        assert_eq!(settings["language"], "French");
-        assert!(settings.get("hooks").is_none());
+        remove(&CLAUDE, &path, &entries).unwrap();
     }
 
     #[test]
     fn test_remove_hook_without_matcher() {
         let dir = tempdir().unwrap();
-        let settings_path = dir.path().join("settings.json");
-        fs::write(
-            &settings_path,
-            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"cleanup.sh"}]}]}}"#,
-        )
-        .unwrap();
+        let path = dir.path().join("settings.json");
 
-        let entries = vec![DeployedHookEntry {
-            event: "Stop".to_string(),
-            matcher: None,
-            command: "cleanup.sh".to_string(),
-        }];
-
-        remove_hooks_from_settings(&settings_path, &entries).unwrap();
+        let hooks = vec![make_renkei_hook("on_stop", None, "cleanup.sh", None)];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
+        remove(&CLAUDE, &path, &entries).unwrap();
 
         let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(settings.get("hooks").is_none());
     }
 
