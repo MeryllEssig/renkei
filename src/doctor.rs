@@ -8,7 +8,8 @@ use crate::cache;
 use crate::config::{BackendId, Config};
 use crate::env_check;
 use crate::error::Result;
-use crate::install_cache::{InstallCache, PackageEntry};
+use crate::install_cache::PackageEntry;
+use crate::package_store::PackageStore;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiagnosticKind {
@@ -347,10 +348,10 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
 }
 
 pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> Result<bool> {
-    let cache = InstallCache::load(config)?;
+    let store = PackageStore::load(config)?;
     let scope_label = if global { "global" } else { "project" };
 
-    if cache.packages.is_empty() {
+    if store.packages().is_empty() {
         println!("No packages installed ({scope_label}).");
         return Ok(true);
     }
@@ -363,7 +364,7 @@ pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> 
     let settings = crate::json_file::read_json_or_empty(&claude_dirs.settings_path.unwrap())?;
     let claude_config = crate::json_file::read_json_or_empty(&claude_dirs.config_path.unwrap())?;
 
-    let mut packages: Vec<_> = cache.packages.iter().collect();
+    let mut packages: Vec<_> = store.packages().iter().collect();
     packages.sort_by_key(|(name, _)| name.as_str());
 
     let mut package_diagnostics = Vec::new();

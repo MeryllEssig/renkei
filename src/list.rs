@@ -4,10 +4,11 @@ use crate::artifact::ArtifactKind;
 use crate::config::Config;
 use crate::error::Result;
 use crate::install_cache::{InstallCache, PackageEntry};
+use crate::package_store::PackageStore;
 
 pub fn run_list(config: &Config, global: bool) -> Result<()> {
-    let cache = InstallCache::load(config)?;
-    let output = format_package_list(&cache, global);
+    let store = PackageStore::load(config)?;
+    let output = format_package_list(store.cache(), global);
     print!("{}", output);
     Ok(())
 }
