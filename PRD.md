@@ -10,12 +10,14 @@ Problem statement and solution summary. Renkei is a CLI package manager (`rk`) w
 
 All user stories organized by theme and phase:
 - Installation and deployment (US 1–14)
+- Installation scope (US 14b–14g)
 - Conflict management (US 15–18)
 - Listing and visibility (US 19–20)
 - Diagnostics (US 21–25)
 - Package creation (US 26–29)
 - Lockfile (US 30–34)
 - Phase 1 — Delivery and migration (US 35–36)
+- Multi-backend configuration (US 55–65)
 - Phase 2 — Registry and advanced commands (US 37–49)
 - Phase 3 — Ecosystem (US 50–54)
 
@@ -26,6 +28,10 @@ All user stories organized by theme and phase:
 ## [Backends](./doc/prd/backends.md)
 
 `Backend` trait interface, multi-backend support matrix (Claude Code, Cursor, Codex, Gemini), and hardcoded deployment conventions (paths, prefixes, merge targets).
+
+## [Multi-Backend Configuration](./doc/prd/multi-backend.md)
+
+User-facing backend selection via `rk config`, auto-detection fallback, backend resolution pipeline (user config ∩ manifest ∩ detection), the `agents` shared standard backend, install-cache v2 format with per-backend grouping, atomic multi-backend deployment and rollback.
 
 ## [Installation Scope](./doc/prd/scope.md)
 

@@ -2,11 +2,11 @@
 
 ## Installation scope
 
-By default, `rk install` operates in **project scope**: skills and agents are deployed to the project's local backend directory (`.claude/`), while hooks and MCP servers go to the global backend directory (`~/.claude/`) since they are inherently global resources. The package is tracked in the project's `rk.lock` and install-cache.
+By default, `rk install` operates in **project scope**: skills and agents are deployed to the project's local backend directories, while hooks and MCP servers follow each backend's conventions (global-only for Claude Code, project-level for Cursor/Codex/Gemini). The package is tracked in the project's `rk.lock` and install-cache.
 
-Use `-g` / `--global` to install in **global scope**: all artifacts deploy to `~/.claude/`, tracked in `~/.renkei/rk.lock` and `~/.renkei/install-cache.json`.
+Use `-g` / `--global` to install in **global scope**: all artifacts deploy to the user's home backend directories, tracked in `~/.renkei/rk.lock` and `~/.renkei/install-cache.json`.
 
-See [Scope](./scope.md) for the full scope specification.
+See [Scope](./scope.md) for the full scope specification and [Multi-Backend Configuration](./multi-backend.md) for backend selection and resolution.
 
 ### Scope validation
 

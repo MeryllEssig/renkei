@@ -35,4 +35,15 @@ This mapping is maintained in `ClaudeBackend`. Other backends will define their 
 
 ## Tracking
 
-Deployed hooks are tracked in the install-cache for the active scope — `~/.renkei/install-cache.json` (global) or `~/.renkei/projects/<slug>/install-cache.json` (project). Even though hooks always deploy globally to `~/.claude/settings.json` regardless of scope, they are tracked in the *project* install-cache when installed in project scope. The backend JSON (`settings.json`, etc.) stays 100% native with no custom fields. On uninstall, Renkei reads the appropriate install-cache to remove the right entries.
+Deployed hooks are tracked in the install-cache for the active scope — `~/.renkei/install-cache.json` (global) or `~/.renkei/projects/<slug>/install-cache.json` (project), grouped by backend (see install-cache v2 format in [Multi-Backend Configuration](./multi-backend.md)). The backend config files (`settings.json`, `hooks.json`, etc.) stay 100% native with no custom fields. On uninstall, Renkei reads the appropriate install-cache to remove the right entries.
+
+## Scope behavior per backend
+
+Hook deployment scope varies by backend:
+
+- **Claude Code**: hooks always deploy globally to `~/.claude/settings.json`, even in project scope.
+- **Cursor**: hooks deploy to `~/.cursor/hooks.json` (global) or `.cursor/hooks.json` (project).
+- **Codex**: hooks deploy to `~/.codex/hooks.json` (global) or `.codex/hooks.json` (project).
+- **Gemini CLI**: hooks merge into `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project).
+
+See [Backends](./backends.md) for the full deployment conventions table.

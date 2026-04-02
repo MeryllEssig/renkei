@@ -16,9 +16,9 @@
 
 - **`archives/`** — immutable `.tar.gz` archives, one per package version. Previously named `cache/`.
 - **`projects/`** — per-project install-caches, keyed by the slugified absolute path of the project root (e.g., `/Users/meryll/Projects/foo` → `Users-meryll-Projects-foo`). Stored centrally to avoid polluting project directories.
-- **`install-cache.json`** — global install-cache tracking packages installed with `-g` (deployed artifacts, hooks, MCP servers).
+- **`install-cache.json`** — global install-cache tracking packages installed with `-g`. Uses v2 format with deployed artifacts grouped by backend. See [Multi-Backend Configuration](./multi-backend.md) for the schema.
 - **`rk.lock`** — global lockfile for packages installed with `-g`.
-- **`config.json`** — local configuration (registries, preferences).
+- **`config.json`** — user configuration. Created only by explicit `rk config` command. Contains `defaults.backends` and future user preferences. See [Multi-Backend Configuration](./multi-backend.md).
 
 ## Project-level files
 

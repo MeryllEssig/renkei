@@ -4,15 +4,15 @@
 
 Renkei supports two installation scopes:
 
-- **Project scope** (default): artifacts are deployed relative to the current project. Skills and agents go into the project's local backend directory (e.g., `.claude/` for Claude Code). Hooks and MCP servers are always deployed globally (they are inherently global resources), but the package is tracked in the project's install-cache and lockfile.
+- **Project scope** (default): artifacts are deployed relative to the current project. Skills and agents go into the project's local backend directory (e.g., `.claude/` for Claude Code). For Claude Code, hooks and MCP servers are always deployed globally (they are inherently global resources in Claude's model); other backends (Cursor, Codex, Gemini) support project-level hooks and MCP. The package is tracked in the project's install-cache and lockfile.
 - **Global scope** (`-g` / `--global`): all artifacts are deployed to the user's home backend directory (e.g., `~/.claude/`). The package is tracked in the global install-cache and lockfile.
 
 ## Default behavior
 
 | Command | Scope | Artifacts | Tracking |
 |---------|-------|-----------|----------|
-| `rk install <source>` | Project | Skills/agents → `.claude/`, hooks/MCP → `~/.claude/` | `./rk.lock` + `~/.renkei/projects/<slug>/install-cache.json` |
-| `rk install -g <source>` | Global | Everything → `~/.claude/` | `~/.renkei/rk.lock` + `~/.renkei/install-cache.json` |
+| `rk install <source>` | Project | Skills/agents → `.<backend>/` at project root. Hooks/MCP → global for Claude, project-level for others. | `./rk.lock` + `~/.renkei/projects/<slug>/install-cache.json` |
+| `rk install -g <source>` | Global | Everything → `~/.<backend>/` | `~/.renkei/rk.lock` + `~/.renkei/install-cache.json` |
 | `rk install` (no args) | Project | Reads `./rk.lock` | Same as project |
 | `rk install -g` (no args) | Global | Reads `~/.renkei/rk.lock` | Same as global |
 
@@ -49,7 +49,7 @@ For hooks and MCP servers (always deployed globally), if the same entry exists f
 
 ## Config adaptation
 
-The `Config` struct absorbs the scope. A `Config::for_project(project_root)` constructor redirects skill and agent deployment paths to the project's `.claude/` directory while keeping hooks and MCP paths pointing to `~/.claude/`. The backend remains agnostic to the scope — it follows the paths from `Config`.
+The `Config` struct absorbs the scope. A `Config::for_project(project_root)` constructor redirects skill and agent deployment paths to the project's backend directory while keeping hook/MCP paths according to each backend's conventions (global-only for Claude, project-level for others). The backend remains agnostic to the scope — it follows the paths from `Config`. See [Multi-Backend Configuration](./multi-backend.md) for the full backend resolution pipeline.
 
 ## Project install-cache location
 
@@ -62,6 +62,6 @@ Project install-caches are stored centrally in `~/.renkei/projects/` to avoid po
 
 ## Uninstall behavior
 
-- `rk uninstall @scope/pkg` — looks up the project install-cache, removes artifacts (skills/agents from `.claude/`, hooks/MCP from `~/.claude/`), updates `./rk.lock`.
-- `rk uninstall -g @scope/pkg` — looks up the global install-cache, removes all artifacts from `~/.claude/`, updates `~/.renkei/rk.lock`.
+- `rk uninstall @scope/pkg` — looks up the project install-cache, removes all deployed artifacts from all backends recorded in the package entry, updates `./rk.lock`.
+- `rk uninstall -g @scope/pkg` — looks up the global install-cache, removes all deployed artifacts from all backends, updates `~/.renkei/rk.lock`.
 - If the package is not found in the requested scope, error — no fallback to the other scope.

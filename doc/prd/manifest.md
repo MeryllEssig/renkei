@@ -18,6 +18,7 @@ For a repo without a workspace (single package), the conventional directories (`
 
 - Required fields: `name` (scoped `@scope/name`, **required from v1**), `version` (semver), `description`, `author`, `license`, `backends`.
 - Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`.
+- `backends` declares which tools the package supports. Valid values: `"claude"`, `"cursor"`, `"codex"`, `"gemini"`, `"agents"`. At install time, the effective target is `manifest.backends ∩ user configured backends ∩ detected backends`. See [Multi-Backend Configuration](./multi-backend.md) for the full resolution pipeline.
 - **No `artifacts` field**: pure convention. The `skills/`, `hooks/`, `agents/` directories are the source of truth. Any file present in these directories is a deployed artifact.
 - `mcp` declares MCP configurations in the native `command`/`args`/`env` format (standard between Claude and Cursor, no extra abstraction).
 - `requiredEnv` lists environment variables with their descriptions.

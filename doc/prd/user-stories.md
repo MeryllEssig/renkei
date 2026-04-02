@@ -66,6 +66,20 @@
 35. As a project maintainer, I want the CLI to be compiled into native binaries for Linux / macOS / Windows and automatically published via GitHub Actions on each release so users can install it without dependencies.
 36. As a package creator, I want to migrate existing workflows (renkei-old) into valid Renkei packages to validate the `renkei.json` format on real cases from v1.
 
+## Multi-backend configuration
+
+55. As a developer, I want to configure which backends I use (`rk config`) so that Renkei deploys to the right tools without me specifying them each time.
+56. As a developer, I want Renkei to auto-detect installed backends when no config exists so that `rk install` works out of the box without running `rk config` first.
+57. As a developer, I want `rk install` to deploy to all my configured backends in a single atomic operation so that my workflows are available everywhere at once.
+58. As a developer, I want to override my configured backends for a single install (`--backend cursor`) so I can target a specific tool without changing my global config.
+59. As a developer, I want a warning when a configured backend is not detected on my machine so I know it was skipped, and an error when none of my backends are detected.
+60. As a developer, I want `rk install --force` to bypass manifest backend restrictions but not detection, so I can override the package author's intent without deploying into the void.
+61. As a developer, I want the `agents` backend to deploy skills to the shared `.agents/` directory so that tools supporting the `.agents/` standard (Codex, Gemini) pick them up automatically.
+62. As a developer, I want Renkei to avoid deploying duplicate skills when a branded backend already reads from `.agents/`, so I don't end up with two copies of the same skill.
+63. As a developer, I want `rk config set/get/list` subcommands so I can manage my configuration programmatically and in CI scripts.
+64. As a developer, I want the install-cache to group deployed artifacts by backend so that uninstall, doctor, and list can operate per-backend accurately.
+65. As a developer, I want my existing v1 install-cache to be automatically migrated to the v2 format so I don't have to reinstall all my packages.
+
 ## Phase 2 — Registry and advanced commands
 
 37. As a package creator, I want to publish my package to a centralized registry (`rk publish`) to make it discoverable by other teams.
