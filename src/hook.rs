@@ -179,7 +179,7 @@ pub struct DeployedHookEntry {
     pub command: String,
 }
 
-pub fn translate_event(renkei_event: &str) -> Option<&'static str> {
+fn translate_event(renkei_event: &str) -> Option<&'static str> {
     match renkei_event {
         "before_tool" => Some("PreToolUse"),
         "after_tool" => Some("PostToolUse"),
@@ -196,7 +196,7 @@ pub fn translate_event(renkei_event: &str) -> Option<&'static str> {
     }
 }
 
-pub fn translate_event_cursor(renkei_event: &str) -> Option<&'static str> {
+fn translate_event_cursor(renkei_event: &str) -> Option<&'static str> {
     match renkei_event {
         "before_tool" => Some("preToolUse"),
         "after_tool" => Some("postToolUse"),
@@ -209,7 +209,7 @@ pub fn translate_event_cursor(renkei_event: &str) -> Option<&'static str> {
     }
 }
 
-pub fn translate_event_codex(renkei_event: &str) -> Option<&'static str> {
+fn translate_event_codex(renkei_event: &str) -> Option<&'static str> {
     match renkei_event {
         "before_tool" => Some("PreToolUse"),
         "after_tool" => Some("PostToolUse"),
@@ -220,7 +220,7 @@ pub fn translate_event_codex(renkei_event: &str) -> Option<&'static str> {
     }
 }
 
-pub fn translate_event_gemini(renkei_event: &str) -> Option<&'static str> {
+fn translate_event_gemini(renkei_event: &str) -> Option<&'static str> {
     match renkei_event {
         "before_tool" => Some("BeforeTool"),
         "after_tool" => Some("AfterTool"),
@@ -240,7 +240,7 @@ pub fn parse_hook_file(path: &Path) -> Result<Vec<RenkeiHook>> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ClaudeHookEntry {
+struct ClaudeHookEntry {
     #[serde(rename = "type")]
     pub hook_type: String,
     pub command: String,
@@ -249,15 +249,15 @@ pub struct ClaudeHookEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ClaudeHookGroup {
+struct ClaudeHookGroup {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matcher: Option<String>,
-    pub hooks: Vec<ClaudeHookEntry>,
+    matcher: Option<String>,
+    hooks: Vec<ClaudeHookEntry>,
 }
 
 /// Translate Renkei hooks to the nested group format (Claude/Codex/Gemini), using the
 /// provided event translation function.
-pub fn translate_hooks_with<F>(
+fn translate_hooks_with<F>(
     renkei_hooks: &[RenkeiHook],
     translate_fn: F,
 ) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>>
@@ -294,7 +294,7 @@ where
     Ok(result)
 }
 
-pub fn translate_hooks(
+fn translate_hooks(
     renkei_hooks: &[RenkeiHook],
 ) -> Result<BTreeMap<String, Vec<ClaudeHookGroup>>> {
     translate_hooks_with(renkei_hooks, translate_event)
@@ -302,14 +302,14 @@ pub fn translate_hooks(
 
 /// Cursor hook entry — flat format (no nested `hooks` array).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CursorHookEntry {
-    pub command: String,
+struct CursorHookEntry {
+    command: String,
     #[serde(rename = "type")]
-    pub hook_type: String,
+    hook_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<u64>,
+    timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matcher: Option<String>,
+    matcher: Option<String>,
 }
 
 /// Translate Renkei hooks to flat-entry format using the provided translation function.
@@ -341,7 +341,7 @@ where
 }
 
 /// Translate Renkei hooks to Cursor's flat-entry format.
-pub fn translate_hooks_cursor(
+fn translate_hooks_cursor(
     renkei_hooks: &[RenkeiHook],
 ) -> Result<BTreeMap<String, Vec<CursorHookEntry>>> {
     translate_hooks_cursor_with(renkei_hooks, translate_event_cursor)
@@ -349,7 +349,7 @@ pub fn translate_hooks_cursor(
 
 /// Write/merge translated cursor hooks into a standalone `hooks.json` file.
 /// Returns deployed entries for tracking.
-pub fn write_cursor_hooks(
+fn write_cursor_hooks(
     hooks_path: &Path,
     translated: &BTreeMap<String, Vec<CursorHookEntry>>,
 ) -> Result<Vec<DeployedHookEntry>> {
@@ -395,8 +395,7 @@ pub fn write_cursor_hooks(
 }
 
 /// Remove cursor hook entries from a standalone `hooks.json` file.
-#[allow(dead_code)]
-pub fn remove_cursor_hooks(hooks_path: &Path, entries_to_remove: &[DeployedHookEntry]) -> Result<()> {
+fn remove_cursor_hooks(hooks_path: &Path, entries_to_remove: &[DeployedHookEntry]) -> Result<()> {
     let mut file: serde_json::Value = match std::fs::read_to_string(hooks_path) {
         Ok(content) => serde_json::from_str(&content)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -439,7 +438,7 @@ pub fn remove_cursor_hooks(hooks_path: &Path, entries_to_remove: &[DeployedHookE
 
 /// Write/merge translated hooks (nested format) to a standalone `hooks.json` file.
 /// Used by Codex backend. Returns deployed entries for tracking.
-pub fn write_standalone_hooks(
+fn write_standalone_hooks(
     hooks_path: &Path,
     translated: &BTreeMap<String, Vec<ClaudeHookGroup>>,
 ) -> Result<Vec<DeployedHookEntry>> {
@@ -484,8 +483,7 @@ pub fn write_standalone_hooks(
 }
 
 /// Remove hook entries from a standalone `hooks.json` file (Codex format).
-#[allow(dead_code)]
-pub fn remove_standalone_hooks(
+fn remove_standalone_hooks(
     hooks_path: &Path,
     entries_to_remove: &[DeployedHookEntry],
 ) -> Result<()> {
@@ -500,7 +498,7 @@ fn write_settings(path: &Path, value: &serde_json::Value) -> Result<()> {
     json_file::write_json_pretty(path, value)
 }
 
-pub fn merge_hooks_into_settings(
+fn merge_hooks_into_settings(
     settings_path: &Path,
     translated: &BTreeMap<String, Vec<ClaudeHookGroup>>,
 ) -> Result<Vec<DeployedHookEntry>> {
@@ -545,7 +543,7 @@ pub fn merge_hooks_into_settings(
     Ok(deployed_entries)
 }
 
-pub fn remove_hooks_from_settings(
+fn remove_hooks_from_settings(
     settings_path: &Path,
     entries_to_remove: &[DeployedHookEntry],
 ) -> Result<()> {
