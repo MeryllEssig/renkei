@@ -99,19 +99,19 @@ Transform the single-backend system into a multi-backend architecture. This is t
 
 ### Acceptance criteria
 
-- [ ] `BackendRegistry` resolves backends from manifest + detection
-- [ ] `AgentsBackend` deploys skills to `.agents/skills/renkei-{name}/SKILL.md`
-- [ ] `rk install ./pkg` with manifest `["claude", "agents"]` deploys to both locations
-- [ ] Install cache v2 groups artifacts per backend
-- [ ] Loading a v1 cache auto-migrates to v2 under `"claude"` key
-- [ ] Warning printed when configured backend not detected
-- [ ] Error when no backend in final set
-- [ ] `--force` skips manifest check but still filters by detection
-- [ ] Rollback removes artifacts from ALL backends on error
-- [ ] `rk uninstall` cleans up artifacts across all backends
-- [ ] `rk list` shows per-backend breakdown
-- [ ] `rk doctor` checks per-backend health
-- [ ] All existing tests pass (iso-functionality for Claude-only installs)
+- [x] `BackendRegistry` resolves backends from manifest + detection
+- [x] `AgentsBackend` deploys skills to `.agents/skills/renkei-{name}/SKILL.md`
+- [x] `rk install ./pkg` with manifest `["claude", "agents"]` deploys to both locations
+- [x] Install cache v2 groups artifacts per backend
+- [x] Loading a v1 cache auto-migrates to v2 under `"claude"` key
+- [x] Warning printed when configured backend not detected
+- [x] Error when no backend in final set
+- [x] `--force` skips manifest check but still filters by detection
+- [x] Rollback removes artifacts from ALL backends on error
+- [x] `rk uninstall` cleans up artifacts across all backends
+- [x] `rk list` shows per-backend breakdown
+- [x] `rk doctor` checks per-backend health
+- [x] All existing tests pass (iso-functionality for Claude-only installs)
 
 ---
 
