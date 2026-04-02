@@ -27,7 +27,7 @@ pub fn detect_conflicts(
                 continue;
             }
 
-            for deployed in &entry.deployed_artifacts {
+            for deployed in entry.all_artifacts() {
                 if deployed.artifact_type == art.kind && deployed.name == art.name {
                     conflicts.push(Conflict {
                         artifact_kind: art.kind.clone(),
@@ -46,7 +46,7 @@ pub fn detect_conflicts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::install_cache::{DeployedArtifactEntry, PackageEntry};
+    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, PackageEntry};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -59,23 +59,30 @@ mod tests {
     }
 
     fn make_cache_entry(artifacts: Vec<(ArtifactKind, &str)>) -> PackageEntry {
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts: artifacts
+                    .into_iter()
+                    .map(|(kind, name)| DeployedArtifactEntry {
+                        artifact_type: kind,
+                        name: name.to_string(),
+                        deployed_path: format!("/p/{name}"),
+                        deployed_hooks: vec![],
+                        original_name: None,
+                    })
+                    .collect(),
+                mcp_servers: vec![],
+            },
+        );
         PackageEntry {
             version: "1.0.0".to_string(),
             source: "local".to_string(),
             source_path: "/tmp/pkg".to_string(),
             integrity: "abc".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: artifacts
-                .into_iter()
-                .map(|(kind, name)| DeployedArtifactEntry {
-                    artifact_type: kind,
-                    name: name.to_string(),
-                    deployed_path: format!("/p/{name}"),
-                    deployed_hooks: vec![],
-                    original_name: None,
-                })
-                .collect(),
-            deployed_mcp_servers: vec![],
+            deployed,
             resolved: None,
             tag: None,
         }
@@ -85,7 +92,7 @@ mod tests {
     fn test_no_conflict_empty_cache() {
         let artifacts = vec![make_artifact(ArtifactKind::Skill, "review")];
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -101,7 +108,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Skill, "review")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         // Installing the same package — no conflict
@@ -118,7 +125,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Skill, "review")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -137,7 +144,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Agent, "deploy")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -155,7 +162,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Agent, "review")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -171,7 +178,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Hook, "lint")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -193,7 +200,7 @@ mod tests {
             ]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
@@ -212,7 +219,7 @@ mod tests {
             make_cache_entry(vec![(ArtifactKind::Skill, "review")]),
         );
         let cache = InstallCache {
-            version: 1,
+            version: 2,
             packages,
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");

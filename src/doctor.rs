@@ -55,7 +55,7 @@ impl DoctorReport {
 
 fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
-    for artifact in &entry.deployed_artifacts {
+    for artifact in entry.all_artifacts() {
         match artifact.artifact_type {
             ArtifactKind::Skill | ArtifactKind::Agent => {
                 if !Path::new(&artifact.deployed_path).exists() {
@@ -89,7 +89,7 @@ fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
     let archive_path = Path::new(&entry.archive_path);
 
-    for artifact in &entry.deployed_artifacts {
+    for artifact in entry.all_artifacts() {
         if artifact.artifact_type != ArtifactKind::Skill {
             continue;
         }
@@ -150,7 +150,7 @@ fn check_env_vars(entry: &PackageEntry) -> Vec<DiagnosticKind> {
 
 fn check_hooks(entry: &PackageEntry, settings: &serde_json::Value) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
-    for artifact in &entry.deployed_artifacts {
+    for artifact in entry.all_artifacts() {
         for hook in &artifact.deployed_hooks {
             if !hook_exists_in_settings(settings, &hook.event, &hook.matcher, &hook.command) {
                 issues.push(DiagnosticKind::HookMissing {
@@ -199,14 +199,14 @@ fn hook_exists_in_settings(
 
 fn check_mcp(entry: &PackageEntry, claude_config: &serde_json::Value) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
-    for server_name in &entry.deployed_mcp_servers {
+    for server_name in entry.all_mcp_servers() {
         let exists = claude_config
             .get("mcpServers")
             .and_then(|m| m.get(server_name))
             .is_some();
         if !exists {
             issues.push(DiagnosticKind::McpMissing {
-                server_name: server_name.clone(),
+                server_name: server_name.to_string(),
             });
         }
     }
@@ -395,9 +395,10 @@ pub fn run_doctor(config: &Config, global: bool, backend: &dyn Backend) -> Resul
 mod tests {
     use super::*;
     use crate::hook::DeployedHookEntry;
-    use crate::install_cache::DeployedArtifactEntry;
+    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry};
     use crate::manifest::{ManifestScope, ValidatedManifest};
     use semver::Version;
+    use std::collections::HashMap;
     use tempfile::tempdir;
 
     #[test]
@@ -438,14 +439,21 @@ mod tests {
     }
 
     fn make_entry(artifacts: Vec<DeployedArtifactEntry>) -> PackageEntry {
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts,
+                mcp_servers: vec![],
+            },
+        );
         PackageEntry {
             version: "1.0.0".to_string(),
             source: "local".to_string(),
             source_path: "/tmp/pkg".to_string(),
             integrity: "abc".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: artifacts,
-            deployed_mcp_servers: vec![],
+            deployed,
             resolved: None,
             tag: None,
         }
@@ -853,6 +861,12 @@ mod tests {
 
     // -- MCP presence tests --
 
+    fn set_mcp_servers(entry: &mut PackageEntry, servers: Vec<String>) {
+        if let Some(claude) = entry.deployed.get_mut("claude") {
+            claude.mcp_servers = servers;
+        }
+    }
+
     #[test]
     fn test_mcp_present() {
         let config = serde_json::json!({
@@ -861,7 +875,7 @@ mod tests {
             }
         });
         let mut entry = make_entry(vec![]);
-        entry.deployed_mcp_servers = vec!["test-server".to_string()];
+        set_mcp_servers(&mut entry, vec!["test-server".to_string()]);
         assert!(check_mcp(&entry, &config).is_empty());
     }
 
@@ -869,7 +883,7 @@ mod tests {
     fn test_mcp_missing() {
         let config = serde_json::json!({});
         let mut entry = make_entry(vec![]);
-        entry.deployed_mcp_servers = vec!["test-server".to_string()];
+        set_mcp_servers(&mut entry, vec!["test-server".to_string()]);
         let issues = check_mcp(&entry, &config);
         assert_eq!(issues.len(), 1);
         assert!(
@@ -881,7 +895,7 @@ mod tests {
     fn test_mcp_no_mcp_servers_key() {
         let config = serde_json::json!({"projects": {}});
         let mut entry = make_entry(vec![]);
-        entry.deployed_mcp_servers = vec!["srv".to_string()];
+        set_mcp_servers(&mut entry, vec!["srv".to_string()]);
         let issues = check_mcp(&entry, &config);
         assert_eq!(issues.len(), 1);
     }
@@ -894,7 +908,10 @@ mod tests {
             }
         });
         let mut entry = make_entry(vec![]);
-        entry.deployed_mcp_servers = vec!["server-a".to_string(), "server-b".to_string()];
+        set_mcp_servers(
+            &mut entry,
+            vec!["server-a".to_string(), "server-b".to_string()],
+        );
         let issues = check_mcp(&entry, &config);
         assert_eq!(issues.len(), 1);
         assert!(

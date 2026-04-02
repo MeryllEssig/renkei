@@ -66,7 +66,7 @@ fn test_install_valid_local_package() {
         cache["packages"]["@test/sample-workflow"]["version"],
         "0.1.0"
     );
-    let artifacts = &cache["packages"]["@test/sample-workflow"]["deployed_artifacts"];
+    let artifacts = &cache["packages"]["@test/sample-workflow"]["deployed"]["claude"]["artifacts"];
     assert_eq!(artifacts.as_array().unwrap().len(), 1);
     assert_eq!(artifacts[0]["name"], "review");
 }
@@ -224,7 +224,7 @@ fn test_install_mixed_package() {
     let cache_path = home.path().join(".renkei/install-cache.json");
     let cache_content = fs::read_to_string(&cache_path).unwrap();
     let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
-    let artifacts = &cache["packages"]["@test/mixed"]["deployed_artifacts"];
+    let artifacts = &cache["packages"]["@test/mixed"]["deployed"]["claude"]["artifacts"];
     assert_eq!(artifacts.as_array().unwrap().len(), 3);
 }
 
@@ -284,7 +284,7 @@ fn test_reinstall_replaces_artifacts() {
     let cache: serde_json::Value = serde_json::from_str(&cache_content).unwrap();
     let packages = cache["packages"].as_object().unwrap();
     assert_eq!(packages.len(), 1);
-    let artifacts = &packages["@test/mixed"]["deployed_artifacts"];
+    let artifacts = &packages["@test/mixed"]["deployed"]["claude"]["artifacts"];
     assert_eq!(artifacts.as_array().unwrap().len(), 3);
 
     // Verify all files still exist after reinstall
@@ -368,7 +368,7 @@ fn test_install_hook_package() {
     let cache_path = home.path().join(".renkei/install-cache.json");
     let cache: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
-    let artifacts = &cache["packages"]["@test/hook-pkg"]["deployed_artifacts"];
+    let artifacts = &cache["packages"]["@test/hook-pkg"]["deployed"]["claude"]["artifacts"];
     assert_eq!(artifacts.as_array().unwrap().len(), 1);
     assert_eq!(artifacts[0]["artifact_type"], "hook");
     assert!(artifacts[0]["deployed_hooks"].is_array());
@@ -474,7 +474,7 @@ fn test_install_mixed_with_hooks() {
         &fs::read_to_string(home.path().join(".renkei/install-cache.json")).unwrap(),
     )
     .unwrap();
-    let artifacts = cache["packages"]["@test/mixed-hooks"]["deployed_artifacts"]
+    let artifacts = cache["packages"]["@test/mixed-hooks"]["deployed"]["claude"]["artifacts"]
         .as_array()
         .unwrap();
     assert_eq!(artifacts.len(), 3);
@@ -649,7 +649,7 @@ fn test_install_mcp_tracked_in_cache() {
     )
     .unwrap();
     let pkg = &cache["packages"]["@test/mcp-pkg"];
-    let mcp_servers = pkg["deployed_mcp_servers"].as_array().unwrap();
+    let mcp_servers = pkg["deployed"]["claude"]["mcp_servers"].as_array().unwrap();
     assert_eq!(mcp_servers.len(), 1);
     assert_eq!(mcp_servers[0], "test-server");
 }
@@ -1379,13 +1379,13 @@ fn test_conflict_force_overwrites() {
     let cache_path = home.path().join(".renkei/install-cache.json");
     let cache: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
-    let a_artifacts = &cache["packages"]["@test/conflict-a"]["deployed_artifacts"];
+    let a_artifacts = &cache["packages"]["@test/conflict-a"]["deployed"]["claude"]["artifacts"];
     assert_eq!(
         a_artifacts.as_array().unwrap().len(),
         0,
         "A should have no artifacts after force overwrite"
     );
-    let b_artifacts = &cache["packages"]["@test/conflict-b"]["deployed_artifacts"];
+    let b_artifacts = &cache["packages"]["@test/conflict-b"]["deployed"]["claude"]["artifacts"];
     assert_eq!(b_artifacts.as_array().unwrap().len(), 1);
     assert_eq!(b_artifacts[0]["name"], "review");
 }
@@ -1522,7 +1522,7 @@ fn test_force_preserves_other_artifacts() {
     let cache_path = home.path().join(".renkei/install-cache.json");
     let cache: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
-    let multi_artifacts = cache["packages"]["@test/conflict-multi-a"]["deployed_artifacts"]
+    let multi_artifacts = cache["packages"]["@test/conflict-multi-a"]["deployed"]["claude"]["artifacts"]
         .as_array()
         .unwrap();
     assert_eq!(multi_artifacts.len(), 1, "Should only have 'lint' left");

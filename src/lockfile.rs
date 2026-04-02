@@ -399,8 +399,7 @@ mod tests {
             source_path: "git@github.com:user/repo".to_string(),
             integrity: "deadbeef".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: vec![],
-            deployed_mcp_servers: vec![],
+            deployed: std::collections::HashMap::new(),
             resolved: Some("abc123".to_string()),
             tag: Some("v1.0.0".to_string()),
         };
@@ -420,8 +419,7 @@ mod tests {
             source_path: "/tmp/pkg".to_string(),
             integrity: "aabbcc".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: vec![],
-            deployed_mcp_servers: vec![],
+            deployed: std::collections::HashMap::new(),
             resolved: None,
             tag: None,
         };

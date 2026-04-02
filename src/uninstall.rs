@@ -42,7 +42,8 @@ mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
     use crate::hook::DeployedHookEntry;
-    use crate::install_cache::{DeployedArtifactEntry, PackageEntry};
+    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, PackageEntry};
+    use std::collections::HashMap;
     use tempfile::tempdir;
 
     fn make_config_global(home: &std::path::Path) -> Config {
@@ -53,24 +54,41 @@ mod tests {
         Config::for_project(home.to_path_buf(), project.to_path_buf())
     }
 
-    fn make_skill_entry(skill_name: &str, deployed_path: &str) -> PackageEntry {
+    fn make_v2_package(
+        artifacts: Vec<DeployedArtifactEntry>,
+        mcp_servers: Vec<String>,
+    ) -> PackageEntry {
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts,
+                mcp_servers,
+            },
+        );
         PackageEntry {
             version: "1.0.0".to_string(),
             source: "local".to_string(),
             source_path: "/tmp/pkg".to_string(),
             integrity: "abc".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: vec![DeployedArtifactEntry {
+            deployed,
+            resolved: None,
+            tag: None,
+        }
+    }
+
+    fn make_skill_entry(skill_name: &str, deployed_path: &str) -> PackageEntry {
+        make_v2_package(
+            vec![DeployedArtifactEntry {
                 artifact_type: ArtifactKind::Skill,
                 name: skill_name.to_string(),
                 deployed_path: deployed_path.to_string(),
                 deployed_hooks: vec![],
                 original_name: None,
             }],
-            deployed_mcp_servers: vec![],
-            resolved: None,
-            tag: None,
-        }
+            vec![],
+        )
     }
 
     #[test]
@@ -117,23 +135,16 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/deploy",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp/pkg".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![DeployedArtifactEntry {
+            make_v2_package(
+                vec![DeployedArtifactEntry {
                     artifact_type: ArtifactKind::Agent,
                     name: "deploy".to_string(),
                     deployed_path: agent_path.to_str().unwrap().to_string(),
                     deployed_hooks: vec![],
                     original_name: None,
                 }],
-                deployed_mcp_servers: vec![],
-                resolved: None,
-                tag: None,
-            },
+                vec![],
+            ),
         );
         cache.save(&config).unwrap();
 
@@ -173,13 +184,8 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/hooks-pkg",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp/pkg".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![DeployedArtifactEntry {
+            make_v2_package(
+                vec![DeployedArtifactEntry {
                     artifact_type: ArtifactKind::Hook,
                     name: "lint".to_string(),
                     deployed_path: settings_path.to_str().unwrap().to_string(),
@@ -190,10 +196,8 @@ mod tests {
                     }],
                     original_name: None,
                 }],
-                deployed_mcp_servers: vec![],
-                resolved: None,
-                tag: None,
-            },
+                vec![],
+            ),
         );
         cache.save(&config).unwrap();
 
@@ -229,17 +233,7 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/mcp-pkg",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp/pkg".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![],
-                deployed_mcp_servers: vec!["test-server".to_string()],
-                resolved: None,
-                tag: None,
-            },
+            make_v2_package(vec![], vec!["test-server".to_string()]),
         );
         cache.save(&config).unwrap();
 
@@ -322,17 +316,7 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/pkg",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![],
-                deployed_mcp_servers: vec![],
-                resolved: None,
-                tag: None,
-            },
+            make_v2_package(vec![], vec![]),
         );
         cache.save(&config).unwrap();
 
@@ -398,17 +382,7 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/pkg",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![],
-                deployed_mcp_servers: vec![],
-                resolved: None,
-                tag: None,
-            },
+            make_v2_package(vec![], vec![]),
         );
         cache.save(&config).unwrap();
 
@@ -430,17 +404,7 @@ mod tests {
         let mut cache = InstallCache::load(&config).unwrap();
         cache.upsert_package(
             "@test/pkg",
-            PackageEntry {
-                version: "1.0.0".to_string(),
-                source: "local".to_string(),
-                source_path: "/tmp".to_string(),
-                integrity: "abc".to_string(),
-                archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: vec![],
-                deployed_mcp_servers: vec![],
-                resolved: None,
-                tag: None,
-            },
+            make_v2_package(vec![], vec![]),
         );
         cache.save(&config).unwrap();
 

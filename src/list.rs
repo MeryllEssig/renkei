@@ -76,14 +76,14 @@ fn format_artifact_line(entry: &PackageEntry) -> String {
 
 fn format_artifact_summary(entry: &PackageEntry) -> String {
     let (mut skills, mut agents, mut hooks) = (0, 0, 0);
-    for a in &entry.deployed_artifacts {
+    for a in entry.all_artifacts() {
         match a.artifact_type {
             ArtifactKind::Skill => skills += 1,
             ArtifactKind::Agent => agents += 1,
             ArtifactKind::Hook => hooks += 1,
         }
     }
-    let mcp = entry.deployed_mcp_servers.len();
+    let mcp = entry.all_mcp_servers().len();
 
     let mut parts = Vec::new();
     if skills > 0 {
@@ -112,13 +112,31 @@ fn pluralize(count: usize, singular: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::install_cache::DeployedArtifactEntry;
+    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry};
+    use std::collections::HashMap;
 
     fn make_entry(
         source: &str,
         version: &str,
         artifacts: Vec<(ArtifactKind, &str)>,
     ) -> PackageEntry {
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts: artifacts
+                    .into_iter()
+                    .map(|(kind, name)| DeployedArtifactEntry {
+                        artifact_type: kind,
+                        name: name.to_string(),
+                        deployed_path: format!("/deploy/{name}"),
+                        deployed_hooks: vec![],
+                        original_name: None,
+                    })
+                    .collect(),
+                mcp_servers: vec![],
+            },
+        );
         PackageEntry {
             version: version.to_string(),
             source: source.to_string(),
@@ -129,17 +147,7 @@ mod tests {
             },
             integrity: "abc123".to_string(),
             archive_path: "/tmp/a.tar.gz".to_string(),
-            deployed_artifacts: artifacts
-                .into_iter()
-                .map(|(kind, name)| DeployedArtifactEntry {
-                    artifact_type: kind,
-                    name: name.to_string(),
-                    deployed_path: format!("/deploy/{name}"),
-                    deployed_hooks: vec![],
-                    original_name: None,
-                })
-                .collect(),
-            deployed_mcp_servers: vec![],
+            deployed,
             resolved: if source == "git" {
                 Some("abcdef1234567890".to_string())
             } else {
@@ -151,7 +159,7 @@ mod tests {
 
     fn make_cache(packages: Vec<(&str, PackageEntry)>) -> InstallCache {
         InstallCache {
-            version: 1,
+            version: 2,
             packages: packages
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
@@ -247,7 +255,11 @@ mod tests {
     #[test]
     fn test_format_with_mcp_servers() {
         let mut entry = make_entry("local", "1.0.0", vec![]);
-        entry.deployed_mcp_servers = vec!["server-a".to_string(), "server-b".to_string()];
+        entry
+            .deployed
+            .get_mut("claude")
+            .unwrap()
+            .mcp_servers = vec!["server-a".to_string(), "server-b".to_string()];
         let cache = make_cache(vec![("@test/mcp", entry)]);
         let output = format_package_list(&cache, true);
         assert!(output.contains("2 mcp servers"));

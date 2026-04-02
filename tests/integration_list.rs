@@ -46,7 +46,7 @@ fn slug_path(path: &Path) -> String {
 }
 
 const CACHE_TWO_PACKAGES: &str = r#"{
-    "version": 1,
+    "version": 2,
     "packages": {
         "@acme/review": {
             "version": "1.0.0",
@@ -54,9 +54,14 @@ const CACHE_TWO_PACKAGES: &str = r#"{
             "source_path": "/tmp/review",
             "integrity": "abc",
             "archive_path": "/tmp/a.tar.gz",
-            "deployed_artifacts": [
-                {"artifact_type": "skill", "name": "review", "deployed_path": "/p/review"}
-            ]
+            "deployed": {
+                "claude": {
+                    "artifacts": [
+                        {"artifact_type": "skill", "name": "review", "deployed_path": "/p/review"}
+                    ],
+                    "mcp_servers": []
+                }
+            }
         },
         "@acme/deploy": {
             "version": "2.0.0",
@@ -64,9 +69,14 @@ const CACHE_TWO_PACKAGES: &str = r#"{
             "source_path": "git@github.com:acme/deploy",
             "integrity": "def",
             "archive_path": "/tmp/b.tar.gz",
-            "deployed_artifacts": [
-                {"artifact_type": "agent", "name": "deploy", "deployed_path": "/p/deploy"}
-            ],
+            "deployed": {
+                "claude": {
+                    "artifacts": [
+                        {"artifact_type": "agent", "name": "deploy", "deployed_path": "/p/deploy"}
+                    ],
+                    "mcp_servers": []
+                }
+            },
             "resolved": "abcdef1234567890",
             "tag": "v2.0.0"
         }
@@ -134,7 +144,7 @@ fn test_list_project_with_packages() {
     init_git_repo(project.path());
 
     let cache_json = r#"{
-        "version": 1,
+        "version": 2,
         "packages": {
             "@test/tools": {
                 "version": "0.1.0",
@@ -142,9 +152,14 @@ fn test_list_project_with_packages() {
                 "source_path": "/tmp/tools",
                 "integrity": "abc",
                 "archive_path": "/tmp/a.tar.gz",
-                "deployed_artifacts": [
-                    {"artifact_type": "skill", "name": "lint", "deployed_path": "/p/lint"}
-                ]
+                "deployed": {
+                    "claude": {
+                        "artifacts": [
+                            {"artifact_type": "skill", "name": "lint", "deployed_path": "/p/lint"}
+                        ],
+                        "mcp_servers": []
+                    }
+                }
             }
         }
     }"#;
@@ -172,7 +187,7 @@ fn test_list_scope_isolation() {
 
     // Global cache has @global/pkg
     let global_json = r#"{
-        "version": 1,
+        "version": 2,
         "packages": {
             "@global/pkg": {
                 "version": "1.0.0",
@@ -180,7 +195,12 @@ fn test_list_scope_isolation() {
                 "source_path": "/tmp",
                 "integrity": "abc",
                 "archive_path": "/tmp/a.tar.gz",
-                "deployed_artifacts": []
+                "deployed": {
+                    "claude": {
+                        "artifacts": [],
+                        "mcp_servers": []
+                    }
+                }
             }
         }
     }"#;
@@ -188,7 +208,7 @@ fn test_list_scope_isolation() {
 
     // Project cache has @project/pkg
     let project_json = r#"{
-        "version": 1,
+        "version": 2,
         "packages": {
             "@project/pkg": {
                 "version": "2.0.0",
@@ -196,7 +216,12 @@ fn test_list_scope_isolation() {
                 "source_path": "/tmp",
                 "integrity": "def",
                 "archive_path": "/tmp/b.tar.gz",
-                "deployed_artifacts": []
+                "deployed": {
+                    "claude": {
+                        "artifacts": [],
+                        "mcp_servers": []
+                    }
+                }
             }
         }
     }"#;

@@ -13,7 +13,7 @@ use crate::env_check;
 use crate::error::{RenkeiError, Result};
 use crate::frontmatter;
 use crate::hook;
-use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
+use crate::install_cache::{self, DeployedArtifactEntry, InstallCache, PackageEntry};
 use crate::lockfile::{Lockfile, LockfileEntry};
 use crate::manifest::{self, Manifest, RequestedScope};
 use crate::mcp;
@@ -95,7 +95,7 @@ pub(crate) fn cleanup_previous_installation(
     config: &Config,
 ) {
     if let Some(entry) = install_cache.packages.get(full_name) {
-        for artifact in &entry.deployed_artifacts {
+        for artifact in entry.all_artifacts() {
             undo_artifact(
                 &artifact.artifact_type,
                 Path::new(&artifact.deployed_path),
@@ -103,12 +103,12 @@ pub(crate) fn cleanup_previous_installation(
                 config,
             );
         }
-        if !entry.deployed_mcp_servers.is_empty() {
-            let mcp_entries: Vec<mcp::DeployedMcpEntry> = entry
-                .deployed_mcp_servers
+        let mcp_servers = entry.all_mcp_servers();
+        if !mcp_servers.is_empty() {
+            let mcp_entries: Vec<mcp::DeployedMcpEntry> = mcp_servers
                 .iter()
                 .map(|name| mcp::DeployedMcpEntry {
-                    server_name: name.clone(),
+                    server_name: name.to_string(),
                 })
                 .collect();
             let _ = mcp::remove_mcp_from_config(&config.claude_config_path(), &mcp_entries);
@@ -234,9 +234,11 @@ pub(crate) fn install_local_with_resolver(
             None => {
                 // Force overwrite: remove the artifact from the previous owner's cache
                 if let Some(owner_entry) = install_cache.packages.get_mut(&c.owner_package) {
-                    owner_entry.deployed_artifacts.retain(|a| {
-                        !(a.artifact_type == c.artifact_kind && a.name == c.artifact_name)
-                    });
+                    for deployment in owner_entry.deployed.values_mut() {
+                        deployment.artifacts.retain(|a| {
+                            !(a.artifact_type == c.artifact_kind && a.name == c.artifact_name)
+                        });
+                    }
                 }
             }
             Some(new_name) => {
@@ -341,6 +343,15 @@ pub(crate) fn install_local_with_resolver(
         })
         .collect();
 
+    let mut deployed_map = HashMap::new();
+    deployed_map.insert(
+        backend.name().to_string(),
+        install_cache::BackendDeployment {
+            artifacts: deployed_entries,
+            mcp_servers: deployed_mcp_servers,
+        },
+    );
+
     install_cache.upsert_package(
         &manifest.full_name,
         PackageEntry {
@@ -352,8 +363,7 @@ pub(crate) fn install_local_with_resolver(
             },
             integrity,
             archive_path: archive_path.to_string_lossy().to_string(),
-            deployed_artifacts: deployed_entries,
-            deployed_mcp_servers,
+            deployed: deployed_map,
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
         },
@@ -399,11 +409,13 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::artifact::ArtifactKind;
-    use crate::install_cache::{DeployedArtifactEntry, InstallCache, PackageEntry};
+    use crate::install_cache::{
+        BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry,
+    };
     use std::collections::HashMap;
 
     fn make_cache_with_artifacts(artifacts: Vec<(ArtifactKind, &str, &str)>) -> InstallCache {
-        let deployed: Vec<DeployedArtifactEntry> = artifacts
+        let deployed_entries: Vec<DeployedArtifactEntry> = artifacts
             .into_iter()
             .map(|(kind, name, path)| DeployedArtifactEntry {
                 artifact_type: kind,
@@ -413,6 +425,14 @@ mod tests {
                 original_name: None,
             })
             .collect();
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts: deployed_entries,
+                mcp_servers: vec![],
+            },
+        );
         let mut packages = HashMap::new();
         packages.insert(
             "@test/pkg".to_string(),
@@ -422,14 +442,13 @@ mod tests {
                 source_path: "/tmp/pkg".to_string(),
                 integrity: "abc".to_string(),
                 archive_path: "/tmp/a.tar.gz".to_string(),
-                deployed_artifacts: deployed,
-                deployed_mcp_servers: vec![],
+                deployed,
                 resolved: None,
                 tag: None,
             },
         );
         InstallCache {
-            version: 1,
+            version: 2,
             packages,
         }
     }
@@ -819,15 +838,17 @@ mod tests {
         // A's cache should no longer list "review"
         let cache = InstallCache::load(&config).unwrap();
         let a_entry = &cache.packages["@test/conflict-a"];
-        assert!(
-            a_entry.deployed_artifacts.is_empty(),
+        assert_eq!(
+            a_entry.all_artifacts().count(),
+            0,
             "Package A should have no deployed artifacts after force overwrite"
         );
 
         // B's cache should list "review"
         let b_entry = &cache.packages["@test/conflict-b"];
-        assert_eq!(b_entry.deployed_artifacts.len(), 1);
-        assert_eq!(b_entry.deployed_artifacts[0].name, "review");
+        let b_arts: Vec<_> = b_entry.all_artifacts().collect();
+        assert_eq!(b_arts.len(), 1);
+        assert_eq!(b_arts[0].name, "review");
     }
 
     #[test]
@@ -950,9 +971,10 @@ mod tests {
         // Check install-cache
         let cache = InstallCache::load(&config).unwrap();
         let b_entry = &cache.packages["@test/conflict-b"];
-        assert_eq!(b_entry.deployed_artifacts[0].name, "review-v2");
+        let b_arts: Vec<_> = b_entry.all_artifacts().collect();
+        assert_eq!(b_arts[0].name, "review-v2");
         assert_eq!(
-            b_entry.deployed_artifacts[0].original_name.as_deref(),
+            b_arts[0].original_name.as_deref(),
             Some("review")
         );
     }

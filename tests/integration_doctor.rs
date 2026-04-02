@@ -317,7 +317,7 @@ fn test_doctor_backend_missing() {
     // Do NOT create .claude dir
 
     let cache_json = r#"{
-        "version": 1,
+        "version": 2,
         "packages": {
             "@test/pkg": {
                 "version": "1.0.0",
@@ -325,7 +325,12 @@ fn test_doctor_backend_missing() {
                 "source_path": "/tmp",
                 "integrity": "abc",
                 "archive_path": "/nonexistent/archive.tar.gz",
-                "deployed_artifacts": []
+                "deployed": {
+                    "claude": {
+                        "artifacts": [],
+                        "mcp_servers": []
+                    }
+                }
             }
         }
     }"#;
