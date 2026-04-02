@@ -233,17 +233,17 @@ src/doctor/
 
 **Tasks**:
 
-- [ ] Create `src/doctor/` directory structure
-- [ ] Extract `DiagnosticKind`, `PackageDiagnostic`, `DoctorReport`, `ArchiveState` to `doctor/types.rs`
-- [ ] Extract 5 check functions + `hook_exists_in_settings` helper to `doctor/checks.rs`
-- [ ] Implement `DoctorReport::build()` in `doctor/report.rs` (move orchestration loop from `run_doctor`)
-- [ ] Implement `DoctorReport::format()` in `doctor/report.rs` (move `format_report` + `format_check_section`)
-- [ ] Simplify `run_doctor` in `doctor/mod.rs` to: load data → `DoctorReport::build()` → `print!("{}", report.format(...))` → `Ok(report.is_healthy())`
-- [ ] Write boundary tests for `DoctorReport::build()` (construct inputs, assert on returned struct without printing)
-- [ ] Split existing 36 tests into topic-based files under `doctor/tests/`
-- [ ] Extract shared test helpers (`make_entry`, `make_artifact`, `make_hook_entry`) to `doctor/tests/mod.rs`
-- [ ] Note: if Phase 1.2 is done, `run_doctor` uses `PackageStore::packages()` instead of `InstallCache::load()`
-- [ ] Run full test suite, verify iso-functionality
+- [x] Create `src/doctor/` directory structure
+- [x] Extract `DiagnosticKind`, `PackageDiagnostic`, `DoctorReport`, `ArchiveState` to `doctor/types.rs`
+- [x] Extract 5 check functions + `hook_exists_in_settings` helper to `doctor/checks.rs`
+- [x] Implement `DoctorReport::build()` in `doctor/report.rs` (move orchestration loop from `run_doctor`)
+- [x] Implement `DoctorReport::format()` in `doctor/report.rs` (move `format_report` + `format_check_section`)
+- [x] Simplify `run_doctor` in `doctor/mod.rs` to: load data → `DoctorReport::build()` → `print!("{}", report.format(...))` → `Ok(report.is_healthy())`
+- [x] Write boundary tests for `DoctorReport::build()` (construct inputs, assert on returned struct without printing)
+- [x] Split existing 36 tests into topic-based files under `doctor/tests/`
+- [x] Extract shared test helpers (`make_entry`, `make_artifact`, `make_hook_entry`) to `doctor/tests/mod.rs`
+- [x] Note: if Phase 1.2 is done, `run_doctor` uses `PackageStore::packages()` instead of `InstallCache::load()`
+- [x] Run full test suite, verify iso-functionality
 
 ---
 
