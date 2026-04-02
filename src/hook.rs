@@ -8,6 +8,159 @@ use crate::json_file;
 
 const HOOK_TYPE_COMMAND: &str = "command";
 
+// ---------------------------------------------------------------------------
+// Data-driven hook profiles
+// ---------------------------------------------------------------------------
+
+/// Static mapping from renkei event name → backend-specific event name.
+pub type EventTable = &'static [(&'static str, &'static str)];
+
+/// JSON serialization layout for hooks.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HookLayout {
+    /// Grouped by matcher: `{ "EventName": [{ "matcher": "...", "hooks": [...] }] }`
+    Nested,
+    /// Flat entries: `{ "eventName": [{ "command": "...", "type": "command", "matcher": "..." }] }`
+    Flat,
+}
+
+/// Where translated hooks are written.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HookTarget {
+    /// Merge into an existing settings.json (e.g. Claude, Gemini).
+    MergeIntoSettings,
+    /// Write to a standalone hooks.json (e.g. Cursor, Codex).
+    StandaloneFile,
+}
+
+/// Declarative profile for a backend's hook system.
+pub struct HookProfile {
+    pub events: EventTable,
+    pub layout: HookLayout,
+    pub target: HookTarget,
+}
+
+pub const CLAUDE: HookProfile = HookProfile {
+    events: &[
+        ("before_tool", "PreToolUse"),
+        ("after_tool", "PostToolUse"),
+        ("after_tool_failure", "PostToolUseFailure"),
+        ("on_notification", "Notification"),
+        ("on_session_start", "SessionStart"),
+        ("on_session_end", "SessionEnd"),
+        ("on_stop", "Stop"),
+        ("on_stop_failure", "StopFailure"),
+        ("on_subagent_start", "SubagentStart"),
+        ("on_subagent_stop", "SubagentStop"),
+        ("on_elicitation", "Elicitation"),
+    ],
+    layout: HookLayout::Nested,
+    target: HookTarget::MergeIntoSettings,
+};
+
+pub const CURSOR: HookProfile = HookProfile {
+    events: &[
+        ("before_tool", "preToolUse"),
+        ("after_tool", "postToolUse"),
+        ("after_tool_failure", "postToolUseFailure"),
+        ("on_session_start", "sessionStart"),
+        ("on_session_end", "sessionEnd"),
+        ("on_stop", "stop"),
+        ("user_prompt", "beforeSubmitPrompt"),
+    ],
+    layout: HookLayout::Flat,
+    target: HookTarget::StandaloneFile,
+};
+
+pub const CODEX: HookProfile = HookProfile {
+    events: &[
+        ("before_tool", "PreToolUse"),
+        ("after_tool", "PostToolUse"),
+        ("on_session_start", "SessionStart"),
+        ("on_stop", "Stop"),
+        ("user_prompt", "UserPromptSubmit"),
+    ],
+    layout: HookLayout::Nested,
+    target: HookTarget::StandaloneFile,
+};
+
+pub const GEMINI: HookProfile = HookProfile {
+    events: &[
+        ("before_tool", "BeforeTool"),
+        ("after_tool", "AfterTool"),
+        ("on_session_start", "SessionStart"),
+        ("on_session_end", "SessionEnd"),
+        ("on_notification", "Notification"),
+    ],
+    layout: HookLayout::Nested,
+    target: HookTarget::MergeIntoSettings,
+};
+
+impl HookProfile {
+    /// Translate a renkei event name using this profile's event table.
+    fn translate_event(&self, renkei_event: &str) -> Option<&'static str> {
+        self.events
+            .iter()
+            .find(|(from, _)| *from == renkei_event)
+            .map(|(_, to)| *to)
+    }
+}
+
+/// Translate renkei hooks to backend-specific JSON using the given profile.
+pub fn translate(
+    profile: &HookProfile,
+    renkei_hooks: &[RenkeiHook],
+) -> Result<serde_json::Value> {
+    match profile.layout {
+        HookLayout::Nested => {
+            let map = translate_hooks_with(renkei_hooks, |e| profile.translate_event(e))?;
+            Ok(serde_json::to_value(map)?)
+        }
+        HookLayout::Flat => {
+            let map = translate_hooks_cursor_with(renkei_hooks, |e| profile.translate_event(e))?;
+            Ok(serde_json::to_value(map)?)
+        }
+    }
+}
+
+/// Deploy hooks using the given profile. Returns deployed entries for tracking.
+pub fn deploy(
+    profile: &HookProfile,
+    hooks: &[RenkeiHook],
+    path: &Path,
+) -> Result<Vec<DeployedHookEntry>> {
+    match (profile.layout, profile.target) {
+        (HookLayout::Nested, HookTarget::MergeIntoSettings) => {
+            let translated = translate_hooks_with(hooks, |e| profile.translate_event(e))?;
+            merge_hooks_into_settings(path, &translated)
+        }
+        (HookLayout::Nested, HookTarget::StandaloneFile) => {
+            let translated = translate_hooks_with(hooks, |e| profile.translate_event(e))?;
+            write_standalone_hooks(path, &translated)
+        }
+        (HookLayout::Flat, HookTarget::StandaloneFile) => {
+            let translated =
+                translate_hooks_cursor_with(hooks, |e| profile.translate_event(e))?;
+            write_cursor_hooks(path, &translated)
+        }
+        (HookLayout::Flat, HookTarget::MergeIntoSettings) => {
+            unreachable!("Flat layout with MergeIntoSettings is not supported")
+        }
+    }
+}
+
+/// Remove previously deployed hooks using the given profile.
+pub fn remove(
+    profile: &HookProfile,
+    path: &Path,
+    entries: &[DeployedHookEntry],
+) -> Result<()> {
+    match profile.layout {
+        HookLayout::Nested => remove_hooks_from_settings(path, entries),
+        HookLayout::Flat => remove_cursor_hooks(path, entries),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RenkeiHook {
     pub event: String,
@@ -159,14 +312,18 @@ pub struct CursorHookEntry {
     pub matcher: Option<String>,
 }
 
-/// Translate Renkei hooks to Cursor's flat-entry format.
-pub fn translate_hooks_cursor(
+/// Translate Renkei hooks to flat-entry format using the provided translation function.
+fn translate_hooks_cursor_with<F>(
     renkei_hooks: &[RenkeiHook],
-) -> Result<BTreeMap<String, Vec<CursorHookEntry>>> {
+    translate_fn: F,
+) -> Result<BTreeMap<String, Vec<CursorHookEntry>>>
+where
+    F: Fn(&str) -> Option<&'static str>,
+{
     let mut result: BTreeMap<String, Vec<CursorHookEntry>> = BTreeMap::new();
 
     for hook in renkei_hooks {
-        let event = translate_event_cursor(&hook.event)
+        let event = translate_fn(&hook.event)
             .ok_or_else(|| {
                 RenkeiError::InvalidManifest(format!("Unknown hook event '{}'", hook.event))
             })?
@@ -181,6 +338,13 @@ pub fn translate_hooks_cursor(
     }
 
     Ok(result)
+}
+
+/// Translate Renkei hooks to Cursor's flat-entry format.
+pub fn translate_hooks_cursor(
+    renkei_hooks: &[RenkeiHook],
+) -> Result<BTreeMap<String, Vec<CursorHookEntry>>> {
+    translate_hooks_cursor_with(renkei_hooks, translate_event_cursor)
 }
 
 /// Write/merge translated cursor hooks into a standalone `hooks.json` file.
@@ -908,6 +1072,166 @@ mod tests {
 
         let settings: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert!(settings.get("hooks").is_none());
+    }
+
+    // -- Profile-based translate() tests --
+
+    #[test]
+    fn test_profile_translate_claude() {
+        let hooks = vec![
+            make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5)),
+            make_renkei_hook("on_stop", None, "cleanup.sh", None),
+        ];
+        let result = translate(&CLAUDE, &hooks).unwrap();
+        // Nested format: { "EventName": [{ "matcher": ..., "hooks": [...] }] }
+        let pre = &result["PreToolUse"];
+        assert!(pre.is_array());
+        assert_eq!(pre[0]["matcher"], "bash");
+        assert_eq!(pre[0]["hooks"][0]["command"], "lint.sh");
+        assert_eq!(pre[0]["hooks"][0]["timeout"], 5);
+
+        let stop = &result["Stop"];
+        assert!(stop.is_array());
+        assert!(stop[0].get("matcher").is_none());
+        assert_eq!(stop[0]["hooks"][0]["command"], "cleanup.sh");
+    }
+
+    #[test]
+    fn test_profile_translate_cursor() {
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            Some(5),
+        )];
+        let result = translate(&CURSOR, &hooks).unwrap();
+        // Flat format: { "eventName": [{ "command": ..., "type": ..., "matcher": ... }] }
+        let pre = &result["preToolUse"];
+        assert!(pre.is_array());
+        assert_eq!(pre[0]["command"], "lint.sh");
+        assert_eq!(pre[0]["type"], "command");
+        assert_eq!(pre[0]["matcher"], "bash");
+        assert_eq!(pre[0]["timeout"], 5);
+    }
+
+    #[test]
+    fn test_profile_translate_codex() {
+        let hooks = vec![make_renkei_hook("user_prompt", None, "check.sh", None)];
+        let result = translate(&CODEX, &hooks).unwrap();
+        // Codex uses nested format with its own event names
+        assert!(result["UserPromptSubmit"].is_array());
+        assert_eq!(result["UserPromptSubmit"][0]["hooks"][0]["command"], "check.sh");
+    }
+
+    #[test]
+    fn test_profile_translate_gemini() {
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("write_file"),
+            "check.sh",
+            None,
+        )];
+        let result = translate(&GEMINI, &hooks).unwrap();
+        assert!(result["BeforeTool"].is_array());
+        assert_eq!(result["BeforeTool"][0]["matcher"], "write_file");
+    }
+
+    #[test]
+    fn test_profile_translate_unknown_event_fails() {
+        let hooks = vec![make_renkei_hook("on_magic", None, "x.sh", None)];
+        assert!(translate(&CLAUDE, &hooks).is_err());
+        assert!(translate(&CURSOR, &hooks).is_err());
+    }
+
+    // -- Profile-based deploy()+remove() roundtrip tests --
+
+    #[test]
+    fn test_profile_deploy_remove_claude() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        fs::write(&path, r#"{"language":"French"}"#).unwrap();
+
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event, "PreToolUse");
+
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["language"], "French");
+        assert!(settings["hooks"]["PreToolUse"].is_array());
+
+        remove(&CLAUDE, &path, &entries).unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["language"], "French");
+        assert!(settings.get("hooks").is_none());
+    }
+
+    #[test]
+    fn test_profile_deploy_remove_cursor() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hooks.json");
+
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let entries = deploy(&CURSOR, &hooks, &path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event, "preToolUse");
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(content["version"], 1);
+        assert_eq!(content["hooks"]["preToolUse"][0]["command"], "lint.sh");
+
+        remove(&CURSOR, &path, &entries).unwrap();
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content["hooks"]
+            .as_object()
+            .map_or(true, |m| m.is_empty()));
+    }
+
+    #[test]
+    fn test_profile_deploy_remove_codex() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hooks.json");
+
+        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let entries = deploy(&CODEX, &hooks, &path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event, "PreToolUse");
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content["hooks"]["PreToolUse"].is_array());
+
+        remove(&CODEX, &path, &entries).unwrap();
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content.get("hooks").is_none());
+    }
+
+    #[test]
+    fn test_profile_deploy_remove_gemini() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        fs::write(&path, r#"{"theme":"dark"}"#).unwrap();
+
+        let hooks = vec![make_renkei_hook("before_tool", Some("write_file"), "check.sh", None)];
+        let entries = deploy(&GEMINI, &hooks, &path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event, "BeforeTool");
+
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["theme"], "dark");
+        assert!(settings["hooks"]["BeforeTool"].is_array());
+
+        remove(&GEMINI, &path, &entries).unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["theme"], "dark");
         assert!(settings.get("hooks").is_none());
     }
 }
