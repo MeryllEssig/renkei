@@ -27,7 +27,7 @@ pub fn format_package_list(cache: &InstallCache, global: bool) -> String {
     for (i, (name, entry)) in packages.iter().enumerate() {
         output.push_str(&format_package_line(name, entry));
         output.push('\n');
-        output.push_str(&format_artifact_line(entry));
+        output.push_str(&format_artifact_lines(entry));
         output.push('\n');
         if i < packages.len() - 1 {
             output.push('\n');
@@ -65,25 +65,42 @@ fn format_package_line(name: &str, entry: &PackageEntry) -> String {
     )
 }
 
-fn format_artifact_line(entry: &PackageEntry) -> String {
-    let summary = format_artifact_summary(entry);
-    if summary.is_empty() {
+fn format_artifact_lines(entry: &PackageEntry) -> String {
+    let mut lines = Vec::new();
+
+    let mut backend_names: Vec<&String> = entry.deployed.keys().collect();
+    backend_names.sort();
+
+    for backend_name in backend_names {
+        if let Some(deployment) = entry.deployed.get(backend_name) {
+            let summary = format_backend_summary(deployment);
+            if !summary.is_empty() {
+                lines.push(format!(
+                    "    {} {}: {summary}",
+                    "→".dimmed(),
+                    backend_name.dimmed()
+                ));
+            }
+        }
+    }
+
+    if lines.is_empty() {
         format!("    {} {}", "→".dimmed(), "(no artifacts)".dimmed())
     } else {
-        format!("    {} {summary}", "→".dimmed())
+        lines.join("\n")
     }
 }
 
-fn format_artifact_summary(entry: &PackageEntry) -> String {
+fn format_backend_summary(deployment: &crate::install_cache::BackendDeployment) -> String {
     let (mut skills, mut agents, mut hooks) = (0, 0, 0);
-    for a in entry.all_artifacts() {
+    for a in &deployment.artifacts {
         match a.artifact_type {
             ArtifactKind::Skill => skills += 1,
             ArtifactKind::Agent => agents += 1,
             ArtifactKind::Hook => hooks += 1,
         }
     }
-    let mcp = entry.all_mcp_servers().len();
+    let mcp = deployment.mcp_servers.len();
 
     let mut parts = Vec::new();
     if skills > 0 {
@@ -295,5 +312,51 @@ mod tests {
         let output = format_package_list(&cache, false);
         assert!(output.contains("@test/empty"));
         assert!(output.contains("(no artifacts)"));
+    }
+
+    #[test]
+    fn test_format_multi_backend_breakdown() {
+        let mut deployed = HashMap::new();
+        deployed.insert(
+            "claude".to_string(),
+            BackendDeployment {
+                artifacts: vec![DeployedArtifactEntry {
+                    artifact_type: ArtifactKind::Skill,
+                    name: "review".to_string(),
+                    deployed_path: "/deploy/review".to_string(),
+                    deployed_hooks: vec![],
+                    original_name: None,
+                }],
+                mcp_servers: vec![],
+            },
+        );
+        deployed.insert(
+            "agents".to_string(),
+            BackendDeployment {
+                artifacts: vec![DeployedArtifactEntry {
+                    artifact_type: ArtifactKind::Skill,
+                    name: "review".to_string(),
+                    deployed_path: "/deploy/review".to_string(),
+                    deployed_hooks: vec![],
+                    original_name: None,
+                }],
+                mcp_servers: vec![],
+            },
+        );
+        let entry = PackageEntry {
+            version: "1.0.0".to_string(),
+            source: "local".to_string(),
+            source_path: "/tmp/pkg".to_string(),
+            integrity: "abc".to_string(),
+            archive_path: "/tmp/a.tar.gz".to_string(),
+            deployed,
+            resolved: None,
+            tag: None,
+        };
+        let cache = make_cache(vec![("@test/multi-backend", entry)]);
+        let output = format_package_list(&cache, false);
+        assert!(output.contains("claude"));
+        assert!(output.contains("agents"));
+        assert!(output.contains("1 skill"));
     }
 }

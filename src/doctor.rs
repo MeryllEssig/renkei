@@ -213,18 +213,23 @@ fn check_mcp(entry: &PackageEntry, claude_config: &serde_json::Value) -> Vec<Dia
     issues
 }
 
-fn format_report(report: &DoctorReport, scope_label: &str) -> String {
+fn format_report(
+    report: &DoctorReport,
+    scope_label: &str,
+    backend_statuses: &[(String, bool)],
+) -> String {
     let mut out = format!("rk doctor ({scope_label})\n\n");
 
-    // Backend line
-    let backend_status = if report.backend_ok {
-        format!("{}", "ok".green())
-    } else {
-        format!("{}", "FAIL".red().bold())
-    };
-    out.push_str(&format!(
-        "Backend: Claude Code ............ {backend_status}\n"
-    ));
+    // Backend lines
+    for (name, detected) in backend_statuses {
+        let status = if *detected {
+            format!("{}", "ok".green())
+        } else {
+            format!("{}", "not found".dimmed())
+        };
+        let dots = ".".repeat(28_usize.saturating_sub(name.len()));
+        out.push_str(&format!("Backend: {name} {dots} {status}\n"));
+    }
 
     for diag in &report.package_diagnostics {
         out.push('\n');
@@ -352,6 +357,7 @@ pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> 
 
     let detected = registry.detect(config);
     let backend_ok = !detected.is_empty();
+    let backend_statuses = registry.status(config);
 
     let settings = crate::json_file::read_json_or_empty(&config.claude_settings_path())?;
     let claude_config = crate::json_file::read_json_or_empty(&config.claude_config_path())?;
@@ -386,7 +392,7 @@ pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> 
         package_diagnostics,
     };
 
-    let output = format_report(&report, scope_label);
+    let output = format_report(&report, scope_label, &backend_statuses);
     print!("{}", output);
 
     Ok(report.is_healthy())
@@ -929,6 +935,20 @@ mod tests {
 
     // -- Formatting tests --
 
+    fn default_statuses() -> Vec<(String, bool)> {
+        vec![
+            ("claude".to_string(), true),
+            ("agents".to_string(), true),
+        ]
+    }
+
+    fn no_backend_statuses() -> Vec<(String, bool)> {
+        vec![
+            ("claude".to_string(), false),
+            ("agents".to_string(), false),
+        ]
+    }
+
     #[test]
     fn test_format_healthy_report() {
         let report = DoctorReport {
@@ -939,8 +959,9 @@ mod tests {
                 issues: vec![],
             }],
         };
-        let output = format_report(&report, "global");
+        let output = format_report(&report, "global", &default_statuses());
         assert!(output.contains("rk doctor (global)"));
+        assert!(output.contains("claude"));
         assert!(output.contains("ok"));
         assert!(output.contains("@test/pkg"));
         assert!(output.contains("v1.0.0"));
@@ -953,8 +974,8 @@ mod tests {
             backend_ok: false,
             package_diagnostics: vec![],
         };
-        let output = format_report(&report, "global");
-        assert!(output.contains("FAIL"));
+        let output = format_report(&report, "global", &no_backend_statuses());
+        assert!(output.contains("not found"));
         assert!(output.contains("0 healthy, 0 with issues"));
     }
 
@@ -975,7 +996,7 @@ mod tests {
                 ],
             }],
         };
-        let output = format_report(&report, "project");
+        let output = format_report(&report, "project", &default_statuses());
         assert!(output.contains("rk doctor (project)"));
         assert!(output.contains("review"));
         assert!(output.contains("file missing"));
@@ -996,7 +1017,7 @@ mod tests {
                 }],
             }],
         };
-        let output = format_report(&report, "global");
+        let output = format_report(&report, "global", &default_statuses());
         assert!(output.contains("WARN"));
         assert!(output.contains("locally modified"));
     }
@@ -1007,8 +1028,26 @@ mod tests {
             backend_ok: true,
             package_diagnostics: vec![],
         };
-        let output = format_report(&report, "global");
+        let output = format_report(&report, "global", &default_statuses());
         assert!(output.contains("rk doctor (global)"));
         assert!(output.contains("All healthy: 0 package(s)."));
+    }
+
+    #[test]
+    fn test_format_per_backend_lines() {
+        let statuses = vec![
+            ("claude".to_string(), true),
+            ("agents".to_string(), true),
+            ("cursor".to_string(), false),
+        ];
+        let report = DoctorReport {
+            backend_ok: true,
+            package_diagnostics: vec![],
+        };
+        let output = format_report(&report, "global", &statuses);
+        assert!(output.contains("Backend: claude"));
+        assert!(output.contains("Backend: agents"));
+        assert!(output.contains("Backend: cursor"));
+        assert!(output.contains("not found"));
     }
 }

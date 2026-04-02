@@ -115,6 +115,14 @@ impl BackendRegistry {
         Ok(resolved)
     }
 
+    /// Return (name, detected) pairs for all known backends.
+    pub fn status(&self, config: &Config) -> Vec<(String, bool)> {
+        self.backends
+            .iter()
+            .map(|b| (b.name().to_string(), b.detect_installed(config)))
+            .collect()
+    }
+
     /// Get a backend by name (for uninstall/doctor lookups).
     #[allow(dead_code)]
     pub fn get(&self, name: &str) -> Option<&dyn Backend> {
