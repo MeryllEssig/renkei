@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::mcp::DeployedMcpEntry;
 
@@ -12,6 +12,10 @@ pub struct AgentsBackend;
 impl Backend for AgentsBackend {
     fn name(&self) -> &str {
         "agents"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Agents
     }
 
     fn detect_installed(&self, _config: &Config) -> bool {

@@ -7,7 +7,7 @@ use tempfile::tempdir;
 
 use crate::artifact::Artifact;
 use crate::backend::{claude::ClaudeBackend, Backend, DeployedArtifact};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::install::{install_local, InstallOptions};
 use crate::manifest::RequestedScope;
@@ -165,6 +165,10 @@ fn test_dedup_skips_skill_when_agents_and_reads_agents_backend() {
     impl Backend for TrackingBackend {
         fn name(&self) -> &str {
             "agents"
+        }
+
+        fn backend_id(&self) -> BackendId {
+            BackendId::Agents
         }
 
         fn detect_installed(&self, _: &Config) -> bool {

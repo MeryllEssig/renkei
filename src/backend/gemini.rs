@@ -1,5 +1,5 @@
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::Result;
 use crate::hook;
 use crate::mcp::{self, DeployedMcpEntry};
@@ -11,6 +11,10 @@ pub struct GeminiBackend;
 impl Backend for GeminiBackend {
     fn name(&self) -> &str {
         "gemini"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Gemini
     }
 
     fn detect_installed(&self, config: &Config) -> bool {

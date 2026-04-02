@@ -3,7 +3,7 @@ use std::fs;
 use owo_colors::OwoColorize;
 
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::hook;
 use crate::mcp::DeployedMcpEntry;
@@ -15,6 +15,10 @@ pub struct CodexBackend;
 impl Backend for CodexBackend {
     fn name(&self) -> &str {
         "codex"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Codex
     }
 
     fn detect_installed(&self, config: &Config) -> bool {

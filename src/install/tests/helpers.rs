@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::backend::{claude::ClaudeBackend, Backend, DeployedArtifact};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::conflict;
 use crate::error::{RenkeiError, Result};
 use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry};
@@ -147,6 +147,10 @@ impl Backend for FailingBackend {
         "failing"
     }
 
+    fn backend_id(&self) -> BackendId {
+        BackendId::Claude
+    }
+
     fn detect_installed(&self, _config: &Config) -> bool {
         true
     }
@@ -177,6 +181,10 @@ pub struct ReadsAgentsSkillsBackend;
 impl Backend for ReadsAgentsSkillsBackend {
     fn name(&self) -> &str {
         "reads-agents"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Claude
     }
 
     fn detect_installed(&self, _config: &Config) -> bool {
@@ -213,6 +221,10 @@ pub struct AgentsFakeBackend;
 impl Backend for AgentsFakeBackend {
     fn name(&self) -> &str {
         "agents"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Agents
     }
 
     fn detect_installed(&self, _: &Config) -> bool {

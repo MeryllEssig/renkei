@@ -7,7 +7,7 @@ pub mod gemini;
 use std::path::PathBuf;
 
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::hook::DeployedHookEntry;
 use crate::mcp::DeployedMcpEntry;
@@ -48,6 +48,7 @@ pub(super) fn deploy_file(
 #[allow(dead_code)]
 pub trait Backend {
     fn name(&self) -> &str;
+    fn backend_id(&self) -> BackendId;
     fn detect_installed(&self, config: &Config) -> bool;
     /// Returns true if this backend reads skills from the `.agents/skills/` directory
     /// (e.g. Codex, Gemini). Used for deduplication: when `agents` backend is also

@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::hook;
 use crate::mcp::{self, DeployedMcpEntry};
@@ -13,6 +13,10 @@ pub struct CursorBackend;
 impl Backend for CursorBackend {
     fn name(&self) -> &str {
         "cursor"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Cursor
     }
 
     fn detect_installed(&self, config: &Config) -> bool {

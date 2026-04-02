@@ -1,5 +1,5 @@
 use crate::artifact::{Artifact, ArtifactKind};
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::error::Result;
 use crate::mcp::{self, DeployedMcpEntry};
 
@@ -11,6 +11,10 @@ pub struct ClaudeBackend;
 impl Backend for ClaudeBackend {
     fn name(&self) -> &str {
         "claude"
+    }
+
+    fn backend_id(&self) -> BackendId {
+        BackendId::Claude
     }
 
     fn detect_installed(&self, config: &Config) -> bool {
