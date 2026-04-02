@@ -175,11 +175,7 @@ fn test_dedup_skips_skill_when_agents_and_reads_agents_backend() {
             true
         }
 
-        fn deploy_skill(
-            &self,
-            artifact: &Artifact,
-            config: &Config,
-        ) -> Result<DeployedArtifact> {
+        fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
             self.skill_deploy_count.fetch_add(1, Ordering::SeqCst);
             ClaudeBackend.deploy_skill(artifact, config)
         }

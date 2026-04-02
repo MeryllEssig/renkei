@@ -91,9 +91,7 @@ mod tests {
 
         let result = AgentsBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = home
-            .path()
-            .join(".agents/skills/renkei-review/SKILL.md");
+        let expected = home.path().join(".agents/skills/renkei-review/SKILL.md");
         assert_eq!(result.deployed_path, expected);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected.exists());
@@ -114,10 +112,7 @@ mod tests {
         let source = skills_dir.join("lint.md");
         fs::write(&source, "# Lint\nLint the code.").unwrap();
 
-        let config = Config::for_project(
-            home.path().to_path_buf(),
-            project.path().to_path_buf(),
-        );
+        let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
         let artifact = Artifact {
             kind: ArtifactKind::Skill,
             name: "lint".to_string(),
@@ -126,9 +121,7 @@ mod tests {
 
         let result = AgentsBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = project
-            .path()
-            .join(".agents/skills/renkei-lint/SKILL.md");
+        let expected = project.path().join(".agents/skills/renkei-lint/SKILL.md");
         assert_eq!(result.deployed_path, expected);
         assert!(expected.exists());
     }

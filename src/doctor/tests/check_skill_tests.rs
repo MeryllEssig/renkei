@@ -1,10 +1,10 @@
 use crate::artifact::ArtifactKind;
+use crate::cache;
 use crate::config::Config;
 use crate::doctor::checks;
 use crate::doctor::types::{ArchiveState, DiagnosticKind};
 use crate::install_cache::DeployedArtifactEntry;
 use crate::manifest::{ManifestScope, ValidatedManifest};
-use crate::cache;
 use semver::Version;
 use tempfile::tempdir;
 
@@ -120,14 +120,20 @@ fn test_check_archive_available() {
 
     let mut entry = make_entry(vec![]);
     entry.archive_path = archive.to_string_lossy().to_string();
-    assert!(matches!(checks::check_archive(&entry), ArchiveState::Available));
+    assert!(matches!(
+        checks::check_archive(&entry),
+        ArchiveState::Available
+    ));
 }
 
 #[test]
 fn test_check_archive_missing() {
     let mut entry = make_entry(vec![]);
     entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
-    assert!(matches!(checks::check_archive(&entry), ArchiveState::Missing(_)));
+    assert!(matches!(
+        checks::check_archive(&entry),
+        ArchiveState::Missing(_)
+    ));
 }
 
 #[test]

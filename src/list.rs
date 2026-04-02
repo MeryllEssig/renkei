@@ -273,11 +273,8 @@ mod tests {
     #[test]
     fn test_format_with_mcp_servers() {
         let mut entry = make_entry("local", "1.0.0", vec![]);
-        entry
-            .deployed
-            .get_mut("claude")
-            .unwrap()
-            .mcp_servers = vec!["server-a".to_string(), "server-b".to_string()];
+        entry.deployed.get_mut("claude").unwrap().mcp_servers =
+            vec!["server-a".to_string(), "server-b".to_string()];
         let cache = make_cache(vec![("@test/mcp", entry)]);
         let output = format_package_list(&cache, true);
         assert!(output.contains("2 mcp servers"));

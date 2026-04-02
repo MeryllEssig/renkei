@@ -16,11 +16,11 @@ mod install_cache;
 mod json_file;
 mod list;
 mod lockfile;
-mod package_store;
 mod manifest;
 mod mcp;
 mod migrate;
 mod package;
+mod package_store;
 mod source;
 mod uninstall;
 mod user_config;
@@ -133,7 +133,13 @@ fn run_install(
                 force: force || backend_override.is_some(),
                 ..install::InstallOptions::git(url, sha, tag.map(String::from))
             };
-            install_or_workspace(tmp_dir.path(), &config, &backends, requested_scope, &options)
+            install_or_workspace(
+                tmp_dir.path(),
+                &config,
+                &backends,
+                requested_scope,
+                &options,
+            )
         }
     }
 }
@@ -197,9 +203,7 @@ fn main() {
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
         Commands::Package { bump } => package::run_package(bump),
         Commands::Migrate { path } => migrate::run_migrate(&path),
-        Commands::Config {
-            action: None,
-        } => {
+        Commands::Config { action: None } => {
             let config = Config::new();
             config_cmd::run_config_interactive(&config, &registry)
         }

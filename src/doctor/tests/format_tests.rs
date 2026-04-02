@@ -1,17 +1,11 @@
 use crate::doctor::types::{DiagnosticKind, DoctorReport, PackageDiagnostic};
 
 fn default_statuses() -> Vec<(String, bool)> {
-    vec![
-        ("claude".to_string(), true),
-        ("agents".to_string(), true),
-    ]
+    vec![("claude".to_string(), true), ("agents".to_string(), true)]
 }
 
 fn no_backend_statuses() -> Vec<(String, bool)> {
-    vec![
-        ("claude".to_string(), false),
-        ("agents".to_string(), false),
-    ]
+    vec![("claude".to_string(), false), ("agents".to_string(), false)]
 }
 
 #[test]

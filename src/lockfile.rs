@@ -175,7 +175,13 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Resu
                 cache::extract_archive_to_dir(&archive, tmp.path())?;
 
                 let source = build_source_info(entry);
-                install::install_from_lock_entry(tmp.path(), config, backends, requested_scope, &source)?;
+                install::install_from_lock_entry(
+                    tmp.path(),
+                    config,
+                    backends,
+                    requested_scope,
+                    &source,
+                )?;
             }
             Err(_) => {
                 install_from_source(config, backends, requested_scope, entry)?;

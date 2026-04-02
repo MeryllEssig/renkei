@@ -5,7 +5,9 @@ use tempfile::tempdir;
 use crate::backend::{claude::ClaudeBackend, Backend};
 use crate::config::Config;
 use crate::install::pipeline::CorePipeline;
-use crate::install::{install_from_lock_entry, install_local_with_resolver, InstallOptions, SourceInfo, SourceKind};
+use crate::install::{
+    install_from_lock_entry, install_local_with_resolver, InstallOptions, SourceInfo, SourceKind,
+};
 use crate::manifest::RequestedScope;
 use crate::package_store::PackageStore;
 

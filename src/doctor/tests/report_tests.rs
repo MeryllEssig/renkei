@@ -53,8 +53,7 @@ fn test_build_report_runs_all_checks() {
     assert_eq!(report.package_diagnostics.len(), 1);
     // Should at least have FileMissing and ArchiveMissing
     assert!(report.package_diagnostics[0].issues.len() >= 2);
-    assert!(report
-        .package_diagnostics[0]
+    assert!(report.package_diagnostics[0]
         .issues
         .iter()
         .any(|i| matches!(i, DiagnosticKind::FileMissing { .. })));

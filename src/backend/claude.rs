@@ -7,7 +7,6 @@ use super::{Backend, DeployedArtifact};
 
 pub struct ClaudeBackend;
 
-
 impl Backend for ClaudeBackend {
     fn name(&self) -> &str {
         "claude"

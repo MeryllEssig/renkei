@@ -24,10 +24,7 @@ impl UserConfig {
         }
         let content = std::fs::read_to_string(&path)?;
         let cfg: Self = serde_json::from_str(&content).map_err(|e| {
-            crate::error::RenkeiError::CacheError(format!(
-                "Failed to parse config.json: {}",
-                e
-            ))
+            crate::error::RenkeiError::CacheError(format!("Failed to parse config.json: {}", e))
         })?;
         Ok(cfg)
     }

@@ -8,9 +8,7 @@ use crate::install::{install_local_with_resolver, InstallOptions};
 use crate::install_cache::InstallCache;
 use crate::manifest::RequestedScope;
 
-use super::helpers::{
-    error_resolver, force_resolver, make_pkg_with_skill, rename_resolver,
-};
+use super::helpers::{error_resolver, force_resolver, make_pkg_with_skill, rename_resolver};
 
 #[test]
 fn test_conflict_force_overwrites() {

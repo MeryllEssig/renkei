@@ -99,10 +99,7 @@ impl InstallCache {
 
         // Peek at version to decide how to deserialize
         let raw: serde_json::Value = serde_json::from_str(&content)?;
-        let version = raw
-            .get("version")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1) as u32;
+        let version = raw.get("version").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
 
         if version >= CURRENT_VERSION {
             let cache: InstallCache = serde_json::from_value(raw)?;
@@ -243,22 +240,14 @@ mod tests {
         deployed.insert(
             "claude".to_string(),
             BackendDeployment {
-                artifacts: vec![make_artifact(
-                    ArtifactKind::Skill,
-                    "review",
-                    "/claude/path",
-                )],
+                artifacts: vec![make_artifact(ArtifactKind::Skill, "review", "/claude/path")],
                 mcp_servers: vec!["srv-a".to_string()],
             },
         );
         deployed.insert(
             "agents".to_string(),
             BackendDeployment {
-                artifacts: vec![make_artifact(
-                    ArtifactKind::Skill,
-                    "review",
-                    "/agents/path",
-                )],
+                artifacts: vec![make_artifact(ArtifactKind::Skill, "review", "/agents/path")],
                 mcp_servers: vec![],
             },
         );

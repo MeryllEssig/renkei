@@ -1,8 +1,8 @@
+use crate::cache;
 use crate::config::Config;
 use crate::doctor::checks;
 use crate::doctor::types::DiagnosticKind;
 use crate::manifest::{ManifestScope, ValidatedManifest};
-use crate::cache;
 use semver::Version;
 use tempfile::tempdir;
 

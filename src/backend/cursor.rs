@@ -41,11 +41,7 @@ impl Backend for CursorBackend {
 
         let dest = dest_dir.join(format!("renkei-{}.mdc", artifact.name));
         fs::write(&dest, content).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to write {}: {}",
-                dest.display(),
-                e
-            ))
+            RenkeiError::DeploymentFailed(format!("Failed to write {}: {}", dest.display(), e))
         })?;
 
         Ok(DeployedArtifact {
@@ -90,7 +86,9 @@ impl Backend for CursorBackend {
 mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
-    use crate::backend::test_helpers::{make_agent_artifact, make_hook_artifact, make_skill_artifact};
+    use crate::backend::test_helpers::{
+        make_agent_artifact, make_hook_artifact, make_skill_artifact,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -135,10 +133,7 @@ mod tests {
         let pkg = tempdir().unwrap();
 
         let artifact = make_skill_artifact(pkg.path(), "lint", "# Lint\nLint the code.");
-        let config = Config::for_project(
-            home.path().to_path_buf(),
-            project.path().to_path_buf(),
-        );
+        let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
         CursorBackend.deploy_skill(&artifact, &config).unwrap();
 
@@ -218,10 +213,9 @@ mod tests {
 
         CursorBackend.deploy_hook(&artifact, &config).unwrap();
 
-        let content: serde_json::Value = serde_json::from_str(
-            &fs::read_to_string(cursor_dir.join("hooks.json")).unwrap(),
-        )
-        .unwrap();
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(cursor_dir.join("hooks.json")).unwrap())
+                .unwrap();
         let arr = content["hooks"]["preToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
     }

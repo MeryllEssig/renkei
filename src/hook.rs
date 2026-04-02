@@ -109,10 +109,7 @@ impl HookProfile {
 /// Translate renkei hooks to backend-specific JSON using the given profile.
 /// Used for dry-run / preview; no I/O.
 #[allow(dead_code)]
-pub fn translate(
-    profile: &HookProfile,
-    renkei_hooks: &[RenkeiHook],
-) -> Result<serde_json::Value> {
+pub fn translate(profile: &HookProfile, renkei_hooks: &[RenkeiHook]) -> Result<serde_json::Value> {
     match profile.layout {
         HookLayout::Nested => {
             let map = translate_hooks_with(renkei_hooks, |e| profile.translate_event(e))?;
@@ -141,8 +138,7 @@ pub fn deploy(
             write_standalone_hooks(path, &translated)
         }
         (HookLayout::Flat, HookTarget::StandaloneFile) => {
-            let translated =
-                translate_hooks_cursor_with(hooks, |e| profile.translate_event(e))?;
+            let translated = translate_hooks_cursor_with(hooks, |e| profile.translate_event(e))?;
             write_cursor_hooks(path, &translated)
         }
         (HookLayout::Flat, HookTarget::MergeIntoSettings) => {
@@ -152,11 +148,7 @@ pub fn deploy(
 }
 
 /// Remove previously deployed hooks using the given profile.
-pub fn remove(
-    profile: &HookProfile,
-    path: &Path,
-    entries: &[DeployedHookEntry],
-) -> Result<()> {
+pub fn remove(profile: &HookProfile, path: &Path, entries: &[DeployedHookEntry]) -> Result<()> {
     match profile.layout {
         HookLayout::Nested => remove_hooks_from_settings(path, entries),
         HookLayout::Flat => remove_cursor_hooks(path, entries),
@@ -180,7 +172,6 @@ pub struct DeployedHookEntry {
     pub matcher: Option<String>,
     pub command: String,
 }
-
 
 pub fn parse_hook_file(path: &Path) -> Result<Vec<RenkeiHook>> {
     let content = std::fs::read_to_string(path)?;
@@ -245,7 +236,6 @@ where
     Ok(result)
 }
 
-
 /// Cursor hook entry — flat format (no nested `hooks` array).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct CursorHookEntry {
@@ -286,7 +276,6 @@ where
     Ok(result)
 }
 
-
 /// Write/merge translated cursor hooks into a standalone `hooks.json` file.
 /// Returns deployed entries for tracking.
 fn write_cursor_hooks(
@@ -302,9 +291,7 @@ fn write_cursor_hooks(
     // Ensure version field
     obj.entry("version").or_insert(serde_json::json!(1));
 
-    let hooks_obj = obj
-        .entry("hooks")
-        .or_insert_with(|| serde_json::json!({}));
+    let hooks_obj = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
 
     let hooks_map = hooks_obj.as_object_mut().ok_or_else(|| {
         RenkeiError::DeploymentFailed("cursor hooks.json 'hooks' is not a JSON object".into())
@@ -317,7 +304,9 @@ fn write_cursor_hooks(
             .entry(event)
             .or_insert_with(|| serde_json::json!([]));
         let arr = event_array.as_array_mut().ok_or_else(|| {
-            RenkeiError::DeploymentFailed(format!("cursor hooks.json hooks.{event} is not an array"))
+            RenkeiError::DeploymentFailed(format!(
+                "cursor hooks.json hooks.{event} is not an array"
+            ))
         })?;
 
         for entry in entries {
@@ -384,13 +373,11 @@ fn write_standalone_hooks(
 ) -> Result<Vec<DeployedHookEntry>> {
     let mut file: serde_json::Value = json_file::read_json_or_empty(hooks_path)?;
 
-    let obj = file.as_object_mut().ok_or_else(|| {
-        RenkeiError::DeploymentFailed("hooks.json is not a JSON object".into())
-    })?;
+    let obj = file
+        .as_object_mut()
+        .ok_or_else(|| RenkeiError::DeploymentFailed("hooks.json is not a JSON object".into()))?;
 
-    let hooks_obj = obj
-        .entry("hooks")
-        .or_insert_with(|| serde_json::json!({}));
+    let hooks_obj = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
 
     let hooks_map = hooks_obj.as_object_mut().ok_or_else(|| {
         RenkeiError::DeploymentFailed("hooks.json 'hooks' is not a JSON object".into())
@@ -669,7 +656,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("settings.json");
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            Some(5),
+        )];
         let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "PreToolUse");
@@ -707,7 +699,12 @@ mod tests {
         )
         .unwrap();
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            None,
+        )];
         deploy(&CLAUDE, &hooks, &path).unwrap();
 
         let settings: serde_json::Value =
@@ -727,7 +724,12 @@ mod tests {
         )
         .unwrap();
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            None,
+        )];
         deploy(&CLAUDE, &hooks, &path).unwrap();
 
         let settings: serde_json::Value =
@@ -743,7 +745,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("settings.json");
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            None,
+        )];
         let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
         remove(&CLAUDE, &path, &entries).unwrap();
 
@@ -876,7 +883,10 @@ mod tests {
         let result = translate(&CODEX, &hooks).unwrap();
         // Codex uses nested format with its own event names
         assert!(result["UserPromptSubmit"].is_array());
-        assert_eq!(result["UserPromptSubmit"][0]["hooks"][0]["command"], "check.sh");
+        assert_eq!(
+            result["UserPromptSubmit"][0]["hooks"][0]["command"],
+            "check.sh"
+        );
     }
 
     #[test]
@@ -907,7 +917,12 @@ mod tests {
         let path = dir.path().join("settings.json");
         fs::write(&path, r#"{"language":"French"}"#).unwrap();
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            Some(5),
+        )];
         let entries = deploy(&CLAUDE, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "PreToolUse");
@@ -929,7 +944,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("hooks.json");
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", Some(5))];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            Some(5),
+        )];
         let entries = deploy(&CURSOR, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "preToolUse");
@@ -942,9 +962,7 @@ mod tests {
         remove(&CURSOR, &path, &entries).unwrap();
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(content["hooks"]
-            .as_object()
-            .map_or(true, |m| m.is_empty()));
+        assert!(content["hooks"].as_object().map_or(true, |m| m.is_empty()));
     }
 
     #[test]
@@ -952,7 +970,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("hooks.json");
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("bash"), "lint.sh", None)];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("bash"),
+            "lint.sh",
+            None,
+        )];
         let entries = deploy(&CODEX, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "PreToolUse");
@@ -973,7 +996,12 @@ mod tests {
         let path = dir.path().join("settings.json");
         fs::write(&path, r#"{"theme":"dark"}"#).unwrap();
 
-        let hooks = vec![make_renkei_hook("before_tool", Some("write_file"), "check.sh", None)];
+        let hooks = vec![make_renkei_hook(
+            "before_tool",
+            Some("write_file"),
+            "check.sh",
+            None,
+        )];
         let entries = deploy(&GEMINI, &hooks, &path).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].event, "BeforeTool");

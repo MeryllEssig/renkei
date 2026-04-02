@@ -29,7 +29,9 @@ mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
     use crate::hook::DeployedHookEntry;
-    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry};
+    use crate::install_cache::{
+        BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry,
+    };
     use std::collections::HashMap;
     use tempfile::tempdir;
 
@@ -148,7 +150,10 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create settings.json with a hook
-        let settings_path = config.backend(crate::config::BackendId::Claude).settings_path.unwrap();
+        let settings_path = config
+            .backend(crate::config::BackendId::Claude)
+            .settings_path
+            .unwrap();
         std::fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         let settings = serde_json::json!({
             "hooks": {
@@ -203,7 +208,10 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create .claude.json with MCP servers
-        let config_path = config.backend(crate::config::BackendId::Claude).config_path.unwrap();
+        let config_path = config
+            .backend(crate::config::BackendId::Claude)
+            .config_path
+            .unwrap();
         let claude_json = serde_json::json!({
             "mcpServers": {
                 "test-server": {
@@ -301,10 +309,7 @@ mod tests {
         let config = make_config_global(home.path());
 
         let mut cache = InstallCache::load(&config).unwrap();
-        cache.upsert_package(
-            "@test/pkg",
-            make_v2_package(vec![], vec![]),
-        );
+        cache.upsert_package("@test/pkg", make_v2_package(vec![], vec![]));
         cache.save(&config).unwrap();
 
         run_uninstall("@test/pkg", &config).unwrap();
@@ -367,10 +372,7 @@ mod tests {
 
         // Set up cache
         let mut cache = InstallCache::load(&config).unwrap();
-        cache.upsert_package(
-            "@test/pkg",
-            make_v2_package(vec![], vec![]),
-        );
+        cache.upsert_package("@test/pkg", make_v2_package(vec![], vec![]));
         cache.save(&config).unwrap();
 
         run_uninstall("@test/pkg", &config).unwrap();
@@ -389,10 +391,7 @@ mod tests {
         let config = make_config_global(home.path());
 
         let mut cache = InstallCache::load(&config).unwrap();
-        cache.upsert_package(
-            "@test/pkg",
-            make_v2_package(vec![], vec![]),
-        );
+        cache.upsert_package("@test/pkg", make_v2_package(vec![], vec![]));
         cache.save(&config).unwrap();
 
         // No lockfile exists — should succeed silently

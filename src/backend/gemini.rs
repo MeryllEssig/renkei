@@ -71,7 +71,9 @@ mod tests {
 
     use super::*;
     use crate::artifact::ArtifactKind;
-    use crate::backend::test_helpers::{make_agent_artifact, make_hook_artifact, make_skill_artifact};
+    use crate::backend::test_helpers::{
+        make_agent_artifact, make_hook_artifact, make_skill_artifact,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -121,10 +123,7 @@ mod tests {
         let pkg = tempdir().unwrap();
 
         let artifact = make_skill_artifact(pkg.path(), "lint", "# Lint");
-        let config = Config::for_project(
-            home.path().to_path_buf(),
-            project.path().to_path_buf(),
-        );
+        let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
         GeminiBackend.deploy_skill(&artifact, &config).unwrap();
 
@@ -172,10 +171,7 @@ mod tests {
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
         assert!(content["hooks"]["BeforeTool"].is_array());
-        assert_eq!(
-            content["hooks"]["BeforeTool"][0]["matcher"],
-            "write_file"
-        );
+        assert_eq!(content["hooks"]["BeforeTool"][0]["matcher"], "write_file");
     }
 
     #[test]
@@ -199,10 +195,9 @@ mod tests {
 
         GeminiBackend.deploy_hook(&artifact, &config).unwrap();
 
-        let content: serde_json::Value = serde_json::from_str(
-            &fs::read_to_string(gemini_dir.join("settings.json")).unwrap(),
-        )
-        .unwrap();
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(gemini_dir.join("settings.json")).unwrap())
+                .unwrap();
         assert_eq!(content["theme"], "dark");
         assert!(content["hooks"]["SessionStart"].is_array());
         assert!(content["hooks"]["BeforeTool"].is_array());

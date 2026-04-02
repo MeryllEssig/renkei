@@ -53,7 +53,10 @@ impl Backend for CodexBackend {
         })?;
 
         let mut table = toml::map::Map::new();
-        table.insert("name".to_string(), toml::Value::String(artifact.name.clone()));
+        table.insert(
+            "name".to_string(),
+            toml::Value::String(artifact.name.clone()),
+        );
         table.insert(
             "developer_instructions".to_string(),
             toml::Value::String(md_content),
@@ -199,7 +202,9 @@ fn json_to_toml(json: &serde_json::Value) -> Result<toml::Value> {
 mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
-    use crate::backend::test_helpers::{make_agent_artifact, make_hook_artifact, make_skill_artifact};
+    use crate::backend::test_helpers::{
+        make_agent_artifact, make_hook_artifact, make_skill_artifact,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -246,7 +251,8 @@ mod tests {
         let home = tempdir().unwrap();
         let pkg = tempdir().unwrap();
 
-        let artifact = make_agent_artifact(pkg.path(), "researcher", "# Researcher\nDoes research.");
+        let artifact =
+            make_agent_artifact(pkg.path(), "researcher", "# Researcher\nDoes research.");
         let config = Config::with_home_dir(home.path().to_path_buf());
 
         let result = CodexBackend.deploy_agent(&artifact, &config).unwrap();
@@ -289,10 +295,7 @@ mod tests {
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&hooks_path).unwrap()).unwrap();
         assert!(content["hooks"]["PreToolUse"].is_array());
-        assert_eq!(
-            content["hooks"]["PreToolUse"][0]["matcher"],
-            "bash"
-        );
+        assert_eq!(content["hooks"]["PreToolUse"][0]["matcher"], "bash");
     }
 
     #[test]

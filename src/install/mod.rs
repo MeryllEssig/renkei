@@ -4,8 +4,8 @@ pub(crate) mod pipeline;
 mod resolve;
 mod types;
 
-pub use types::{ConflictResolver, InstallOptions, SourceInfo, SourceKind};
 pub(crate) use cleanup::cleanup_previous_installation;
+pub use types::{ConflictResolver, InstallOptions, SourceInfo, SourceKind};
 
 use std::io::IsTerminal;
 use std::path::Path;
@@ -115,7 +115,11 @@ pub(crate) fn install_local_with_resolver(
     );
     store.save(config)?;
 
-    print_post_deploy(&resolved.manifest.full_name, &deployment.all_deployed, &resolved.raw_manifest);
+    print_post_deploy(
+        &resolved.manifest.full_name,
+        &deployment.all_deployed,
+        &resolved.raw_manifest,
+    );
     Ok(())
 }
 
@@ -196,7 +200,11 @@ pub fn install_from_lock_entry(
     );
     store.save(config)?;
 
-    print_post_deploy(&resolved.manifest.full_name, &deployment.all_deployed, &resolved.raw_manifest);
+    print_post_deploy(
+        &resolved.manifest.full_name,
+        &deployment.all_deployed,
+        &resolved.raw_manifest,
+    );
     Ok(())
 }
 
