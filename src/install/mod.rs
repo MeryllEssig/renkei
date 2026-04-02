@@ -112,28 +112,34 @@ pub(crate) fn install_local_with_resolver(
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
         },
-        false,
     );
     store.save(config)?;
 
+    print_post_deploy(&resolved.manifest.full_name, &deployment.all_deployed, &resolved.raw_manifest);
+    Ok(())
+}
+
+fn print_post_deploy(
+    full_name: &str,
+    deployed: &[crate::backend::DeployedArtifact],
+    raw_manifest: &crate::manifest::Manifest,
+) {
     println!(
         "{} Deployed {} artifact(s) for {}",
         "Done.".green().bold(),
-        deployment.all_deployed.len(),
-        resolved.manifest.full_name
+        deployed.len(),
+        full_name
     );
-    for d in &deployment.all_deployed {
+    for d in deployed {
         println!("  {} {}", "→".dimmed(), d.deployed_path.display());
     }
 
-    if let Some(ref env) = resolved.raw_manifest.required_env {
+    if let Some(ref env) = raw_manifest.required_env {
         let missing = env_check::check_required_env(env);
         if !missing.is_empty() {
             env_check::print_env_warnings(&missing);
         }
     }
-
-    Ok(())
 }
 
 /// Install a package from a lockfile entry.
@@ -171,15 +177,11 @@ pub fn install_from_lock_entry(
         &resolved.manifest.short_name,
         &resolved.manifest.version,
     );
-    let integrity = if archive_path.exists() {
-        cache::compute_sha256(&archive_path)?
-    } else {
-        String::new()
-    };
+    let integrity = cache::compute_sha256(&archive_path).unwrap_or_default();
 
     let deployment = resolved.deploy(config)?;
 
-    store.record_install(
+    store.record_install_from_lockfile(
         &resolved.manifest.full_name,
         PackageEntry {
             version: resolved.manifest.version.to_string(),
@@ -191,27 +193,10 @@ pub fn install_from_lock_entry(
             resolved: source.resolved.clone(),
             tag: source.tag.clone(),
         },
-        true, // from_lockfile: skip lockfile update
     );
     store.save(config)?;
 
-    println!(
-        "{} Deployed {} artifact(s) for {}",
-        "Done.".green().bold(),
-        deployment.all_deployed.len(),
-        resolved.manifest.full_name
-    );
-    for d in &deployment.all_deployed {
-        println!("  {} {}", "→".dimmed(), d.deployed_path.display());
-    }
-
-    if let Some(ref env) = resolved.raw_manifest.required_env {
-        let missing = env_check::check_required_env(env);
-        if !missing.is_empty() {
-            env_check::print_env_warnings(&missing);
-        }
-    }
-
+    print_post_deploy(&resolved.manifest.full_name, &deployment.all_deployed, &resolved.raw_manifest);
     Ok(())
 }
 

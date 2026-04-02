@@ -1,6 +1,4 @@
-use std::fs;
-
-use crate::artifact::{Artifact, ArtifactKind};
+use crate::artifact::Artifact;
 use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::mcp::DeployedMcpEntry;
@@ -28,24 +26,7 @@ impl Backend for AgentsBackend {
             .skills_dir
             .unwrap()
             .join(format!("renkei-{}", artifact.name));
-        fs::create_dir_all(&skill_dir)?;
-
-        let dest = skill_dir.join("SKILL.md");
-        fs::copy(&artifact.source_path, &dest).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to copy {} to {}: {}",
-                artifact.source_path.display(),
-                dest.display(),
-                e
-            ))
-        })?;
-
-        Ok(DeployedArtifact {
-            artifact_kind: ArtifactKind::Skill,
-            artifact_name: artifact.name.clone(),
-            deployed_path: dest,
-            deployed_hooks: vec![],
-        })
+        super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, _artifact: &Artifact, _config: &Config) -> Result<DeployedArtifact> {
@@ -74,7 +55,8 @@ impl Backend for AgentsBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::artifact::Artifact;
+    use crate::artifact::{Artifact, ArtifactKind};
+    use std::fs;
     use std::path::PathBuf;
     use tempfile::tempdir;
 

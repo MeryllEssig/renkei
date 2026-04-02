@@ -25,16 +25,18 @@ impl PackageStore {
         Ok(())
     }
 
-    /// Record an install: upsert into cache, and conditionally into lockfile.
-    /// When `from_lockfile` is true, the lockfile is not updated (avoids cycles
-    /// during `install_from_lockfile`).
-    pub fn record_install(&mut self, name: &str, entry: PackageEntry, from_lockfile: bool) {
+    /// Record an install: upsert into both cache and lockfile.
+    pub fn record_install(&mut self, name: &str, entry: PackageEntry) {
         self.cache.upsert_package(name, entry);
-        if !from_lockfile {
-            let pkg = self.cache.packages.get(name).unwrap();
-            self.lockfile
-                .upsert(name, LockfileEntry::from_package_entry(pkg));
-        }
+        let pkg = self.cache.packages.get(name).unwrap();
+        self.lockfile
+            .upsert(name, LockfileEntry::from_package_entry(pkg));
+    }
+
+    /// Record an install from lockfile replay: upsert into cache only.
+    /// Skips lockfile update to avoid cycles during `install_from_lockfile`.
+    pub fn record_install_from_lockfile(&mut self, name: &str, entry: PackageEntry) {
+        self.cache.upsert_package(name, entry);
     }
 
     /// Remove a package from both cache and lockfile.
@@ -124,7 +126,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("1.0.0", "abc123"), false);
+        store.record_install("@test/pkg", make_entry("1.0.0", "abc123"));
         store.save(&config).unwrap();
 
         let loaded = PackageStore::load(&config).unwrap();
@@ -139,7 +141,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("2.0.0", "def456"), false);
+        store.record_install("@test/pkg", make_entry("2.0.0", "def456"));
 
         // Cache has entry
         assert!(store.contains("@test/pkg"));
@@ -157,7 +159,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("1.0.0", "abc"), true);
+        store.record_install_from_lockfile("@test/pkg", make_entry("1.0.0", "abc"));
 
         // Cache has entry
         assert!(store.contains("@test/pkg"));
@@ -172,7 +174,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("1.0.0", "abc"), false);
+        store.record_install("@test/pkg", make_entry("1.0.0", "abc"));
         assert!(store.contains("@test/pkg"));
 
         store.remove("@test/pkg");
@@ -187,7 +189,7 @@ mod tests {
 
         let mut store = PackageStore::load(&config).unwrap();
         // Record with from_lockfile=true so lockfile has no entry
-        store.record_install("@test/pkg", make_entry("1.0.0", "abc"), true);
+        store.record_install_from_lockfile("@test/pkg", make_entry("1.0.0", "abc"));
 
         // Remove should not panic
         store.remove("@test/pkg");
@@ -200,8 +202,8 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/a", make_entry("1.0.0", "aaa"), false);
-        store.record_install("@test/b", make_entry("2.0.0", "bbb"), false);
+        store.record_install("@test/a", make_entry("1.0.0", "aaa"));
+        store.record_install("@test/b", make_entry("2.0.0", "bbb"));
 
         assert_eq!(store.packages().len(), 2);
         assert!(store.packages().contains_key("@test/a"));
@@ -214,7 +216,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("1.0.0", "abc"), false);
+        store.record_install("@test/pkg", make_entry("1.0.0", "abc"));
 
         // Modify via cache_mut
         store.cache_mut().packages.remove("@test/pkg");
@@ -227,7 +229,7 @@ mod tests {
         let config = make_config(dir.path());
 
         let mut store = PackageStore::load(&config).unwrap();
-        store.record_install("@test/pkg", make_entry("1.0.0", "hash"), false);
+        store.record_install("@test/pkg", make_entry("1.0.0", "hash"));
         store.save(&config).unwrap();
 
         // Verify both files exist

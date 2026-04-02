@@ -422,19 +422,11 @@ fn write_standalone_hooks(
     Ok(deployed)
 }
 
-fn read_settings(path: &Path) -> Result<serde_json::Value> {
-    json_file::read_json_or_empty(path)
-}
-
-fn write_settings(path: &Path, value: &serde_json::Value) -> Result<()> {
-    json_file::write_json_pretty(path, value)
-}
-
 fn merge_hooks_into_settings(
     settings_path: &Path,
     translated: &BTreeMap<String, Vec<ClaudeHookGroup>>,
 ) -> Result<Vec<DeployedHookEntry>> {
-    let mut settings = read_settings(settings_path)?;
+    let mut settings = json_file::read_json_or_empty(settings_path)?;
 
     let settings_obj = settings.as_object_mut().ok_or_else(|| {
         RenkeiError::DeploymentFailed("settings.json is not a JSON object".into())
@@ -471,7 +463,7 @@ fn merge_hooks_into_settings(
         }
     }
 
-    write_settings(settings_path, &settings)?;
+    json_file::write_json_pretty(settings_path, &settings)?;
     Ok(deployed_entries)
 }
 
@@ -527,7 +519,7 @@ fn remove_hooks_from_settings(
         settings.as_object_mut().unwrap().remove("hooks");
     }
 
-    write_settings(settings_path, &settings)?;
+    json_file::write_json_pretty(settings_path, &settings)?;
     Ok(())
 }
 

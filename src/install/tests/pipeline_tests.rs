@@ -181,7 +181,6 @@ fn test_pipeline_cleanup_removes_previous_install() {
             resolved: None,
             tag: None,
         },
-        false,
     );
     store.save(&config).unwrap();
 
