@@ -1522,7 +1522,8 @@ fn test_force_preserves_other_artifacts() {
     let cache_path = home.path().join(".renkei/install-cache.json");
     let cache: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&cache_path).unwrap()).unwrap();
-    let multi_artifacts = cache["packages"]["@test/conflict-multi-a"]["deployed"]["claude"]["artifacts"]
+    let multi_artifacts = cache["packages"]["@test/conflict-multi-a"]["deployed"]["claude"]
+        ["artifacts"]
         .as_array()
         .unwrap();
     assert_eq!(multi_artifacts.len(), 1, "Should only have 'lint' left");
@@ -1547,15 +1548,11 @@ fn test_install_multi_backend_claude_and_agents() {
         .stdout(predicate::str::contains("Done."));
 
     // Skill deployed to claude
-    let claude_skill = home
-        .path()
-        .join(".claude/skills/renkei-review/SKILL.md");
+    let claude_skill = home.path().join(".claude/skills/renkei-review/SKILL.md");
     assert!(claude_skill.exists(), "Skill should exist in .claude/");
 
     // Skill deployed to agents
-    let agents_skill = home
-        .path()
-        .join(".agents/skills/renkei-review/SKILL.md");
+    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
     assert!(agents_skill.exists(), "Skill should exist in .agents/");
 
     // Cache has both backends
@@ -1622,15 +1619,25 @@ fn test_install_with_backend_override_cursor() {
 
     // Cursor skill exists
     let cursor_skill = home.path().join(".cursor/rules/renkei-review.mdc");
-    assert!(cursor_skill.exists(), "Cursor rule should exist: {:?}", cursor_skill);
+    assert!(
+        cursor_skill.exists(),
+        "Cursor rule should exist: {:?}",
+        cursor_skill
+    );
 
     // Verify .mdc frontmatter
     let content = fs::read_to_string(&cursor_skill).unwrap();
-    assert!(content.contains("alwaysApply: false"), "mdc should have frontmatter");
+    assert!(
+        content.contains("alwaysApply: false"),
+        "mdc should have frontmatter"
+    );
 
     // Claude skill should NOT exist (backend override is exclusive)
     assert!(
-        !home.path().join(".claude/skills/renkei-review/SKILL.md").exists(),
+        !home
+            .path()
+            .join(".claude/skills/renkei-review/SKILL.md")
+            .exists(),
         "Claude skill should not be deployed when --backend cursor is used"
     );
 }
@@ -1660,7 +1667,10 @@ fn test_install_dedup_agents_codex() {
     // ensures codex backend's deploy_skill is NOT called when agents is in active set.
     // The agents backend already deployed it — only one file should exist.
     let content = fs::read_to_string(&agents_skill).unwrap();
-    assert!(content.contains("Do a code review"), "Skill content should be correct");
+    assert!(
+        content.contains("Do a code review"),
+        "Skill content should be correct"
+    );
 }
 
 #[test]
@@ -1681,13 +1691,18 @@ fn test_install_dedup_agents_gemini() {
 
     // Skill in .agents/skills/ (deployed by agents backend)
     assert!(
-        home.path().join(".agents/skills/renkei-review/SKILL.md").exists(),
+        home.path()
+            .join(".agents/skills/renkei-review/SKILL.md")
+            .exists(),
         "Skill should be in .agents/skills/"
     );
 
     // Gemini should NOT have deployed skill to .gemini/skills/ (dedup)
     assert!(
-        !home.path().join(".gemini/skills/renkei-review/SKILL.md").exists(),
+        !home
+            .path()
+            .join(".gemini/skills/renkei-review/SKILL.md")
+            .exists(),
         "Gemini should not duplicate skill when agents backend is active"
     );
 }

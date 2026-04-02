@@ -232,12 +232,8 @@ fn test_uninstall_removes_from_all_backends() {
         .success();
 
     // Verify both backends have the skill
-    let claude_skill = home
-        .path()
-        .join(".claude/skills/renkei-review/SKILL.md");
-    let agents_skill = home
-        .path()
-        .join(".agents/skills/renkei-review/SKILL.md");
+    let claude_skill = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
     assert!(claude_skill.exists());
     assert!(agents_skill.exists());
 

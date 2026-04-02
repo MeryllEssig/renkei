@@ -27,7 +27,7 @@ pub fn run_config_interactive(config: &Config, registry: &BackendRegistry) -> Re
     let defaults: Vec<&str> = if !current_backends.is_empty() {
         current_backends
     } else {
-        detected_names.iter().copied().collect()
+        detected_names.to_vec()
     };
 
     let default_indices: Vec<usize> = options
