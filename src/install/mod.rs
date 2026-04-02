@@ -92,22 +92,8 @@ pub(crate) fn install_local_with_resolver(
     let mut store = PackageStore::load(config)?;
     let resolved = pipeline.cleanup_and_resolve(&mut store, conflict_resolver, config)?;
 
-    let (archive_path, integrity) = if options.from_lockfile {
-        let path = cache::archive_path(
-            config,
-            &resolved.manifest.scope,
-            &resolved.manifest.short_name,
-            &resolved.manifest.version,
-        );
-        let hash = if path.exists() {
-            cache::compute_sha256(&path)?
-        } else {
-            String::new()
-        };
-        (path, hash)
-    } else {
-        cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?
-    };
+    let (archive_path, integrity) =
+        cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?;
 
     let deployment = resolved.deploy(config)?;
 
@@ -126,7 +112,7 @@ pub(crate) fn install_local_with_resolver(
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
         },
-        options.from_lockfile,
+        false,
     );
     store.save(config)?;
 

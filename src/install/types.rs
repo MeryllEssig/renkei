@@ -23,8 +23,6 @@ pub struct InstallOptions {
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
-    /// Skip archive creation and lockfile write (used during lockfile replay).
-    pub from_lockfile: bool,
 }
 
 impl InstallOptions {
@@ -35,7 +33,6 @@ impl InstallOptions {
             source_url: source_path,
             resolved: None,
             tag: None,
-            from_lockfile: false,
         }
     }
 
@@ -46,7 +43,6 @@ impl InstallOptions {
             source_url: url,
             resolved: Some(resolved),
             tag,
-            from_lockfile: false,
         }
     }
 }
@@ -55,7 +51,7 @@ pub type ConflictResolver = dyn Fn(&Conflict) -> Result<Option<String>>;
 
 /// Source metadata for lockfile-based installs.
 /// Contains only the fields needed to reconstruct a PackageEntry,
-/// without the `force`/`from_lockfile` control flags of InstallOptions.
+/// without the `force` control flag of InstallOptions.
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     pub source_kind: SourceKind,
