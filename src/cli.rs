@@ -68,6 +68,9 @@ pub enum Commands {
         /// Path to the directory to migrate
         path: String,
     },
+    /// Update rk to the latest stable release
+    #[command(name = "self-update")]
+    SelfUpdate,
     /// Manage renkei configuration
     Config {
         #[command(subcommand)]

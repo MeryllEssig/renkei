@@ -68,6 +68,9 @@ pub enum RenkeiError {
     #[error("Already a Renkei package: {0} contains renkei.json")]
     AlreadyRenkeiPackage(PathBuf),
 
+    #[error("Self-update failed: {0}")]
+    SelfUpdateFailed(String),
+
     #[error("Nothing to migrate: no skills, hooks, or agents found in {0}")]
     NothingToMigrate(PathBuf),
 

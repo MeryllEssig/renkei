@@ -21,8 +21,10 @@ mod mcp;
 mod migrate;
 mod package;
 mod package_store;
+mod self_update;
 mod source;
 mod uninstall;
+mod update_notifier;
 mod user_config;
 mod workspace;
 
@@ -177,6 +179,12 @@ fn main() {
     let cli = Cli::parse();
     let registry = BackendRegistry::all();
 
+    let update_check = if matches!(cli.command, Commands::SelfUpdate) {
+        None
+    } else {
+        update_notifier::spawn_check()
+    };
+
     let result: error::Result<()> = match cli.command {
         Commands::Install {
             source: Some(source),
@@ -202,6 +210,7 @@ fn main() {
         Commands::Doctor { global } => run_doctor(global, &registry),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
         Commands::Package { bump } => package::run_package(bump),
+        Commands::SelfUpdate => self_update::run_self_update(),
         Commands::Migrate { path } => migrate::run_migrate(&path),
         Commands::Config { action: None } => {
             let config = Config::new();
@@ -227,8 +236,18 @@ fn main() {
         }
     };
 
-    if let Err(e) = result {
+    let exit_code = if let Err(e) = &result {
         eprintln!("{} {}", "Error:".red().bold(), e);
-        process::exit(1);
+        1
+    } else {
+        0
+    };
+
+    if let Some(check) = update_check {
+        check.notify();
+    }
+
+    if exit_code != 0 {
+        process::exit(exit_code);
     }
 }
