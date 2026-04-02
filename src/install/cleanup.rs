@@ -23,7 +23,7 @@ pub(crate) fn undo_artifact(
     match kind {
         ArtifactKind::Hook => {
             let claude_dirs = config.backend(BackendId::Claude);
-            let _ = hook::remove_hooks_from_settings(&claude_dirs.settings_path.unwrap(), hooks);
+            let _ = hook::remove(&hook::CLAUDE, &claude_dirs.settings_path.unwrap(), hooks);
         }
         _ => remove_artifact_file(path),
     }
