@@ -174,8 +174,8 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Resu
                     .map_err(|e| RenkeiError::CacheError(format!("Cannot create temp dir: {e}")))?;
                 cache::extract_archive_to_dir(&archive, tmp.path())?;
 
-                let options = build_install_options(entry);
-                install::install_local(tmp.path(), config, backends, requested_scope, &options)?;
+                let source = build_source_info(entry);
+                install::install_from_lock_entry(tmp.path(), config, backends, requested_scope, &source)?;
             }
             Err(_) => {
                 install_from_source(config, backends, requested_scope, entry)?;
@@ -186,19 +186,23 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Resu
     Ok(())
 }
 
-fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
-    let mut options = match source::parse_source(&entry.source) {
+fn build_source_info(entry: &LockfileEntry) -> install::SourceInfo {
+    match source::parse_source(&entry.source) {
         source::PackageSource::GitSsh(_) | source::PackageSource::GitUrl(_) => {
-            install::InstallOptions::git(
-                entry.source.clone(),
-                entry.resolved.clone().unwrap_or_default(),
-                entry.tag.clone(),
-            )
+            install::SourceInfo {
+                source_kind: install::SourceKind::Git,
+                source_url: entry.source.clone(),
+                resolved: entry.resolved.clone(),
+                tag: entry.tag.clone(),
+            }
         }
-        source::PackageSource::Local(_) => install::InstallOptions::local(entry.source.clone()),
-    };
-    options.from_lockfile = true;
-    options
+        source::PackageSource::Local(_) => install::SourceInfo {
+            source_kind: install::SourceKind::Local,
+            source_url: entry.source.clone(),
+            resolved: None,
+            tag: None,
+        },
+    }
 }
 
 fn install_from_source(
@@ -211,13 +215,29 @@ fn install_from_source(
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
             let sha = crate::git::resolve_head(tmp_dir.path())?;
-            let options = install::InstallOptions::git(url, sha, entry.tag.clone());
-            install::install_local(tmp_dir.path(), config, backends, requested_scope, &options)
+            let source = install::SourceInfo {
+                source_kind: install::SourceKind::Git,
+                source_url: url,
+                resolved: Some(sha),
+                tag: entry.tag.clone(),
+            };
+            install::install_from_lock_entry(
+                tmp_dir.path(),
+                config,
+                backends,
+                requested_scope,
+                &source,
+            )
         }
         source::PackageSource::Local(path_str) => {
             let path = PathBuf::from(&path_str);
-            let options = install::InstallOptions::local(path_str);
-            install::install_local(&path, config, backends, requested_scope, &options)
+            let source = install::SourceInfo {
+                source_kind: install::SourceKind::Local,
+                source_url: path_str,
+                resolved: None,
+                tag: None,
+            };
+            install::install_from_lock_entry(&path, config, backends, requested_scope, &source)
         }
     }
 }
