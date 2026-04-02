@@ -18,27 +18,31 @@ impl Backend for ClaudeBackend {
     }
 
     fn detect_installed(&self, config: &Config) -> bool {
-        config.claude_dir().is_dir()
+        config.backend(BackendId::Claude).root_dir.is_dir()
     }
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let skill_dir = config
-            .claude_skills_dir()
+        let dirs = config.backend(BackendId::Claude);
+        let skill_dir = dirs
+            .skills_dir
+            .unwrap()
             .join(format!("renkei-{}", artifact.name));
         super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Claude);
         let dest_filename = format!("{}.md", artifact.name);
-        super::deploy_file(artifact, config.claude_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, dirs.agents_dir.unwrap(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         use crate::hook;
 
+        let dirs = config.backend(BackendId::Claude);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
         let translated = hook::translate_hooks(&renkei_hooks)?;
-        let settings_path = config.claude_settings_path();
+        let settings_path = dirs.settings_path.unwrap();
         let deployed_entries = hook::merge_hooks_into_settings(&settings_path, &translated)?;
 
         Ok(DeployedArtifact {
@@ -54,8 +58,8 @@ impl Backend for ClaudeBackend {
         mcp_config: &serde_json::Value,
         config: &Config,
     ) -> Result<Vec<DeployedMcpEntry>> {
-        let config_path = config.claude_config_path();
-        mcp::merge_mcp_into_config(&config_path, mcp_config)
+        let dirs = config.backend(BackendId::Claude);
+        mcp::merge_mcp_into_config(&dirs.config_path.unwrap(), mcp_config)
     }
 }
 

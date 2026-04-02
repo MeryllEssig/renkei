@@ -20,11 +20,12 @@ impl Backend for CursorBackend {
     }
 
     fn detect_installed(&self, config: &Config) -> bool {
-        config.cursor_dir().is_dir()
+        config.backend(BackendId::Cursor).root_dir.is_dir()
     }
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let dest_dir = config.cursor_rules_dir();
+        let dirs = config.backend(BackendId::Cursor);
+        let dest_dir = dirs.skills_dir.unwrap();
         fs::create_dir_all(&dest_dir)?;
 
         let source_content = fs::read_to_string(&artifact.source_path).map_err(|e| {
@@ -56,14 +57,16 @@ impl Backend for CursorBackend {
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Cursor);
         let dest_filename = format!("{}.md", artifact.name);
-        super::deploy_file(artifact, config.cursor_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, dirs.agents_dir.unwrap(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Cursor);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
         let translated = hook::translate_hooks_cursor(&renkei_hooks)?;
-        let hooks_path = config.cursor_hooks_path();
+        let hooks_path = dirs.hooks_path.unwrap();
         let deployed_entries = hook::write_cursor_hooks(&hooks_path, &translated)?;
 
         Ok(DeployedArtifact {
@@ -79,7 +82,8 @@ impl Backend for CursorBackend {
         mcp_config: &serde_json::Value,
         config: &Config,
     ) -> Result<Vec<DeployedMcpEntry>> {
-        mcp::merge_mcp_into_config(&config.cursor_mcp_path(), mcp_config)
+        let dirs = config.backend(BackendId::Cursor);
+        mcp::merge_mcp_into_config(&dirs.mcp_path.unwrap(), mcp_config)
     }
 }
 

@@ -22,7 +22,7 @@ impl Backend for CodexBackend {
     }
 
     fn detect_installed(&self, config: &Config) -> bool {
-        config.codex_dir().is_dir()
+        config.backend(BackendId::Codex).root_dir.is_dir()
     }
 
     fn reads_agents_skills(&self) -> bool {
@@ -31,14 +31,17 @@ impl Backend for CodexBackend {
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let skill_dir = config
-            .agents_skills_dir()
+            .backend(BackendId::Agents)
+            .skills_dir
+            .unwrap()
             .join(format!("renkei-{}", artifact.name));
         super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     /// Deploy agent as TOML file to `.codex/agents/{name}.toml`.
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let dest_dir = config.codex_agents_dir();
+        let dirs = config.backend(BackendId::Codex);
+        let dest_dir = dirs.agents_dir.unwrap();
         fs::create_dir_all(&dest_dir)?;
 
         let md_content = fs::read_to_string(&artifact.source_path).map_err(|e| {
@@ -74,9 +77,10 @@ impl Backend for CodexBackend {
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Codex);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
         let translated = hook::translate_hooks_with(&renkei_hooks, hook::translate_event_codex)?;
-        let hooks_path = config.codex_hooks_path();
+        let hooks_path = dirs.hooks_path.unwrap();
         let deployed_entries = hook::write_standalone_hooks(&hooks_path, &translated)?;
 
         Ok(DeployedArtifact {
@@ -96,7 +100,8 @@ impl Backend for CodexBackend {
             RenkeiError::InvalidManifest("mcp field must be a JSON object".into())
         })?;
 
-        let config_path = config.codex_config_path();
+        let dirs = config.backend(BackendId::Codex);
+        let config_path = dirs.config_path.unwrap();
 
         let mut toml_value: toml::Value = match fs::read_to_string(&config_path) {
             Ok(content) => toml::from_str(&content).map_err(|e| {

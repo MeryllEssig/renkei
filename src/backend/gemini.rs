@@ -18,7 +18,7 @@ impl Backend for GeminiBackend {
     }
 
     fn detect_installed(&self, config: &Config) -> bool {
-        config.gemini_dir().is_dir()
+        config.backend(BackendId::Gemini).root_dir.is_dir()
     }
 
     fn reads_agents_skills(&self) -> bool {
@@ -26,21 +26,25 @@ impl Backend for GeminiBackend {
     }
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let skill_dir = config
-            .gemini_skills_dir()
+        let dirs = config.backend(BackendId::Gemini);
+        let skill_dir = dirs
+            .skills_dir
+            .unwrap()
             .join(format!("renkei-{}", artifact.name));
         super::deploy_file(artifact, skill_dir, "SKILL.md")
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Gemini);
         let dest_filename = format!("{}.md", artifact.name);
-        super::deploy_file(artifact, config.gemini_agents_dir(), &dest_filename)
+        super::deploy_file(artifact, dirs.agents_dir.unwrap(), &dest_filename)
     }
 
     fn deploy_hook(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
+        let dirs = config.backend(BackendId::Gemini);
         let renkei_hooks = hook::parse_hook_file(&artifact.source_path)?;
         let translated = hook::translate_hooks_with(&renkei_hooks, hook::translate_event_gemini)?;
-        let settings_path = config.gemini_settings_path();
+        let settings_path = dirs.settings_path.unwrap();
         let deployed_entries = hook::merge_hooks_into_settings(&settings_path, &translated)?;
 
         Ok(DeployedArtifact {
@@ -57,7 +61,8 @@ impl Backend for GeminiBackend {
         mcp_config: &serde_json::Value,
         config: &Config,
     ) -> Result<Vec<DeployedMcpEntry>> {
-        mcp::merge_mcp_into_config(&config.gemini_settings_path(), mcp_config)
+        let dirs = config.backend(BackendId::Gemini);
+        mcp::merge_mcp_into_config(&dirs.settings_path.unwrap(), mcp_config)
     }
 }
 

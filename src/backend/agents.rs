@@ -23,8 +23,10 @@ impl Backend for AgentsBackend {
     }
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
-        let skill_dir = config
-            .agents_skills_dir()
+        let dirs = config.backend(BackendId::Agents);
+        let skill_dir = dirs
+            .skills_dir
+            .unwrap()
             .join(format!("renkei-{}", artifact.name));
         fs::create_dir_all(&skill_dir)?;
 

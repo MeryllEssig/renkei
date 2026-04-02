@@ -5,7 +5,7 @@ use owo_colors::OwoColorize;
 use crate::artifact::ArtifactKind;
 use crate::backend::BackendRegistry;
 use crate::cache;
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::env_check;
 use crate::error::Result;
 use crate::install_cache::{InstallCache, PackageEntry};
@@ -359,8 +359,9 @@ pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> 
     let backend_ok = !detected.is_empty();
     let backend_statuses = registry.status(config);
 
-    let settings = crate::json_file::read_json_or_empty(&config.claude_settings_path())?;
-    let claude_config = crate::json_file::read_json_or_empty(&config.claude_config_path())?;
+    let claude_dirs = config.backend(BackendId::Claude);
+    let settings = crate::json_file::read_json_or_empty(&claude_dirs.settings_path.unwrap())?;
+    let claude_config = crate::json_file::read_json_or_empty(&claude_dirs.config_path.unwrap())?;
 
     let mut packages: Vec<_> = cache.packages.iter().collect();
     packages.sort_by_key(|(name, _)| name.as_str());
