@@ -3,7 +3,7 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 
 use crate::artifact::ArtifactKind;
-use crate::backend::Backend;
+use crate::backend::BackendRegistry;
 use crate::cache;
 use crate::config::Config;
 use crate::env_check;
@@ -341,7 +341,7 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
     }
 }
 
-pub fn run_doctor(config: &Config, global: bool, backend: &dyn Backend) -> Result<bool> {
+pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> Result<bool> {
     let cache = InstallCache::load(config)?;
     let scope_label = if global { "global" } else { "project" };
 
@@ -350,7 +350,8 @@ pub fn run_doctor(config: &Config, global: bool, backend: &dyn Backend) -> Resul
         return Ok(true);
     }
 
-    let backend_ok = backend.detect_installed(config);
+    let detected = registry.detect(config);
+    let backend_ok = !detected.is_empty();
 
     let settings = crate::json_file::read_json_or_empty(&config.claude_settings_path())?;
     let claude_config = crate::json_file::read_json_or_empty(&config.claude_config_path())?;

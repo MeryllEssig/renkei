@@ -68,6 +68,20 @@ impl InstallOptions {
     }
 }
 
+/// Check if an artifact kind is known to be unsupported for a backend.
+/// This allows graceful skipping instead of hard errors during multi-backend deploy.
+fn is_unsupported_for_backend(backend_name: &str, kind: &ArtifactKind) -> bool {
+    match backend_name {
+        "agents" => matches!(kind, ArtifactKind::Agent | ArtifactKind::Hook),
+        _ => false,
+    }
+}
+
+/// Check if MCP registration is known to be unsupported for a backend.
+fn is_mcp_unsupported(backend_name: &str) -> bool {
+    matches!(backend_name, "agents")
+}
+
 fn remove_artifact_file(path: &Path) {
     let _ = std::fs::remove_file(path);
     if let Some(parent) = path.parent() {
@@ -160,7 +174,7 @@ fn default_resolver(force: bool) -> Box<ConflictResolver> {
 pub fn install_local(
     package_dir: &Path,
     config: &Config,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &InstallOptions,
 ) -> Result<()> {
@@ -168,7 +182,7 @@ pub fn install_local(
     install_local_with_resolver(
         package_dir,
         config,
-        backend,
+        backends,
         requested_scope,
         options,
         &*resolver,
@@ -179,7 +193,7 @@ pub fn install_local(
 pub(crate) fn install_local_with_resolver(
     package_dir: &Path,
     config: &Config,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &InstallOptions,
     conflict_resolver: &ConflictResolver,
@@ -192,20 +206,27 @@ pub(crate) fn install_local_with_resolver(
     let manifest = raw_manifest.validate()?;
     manifest::validate_scope(&manifest.install_scope, requested_scope)?;
 
-    // Backend detection
-    if !options.force {
-        let is_installed = backend.detect_installed(config);
-        let has_match = is_installed && manifest.backends.iter().any(|b| b == backend.name());
-        if !has_match {
-            return Err(RenkeiError::BackendNotDetected {
-                required: manifest.backends.join(", "),
-                detected: if is_installed {
-                    backend.name().to_string()
-                } else {
-                    "none".to_string()
-                },
-            });
-        }
+    // Resolve backends: intersect manifest requirements with detected backends
+    let active_backends: Vec<&dyn Backend> = if options.force {
+        backends.to_vec()
+    } else {
+        backends
+            .iter()
+            .filter(|b| manifest.backends.iter().any(|mb| mb == b.name()))
+            .copied()
+            .collect()
+    };
+
+    if active_backends.is_empty() {
+        let detected_names: Vec<&str> = backends.iter().map(|b| b.name()).collect();
+        return Err(RenkeiError::BackendNotDetected {
+            required: manifest.backends.join(", "),
+            detected: if detected_names.is_empty() {
+                "none".to_string()
+            } else {
+                detected_names.join(", ")
+            },
+        });
     }
 
     println!(
@@ -302,55 +323,75 @@ pub(crate) fn install_local_with_resolver(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let mut deployed = Vec::new();
+    // Deploy to all backends, collecting results per backend
+    let mut all_deployed: Vec<DeployedArtifact> = Vec::new();
+    let mut deployed_map: HashMap<String, install_cache::BackendDeployment> = HashMap::new();
 
-    for (art, _) in &effective_artifacts {
-        let result = match art.kind {
-            ArtifactKind::Skill => backend.deploy_skill(art, config),
-            ArtifactKind::Agent => backend.deploy_agent(art, config),
-            ArtifactKind::Hook => backend.deploy_hook(art, config),
+    for backend in &active_backends {
+        let mut backend_deployed = Vec::new();
+
+        for (art, _) in &effective_artifacts {
+            let result = match art.kind {
+                ArtifactKind::Skill => backend.deploy_skill(art, config),
+                ArtifactKind::Agent => backend.deploy_agent(art, config),
+                ArtifactKind::Hook => backend.deploy_hook(art, config),
+            };
+            match result {
+                Ok(d) => backend_deployed.push(d),
+                Err(_) if is_unsupported_for_backend(backend.name(), &art.kind) => {
+                    // Skip unsupported artifact types for this backend
+                    continue;
+                }
+                Err(e) => {
+                    // Rollback everything deployed so far (all backends + current)
+                    rollback(&all_deployed, config);
+                    rollback(&backend_deployed, config);
+                    return Err(e);
+                }
+            }
+        }
+
+        let mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
+            match backend.register_mcp(mcp, config) {
+                Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
+                Err(_) if is_mcp_unsupported(backend.name()) => vec![],
+                Err(e) => {
+                    rollback(&all_deployed, config);
+                    rollback(&backend_deployed, config);
+                    return Err(e);
+                }
+            }
+        } else {
+            vec![]
         };
-        match result {
-            Ok(d) => deployed.push(d),
-            Err(e) => {
-                rollback(&deployed, config);
-                return Err(e);
-            }
-        }
+
+        let deployed_entries: Vec<DeployedArtifactEntry> = backend_deployed
+            .iter()
+            .map(|d| {
+                let original = effective_artifacts
+                    .iter()
+                    .find(|(art, _)| art.name == d.artifact_name && art.kind == d.artifact_kind)
+                    .and_then(|(_, orig)| orig.clone());
+                DeployedArtifactEntry {
+                    artifact_type: d.artifact_kind.clone(),
+                    name: d.artifact_name.clone(),
+                    deployed_path: d.deployed_path.to_string_lossy().to_string(),
+                    deployed_hooks: d.deployed_hooks.clone(),
+                    original_name: original,
+                }
+            })
+            .collect();
+
+        deployed_map.insert(
+            backend.name().to_string(),
+            install_cache::BackendDeployment {
+                artifacts: deployed_entries,
+                mcp_servers,
+            },
+        );
+
+        all_deployed.extend(backend_deployed);
     }
-
-    let deployed_mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
-        match backend.register_mcp(mcp, config) {
-            Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
-            Err(e) => {
-                rollback(&deployed, config);
-                return Err(e);
-            }
-        }
-    } else {
-        vec![]
-    };
-
-    let deployed_entries: Vec<DeployedArtifactEntry> = deployed
-        .iter()
-        .zip(effective_artifacts.iter())
-        .map(|(d, (_, original))| DeployedArtifactEntry {
-            artifact_type: d.artifact_kind.clone(),
-            name: d.artifact_name.clone(),
-            deployed_path: d.deployed_path.to_string_lossy().to_string(),
-            deployed_hooks: d.deployed_hooks.clone(),
-            original_name: original.clone(),
-        })
-        .collect();
-
-    let mut deployed_map = HashMap::new();
-    deployed_map.insert(
-        backend.name().to_string(),
-        install_cache::BackendDeployment {
-            artifacts: deployed_entries,
-            mcp_servers: deployed_mcp_servers,
-        },
-    );
 
     install_cache.upsert_package(
         &manifest.full_name,
@@ -385,10 +426,10 @@ pub(crate) fn install_local_with_resolver(
     println!(
         "{} Deployed {} artifact(s) for {}",
         "Done.".green().bold(),
-        deployed.len(),
+        all_deployed.len(),
         manifest.full_name
     );
-    for d in &deployed {
+    for d in &all_deployed {
         println!("  {} {}", "→".dimmed(), d.deployed_path.display());
     }
 
@@ -651,7 +692,7 @@ mod tests {
         let result = install_local(
             pkg.path(),
             &config,
-            &backend,
+            &[&backend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -690,7 +731,7 @@ mod tests {
         let result = install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -704,10 +745,11 @@ mod tests {
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let options = InstallOptions::local("/tmp".to_string());
+        let empty_backends: Vec<&dyn Backend> = vec![];
         let result = install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &empty_backends,
             RequestedScope::Global,
             &options,
         );
@@ -730,7 +772,7 @@ mod tests {
         let result = install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -748,7 +790,7 @@ mod tests {
         let result = install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -809,7 +851,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_a,
             &force_resolver,
@@ -822,7 +864,7 @@ mod tests {
         install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &force_resolver,
@@ -863,7 +905,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,
@@ -876,7 +918,7 @@ mod tests {
         let result = install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &error_resolver,
@@ -900,7 +942,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,
@@ -914,7 +956,7 @@ mod tests {
         install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &resolver,
@@ -947,7 +989,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,
@@ -961,7 +1003,7 @@ mod tests {
         install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &resolver,
@@ -993,7 +1035,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &error_resolver,
@@ -1002,7 +1044,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &error_resolver,
@@ -1025,7 +1067,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_a,
             &error_resolver,
@@ -1034,7 +1076,7 @@ mod tests {
         install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &error_resolver,
@@ -1064,7 +1106,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,
@@ -1093,7 +1135,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Project,
             &opts,
             &force_resolver,
@@ -1121,7 +1163,7 @@ mod tests {
         install_local_with_resolver(
             pkg_a.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_a,
             &force_resolver,
@@ -1130,7 +1172,7 @@ mod tests {
         install_local_with_resolver(
             pkg_b.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts_b,
             &force_resolver,
@@ -1156,7 +1198,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,
@@ -1165,7 +1207,7 @@ mod tests {
         install_local_with_resolver(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
             &force_resolver,

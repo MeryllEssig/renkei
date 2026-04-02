@@ -16,7 +16,7 @@ pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],
     config: &Config,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &InstallOptions,
 ) -> Result<()> {
@@ -41,7 +41,7 @@ pub fn install_workspace(
         install::install_local(
             &member_dir,
             config,
-            backend,
+            backends,
             requested_scope,
             &member_options,
         )?;
@@ -126,7 +126,7 @@ mod tests {
             ws.path(),
             &["member-a".to_string(), "member-b".to_string()],
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         )
@@ -180,7 +180,7 @@ mod tests {
             ws.path(),
             &["exists".to_string(), "missing".to_string()],
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -208,7 +208,7 @@ mod tests {
             ws.path(),
             &["member-a".to_string()],
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         );
@@ -233,7 +233,7 @@ mod tests {
             ws.path(),
             &["member-a".to_string(), "member-b".to_string()],
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
         )

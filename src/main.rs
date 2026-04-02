@@ -29,8 +29,7 @@ use std::process;
 use clap::Parser;
 use owo_colors::OwoColorize;
 
-use backend::claude::ClaudeBackend;
-use backend::Backend;
+use backend::{Backend, BackendRegistry};
 use cli::{Cli, Commands};
 use config::Config;
 use manifest::RequestedScope;
@@ -49,7 +48,7 @@ fn build_config(global: bool) -> error::Result<Config> {
 fn install_or_workspace(
     package_dir: &Path,
     config: &Config,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &install::InstallOptions,
 ) -> error::Result<()> {
@@ -58,12 +57,12 @@ fn install_or_workspace(
             package_dir,
             &members,
             config,
-            backend,
+            backends,
             requested_scope,
             options,
         )
     } else {
-        install::install_local(package_dir, config, backend, requested_scope, options)
+        install::install_local(package_dir, config, backends, requested_scope, options)
     }
 }
 
@@ -72,7 +71,7 @@ fn run_install(
     global: bool,
     tag: Option<&str>,
     force: bool,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
 ) -> error::Result<()> {
     let requested_scope = if global {
         RequestedScope::Global
@@ -89,7 +88,7 @@ fn run_install(
                 force,
                 ..install::InstallOptions::local(path_str)
             };
-            install_or_workspace(&path, &config, backend, requested_scope, &options)
+            install_or_workspace(&path, &config, backends, requested_scope, &options)
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
@@ -98,14 +97,14 @@ fn run_install(
                 force,
                 ..install::InstallOptions::git(url, sha, tag.map(String::from))
             };
-            install_or_workspace(tmp_dir.path(), &config, backend, requested_scope, &options)
+            install_or_workspace(tmp_dir.path(), &config, backends, requested_scope, &options)
         }
     }
 }
 
-fn run_install_from_lockfile(global: bool, backend: &dyn Backend) -> error::Result<()> {
+fn run_install_from_lockfile(global: bool, backends: &[&dyn Backend]) -> error::Result<()> {
     let config = build_config(global)?;
-    lockfile::install_from_lockfile(&config, backend)
+    lockfile::install_from_lockfile(&config, backends)
 }
 
 fn run_uninstall(package: &str, global: bool) -> error::Result<()> {
@@ -118,9 +117,9 @@ fn run_list(global: bool) -> error::Result<()> {
     list::run_list(&config, global)
 }
 
-fn run_doctor(global: bool, backend: &dyn Backend) -> error::Result<()> {
+fn run_doctor(global: bool, registry: &BackendRegistry) -> error::Result<()> {
     let config = build_config(global)?;
-    let healthy = doctor::run_doctor(&config, global, backend)?;
+    let healthy = doctor::run_doctor(&config, global, registry)?;
     if !healthy {
         process::exit(1);
     }
@@ -129,7 +128,8 @@ fn run_doctor(global: bool, backend: &dyn Backend) -> error::Result<()> {
 
 fn main() {
     let cli = Cli::parse();
-    let backend = ClaudeBackend;
+    let registry = BackendRegistry::all();
+    let all_backends = registry.detect(&Config::new());
 
     let result: error::Result<()> = match cli.command {
         Commands::Install {
@@ -137,14 +137,14 @@ fn main() {
             global,
             tag,
             force,
-        } => run_install(&source, global, tag.as_deref(), force, &backend),
+        } => run_install(&source, global, tag.as_deref(), force, &all_backends),
         Commands::Install {
             source: None,
             global,
             ..
-        } => run_install_from_lockfile(global, &backend),
+        } => run_install_from_lockfile(global, &all_backends),
         Commands::List { global } => run_list(global),
-        Commands::Doctor { global } => run_doctor(global, &backend),
+        Commands::Doctor { global } => run_doctor(global, &registry),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),
         Commands::Package { bump } => package::run_package(bump),
         Commands::Migrate { path } => migrate::run_migrate(&path),

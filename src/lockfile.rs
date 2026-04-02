@@ -113,7 +113,7 @@ fn strip_integrity_prefix(integrity: &str) -> &str {
         .unwrap_or(integrity)
 }
 
-pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<()> {
+pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Result<()> {
     let lockfile_path = config.lockfile_path();
 
     if config.is_project() && !lockfile_path.exists() {
@@ -175,10 +175,10 @@ pub fn install_from_lockfile(config: &Config, backend: &dyn Backend) -> Result<(
                 cache::extract_archive_to_dir(&archive, tmp.path())?;
 
                 let options = build_install_options(entry);
-                install::install_local(tmp.path(), config, backend, requested_scope, &options)?;
+                install::install_local(tmp.path(), config, backends, requested_scope, &options)?;
             }
             Err(_) => {
-                install_from_source(config, backend, requested_scope, entry)?;
+                install_from_source(config, backends, requested_scope, entry)?;
             }
         }
     }
@@ -203,7 +203,7 @@ fn build_install_options(entry: &LockfileEntry) -> install::InstallOptions {
 
 fn install_from_source(
     config: &Config,
-    backend: &dyn Backend,
+    backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     entry: &LockfileEntry,
 ) -> Result<()> {
@@ -212,12 +212,12 @@ fn install_from_source(
             let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
             let sha = crate::git::resolve_head(tmp_dir.path())?;
             let options = install::InstallOptions::git(url, sha, entry.tag.clone());
-            install::install_local(tmp_dir.path(), config, backend, requested_scope, &options)
+            install::install_local(tmp_dir.path(), config, backends, requested_scope, &options)
         }
         source::PackageSource::Local(path_str) => {
             let path = PathBuf::from(&path_str);
             let options = install::InstallOptions::local(path_str);
-            install::install_local(&path, config, backend, requested_scope, &options)
+            install::install_local(&path, config, backends, requested_scope, &options)
         }
     }
 }
@@ -487,7 +487,7 @@ mod tests {
         install::install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
         )
@@ -504,7 +504,7 @@ mod tests {
         assert!(!skill_path.exists());
 
         // Step 3: install from lockfile
-        install_from_lockfile(&config, &ClaudeBackend).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]).unwrap();
 
         // Verify skill is re-deployed
         assert!(skill_path.exists());
@@ -522,7 +522,7 @@ mod tests {
         install::install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
         )
@@ -537,7 +537,7 @@ mod tests {
         lockfile.save(&lockfile_path).unwrap();
 
         // Install from lockfile should fail with integrity error
-        let result = install_from_lockfile(&config, &ClaudeBackend);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Integrity check failed"));
@@ -549,7 +549,7 @@ mod tests {
         let home = tempdir().unwrap();
         let config = Config::with_home_dir(home.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &ClaudeBackend);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -562,7 +562,7 @@ mod tests {
         let project = tempdir().unwrap();
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &ClaudeBackend);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -583,7 +583,7 @@ mod tests {
 
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &ClaudeBackend);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Workspace detected"));
@@ -604,7 +604,7 @@ mod tests {
         install::install_local(
             pkg.path(),
             &config,
-            &ClaudeBackend,
+            &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
         )
@@ -617,7 +617,7 @@ mod tests {
         fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
 
         // Install from lockfile — should fall back to local source
-        install_from_lockfile(&config, &ClaudeBackend).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]).unwrap();
 
         let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
         assert!(skill_path.exists());
