@@ -3,6 +3,26 @@ use std::process::Stdio;
 
 use crate::error::{RenkeiError, Result};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BackendId {
+    Claude,
+    Cursor,
+    Codex,
+    Gemini,
+    Agents,
+}
+
+#[derive(Debug, Clone)]
+pub struct BackendDirs {
+    pub root_dir: PathBuf,
+    pub skills_dir: Option<PathBuf>,
+    pub agents_dir: Option<PathBuf>,
+    pub settings_path: Option<PathBuf>,
+    pub config_path: Option<PathBuf>,
+    pub hooks_path: Option<PathBuf>,
+    pub mcp_path: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub home_dir: PathBuf,
@@ -193,6 +213,71 @@ impl Config {
 
     pub fn gemini_settings_path(&self) -> PathBuf {
         self.gemini_subdir("settings.json")
+    }
+
+    /// Resolve a scoped path: project-local when in project scope, home-based otherwise.
+    fn scoped(&self, dot_dir: &str, name: &str) -> PathBuf {
+        match self.project_root {
+            Some(ref root) => root.join(dot_dir).join(name),
+            None => self.home_dir.join(dot_dir).join(name),
+        }
+    }
+
+    /// Single entry point for all backend path resolution.
+    pub fn backend(&self, id: BackendId) -> BackendDirs {
+        match id {
+            BackendId::Claude => BackendDirs {
+                root_dir: self.home_dir.join(".claude"),
+                skills_dir: Some(self.scoped(".claude", "skills")),
+                agents_dir: Some(self.scoped(".claude", "agents")),
+                settings_path: Some(self.home_dir.join(".claude").join("settings.json")),
+                config_path: Some(self.home_dir.join(".claude.json")),
+                hooks_path: None,
+                mcp_path: None,
+            },
+            BackendId::Cursor => BackendDirs {
+                root_dir: self.home_dir.join(".cursor"),
+                skills_dir: Some(self.scoped(".cursor", "rules")),
+                agents_dir: Some(self.scoped(".cursor", "agents")),
+                settings_path: None,
+                config_path: None,
+                hooks_path: Some(self.scoped(".cursor", "hooks.json")),
+                mcp_path: Some(self.scoped(".cursor", "mcp.json")),
+            },
+            BackendId::Codex => BackendDirs {
+                root_dir: self.home_dir.join(".codex"),
+                skills_dir: None,
+                agents_dir: Some(self.scoped(".codex", "agents")),
+                settings_path: None,
+                config_path: Some(self.scoped(".codex", "config.toml")),
+                hooks_path: Some(self.scoped(".codex", "hooks.json")),
+                mcp_path: None,
+            },
+            BackendId::Gemini => BackendDirs {
+                root_dir: self.home_dir.join(".gemini"),
+                skills_dir: Some(self.scoped(".gemini", "skills")),
+                agents_dir: Some(self.scoped(".gemini", "agents")),
+                settings_path: Some(self.scoped(".gemini", "settings.json")),
+                config_path: None,
+                hooks_path: None,
+                mcp_path: None,
+            },
+            BackendId::Agents => {
+                let root = match self.project_root {
+                    Some(ref root) => root.join(".agents"),
+                    None => self.home_dir.join(".agents"),
+                };
+                BackendDirs {
+                    skills_dir: Some(root.join("skills")),
+                    root_dir: root,
+                    agents_dir: None,
+                    settings_path: None,
+                    config_path: None,
+                    hooks_path: None,
+                    mcp_path: None,
+                }
+            }
+        }
     }
 }
 
@@ -466,5 +551,122 @@ mod tests {
             config.gemini_settings_path(),
             PathBuf::from("/home/user/.gemini/settings.json")
         );
+    }
+
+    // --- BackendDirs boundary tests ---
+
+    #[test]
+    fn test_backend_claude_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let dirs = config.backend(BackendId::Claude);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.claude"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/home/user/.claude/skills"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/home/user/.claude/agents"));
+        assert_eq!(dirs.settings_path.unwrap(), PathBuf::from("/home/user/.claude/settings.json"));
+        assert_eq!(dirs.config_path.unwrap(), PathBuf::from("/home/user/.claude.json"));
+        assert!(dirs.hooks_path.is_none());
+        assert!(dirs.mcp_path.is_none());
+    }
+
+    #[test]
+    fn test_backend_claude_project() {
+        let config = Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        let dirs = config.backend(BackendId::Claude);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.claude"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/projects/foo/.claude/skills"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/projects/foo/.claude/agents"));
+        assert_eq!(dirs.settings_path.unwrap(), PathBuf::from("/home/user/.claude/settings.json"));
+        assert_eq!(dirs.config_path.unwrap(), PathBuf::from("/home/user/.claude.json"));
+    }
+
+    #[test]
+    fn test_backend_cursor_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let dirs = config.backend(BackendId::Cursor);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.cursor"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/home/user/.cursor/rules"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/home/user/.cursor/agents"));
+        assert!(dirs.settings_path.is_none());
+        assert!(dirs.config_path.is_none());
+        assert_eq!(dirs.hooks_path.unwrap(), PathBuf::from("/home/user/.cursor/hooks.json"));
+        assert_eq!(dirs.mcp_path.unwrap(), PathBuf::from("/home/user/.cursor/mcp.json"));
+    }
+
+    #[test]
+    fn test_backend_cursor_project() {
+        let config = Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        let dirs = config.backend(BackendId::Cursor);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.cursor"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/projects/foo/.cursor/rules"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/projects/foo/.cursor/agents"));
+        assert_eq!(dirs.hooks_path.unwrap(), PathBuf::from("/projects/foo/.cursor/hooks.json"));
+        assert_eq!(dirs.mcp_path.unwrap(), PathBuf::from("/projects/foo/.cursor/mcp.json"));
+    }
+
+    #[test]
+    fn test_backend_codex_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let dirs = config.backend(BackendId::Codex);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.codex"));
+        assert!(dirs.skills_dir.is_none());
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/home/user/.codex/agents"));
+        assert!(dirs.settings_path.is_none());
+        assert_eq!(dirs.config_path.unwrap(), PathBuf::from("/home/user/.codex/config.toml"));
+        assert_eq!(dirs.hooks_path.unwrap(), PathBuf::from("/home/user/.codex/hooks.json"));
+        assert!(dirs.mcp_path.is_none());
+    }
+
+    #[test]
+    fn test_backend_codex_project() {
+        let config = Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        let dirs = config.backend(BackendId::Codex);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.codex"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/projects/foo/.codex/agents"));
+        assert_eq!(dirs.config_path.unwrap(), PathBuf::from("/projects/foo/.codex/config.toml"));
+        assert_eq!(dirs.hooks_path.unwrap(), PathBuf::from("/projects/foo/.codex/hooks.json"));
+    }
+
+    #[test]
+    fn test_backend_gemini_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let dirs = config.backend(BackendId::Gemini);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.gemini"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/home/user/.gemini/skills"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/home/user/.gemini/agents"));
+        assert_eq!(dirs.settings_path.unwrap(), PathBuf::from("/home/user/.gemini/settings.json"));
+        assert!(dirs.config_path.is_none());
+        assert!(dirs.hooks_path.is_none());
+        assert!(dirs.mcp_path.is_none());
+    }
+
+    #[test]
+    fn test_backend_gemini_project() {
+        let config = Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        let dirs = config.backend(BackendId::Gemini);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.gemini"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/projects/foo/.gemini/skills"));
+        assert_eq!(dirs.agents_dir.unwrap(), PathBuf::from("/projects/foo/.gemini/agents"));
+        assert_eq!(dirs.settings_path.unwrap(), PathBuf::from("/projects/foo/.gemini/settings.json"));
+    }
+
+    #[test]
+    fn test_backend_agents_global() {
+        let config = Config::with_home_dir(PathBuf::from("/home/user"));
+        let dirs = config.backend(BackendId::Agents);
+        assert_eq!(dirs.root_dir, PathBuf::from("/home/user/.agents"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/home/user/.agents/skills"));
+        assert!(dirs.agents_dir.is_none());
+        assert!(dirs.settings_path.is_none());
+        assert!(dirs.config_path.is_none());
+        assert!(dirs.hooks_path.is_none());
+        assert!(dirs.mcp_path.is_none());
+    }
+
+    #[test]
+    fn test_backend_agents_project() {
+        let config = Config::for_project(PathBuf::from("/home/user"), PathBuf::from("/projects/foo"));
+        let dirs = config.backend(BackendId::Agents);
+        assert_eq!(dirs.root_dir, PathBuf::from("/projects/foo/.agents"));
+        assert_eq!(dirs.skills_dir.unwrap(), PathBuf::from("/projects/foo/.agents/skills"));
     }
 }
