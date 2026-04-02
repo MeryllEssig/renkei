@@ -161,7 +161,7 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create settings.json with a hook
-        let settings_path = config.claude_settings_path();
+        let settings_path = config.backend(crate::config::BackendId::Claude).settings_path.unwrap();
         std::fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         let settings = serde_json::json!({
             "hooks": {
@@ -216,7 +216,7 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create .claude.json with MCP servers
-        let config_path = config.claude_config_path();
+        let config_path = config.backend(crate::config::BackendId::Claude).config_path.unwrap();
         let claude_json = serde_json::json!({
             "mcpServers": {
                 "test-server": {

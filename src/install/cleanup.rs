@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::artifact::ArtifactKind;
 use crate::backend::DeployedArtifact;
-use crate::config::Config;
+use crate::config::{BackendId, Config};
 use crate::hook;
 use crate::install_cache::InstallCache;
 use crate::mcp;
@@ -22,7 +22,8 @@ pub(crate) fn undo_artifact(
 ) {
     match kind {
         ArtifactKind::Hook => {
-            let _ = hook::remove_hooks_from_settings(&config.claude_settings_path(), hooks);
+            let claude_dirs = config.backend(BackendId::Claude);
+            let _ = hook::remove_hooks_from_settings(&claude_dirs.settings_path.unwrap(), hooks);
         }
         _ => remove_artifact_file(path),
     }
@@ -50,7 +51,8 @@ pub(crate) fn cleanup_previous_installation(
                     server_name: name.to_string(),
                 })
                 .collect();
-            let _ = mcp::remove_mcp_from_config(&config.claude_config_path(), &mcp_entries);
+            let claude_dirs = config.backend(BackendId::Claude);
+            let _ = mcp::remove_mcp_from_config(&claude_dirs.config_path.unwrap(), &mcp_entries);
         }
     }
 }
