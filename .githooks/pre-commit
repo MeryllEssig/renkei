@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+echo "Running pre-commit checks..."
+
+echo "  fmt..."
+cargo fmt --check 2>&1 || {
+    echo "ERROR: cargo fmt check failed. Run 'cargo fmt' to fix."
+    exit 1
+}
+
+echo "  clippy..."
+cargo clippy -- -D warnings 2>&1 || {
+    echo "ERROR: cargo clippy failed. Fix warnings before committing."
+    exit 1
+}
+
+echo "  test..."
+cargo test --all-targets 2>&1 || {
+    echo "ERROR: cargo test failed. Fix tests before committing."
+    exit 1
+}
+
+echo "All checks passed."

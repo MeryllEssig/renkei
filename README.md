@@ -36,17 +36,13 @@ rk doctor                                        # Run health checks
 
 ## Installation
 
-### From releases
+### Quick install
 
 ```bash
-# macOS (Apple Silicon)
-curl -fsSL https://github.com/meryll/renkei/releases/latest/download/rk-darwin-aarch64.tar.gz | tar xz
-sudo mv rk /usr/local/bin/
-
-# Linux (x86_64)
-curl -fsSL https://github.com/meryll/renkei/releases/latest/download/rk-linux-x86_64.tar.gz | tar xz
-sudo mv rk /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/meryll/renkei/main/install.sh | sh
 ```
+
+Auto-detects your OS and architecture. Installs to `~/.local/bin` by default (override with `RK_INSTALL_DIR`).
 
 ### From source
 
@@ -184,6 +180,7 @@ Review the code changes and provide feedback on:
 ## Development
 
 ```bash
+git config core.hooksPath .githooks  # Enable pre-commit checks (fmt, clippy, test)
 cargo test              # Run all tests
 cargo test -- --nocapture  # With output
 cargo clippy            # Lint
