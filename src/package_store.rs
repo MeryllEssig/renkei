@@ -44,6 +44,7 @@ impl PackageStore {
     }
 
     /// Get a package entry by name.
+    #[allow(dead_code)]
     pub fn get(&self, name: &str) -> Option<&PackageEntry> {
         self.cache.packages.get(name)
     }
@@ -59,6 +60,7 @@ impl PackageStore {
     }
 
     /// Access the lockfile (read-only, for install_from_lockfile).
+    #[allow(dead_code)]
     pub fn lockfile(&self) -> &Lockfile {
         &self.lockfile
     }
