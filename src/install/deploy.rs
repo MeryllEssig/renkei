@@ -39,12 +39,16 @@ pub(crate) fn deploy_to_backends(
 
     let has_agents = active_backends.iter().any(|b| b.name() == "agents");
 
+    // Pre-build lookup for original names (avoids O(n²) scan in entry building)
+    let original_names: HashMap<(&ArtifactKind, &str), Option<&String>> = effective_artifacts
+        .iter()
+        .map(|(art, orig)| ((&art.kind, art.name.as_str()), orig.as_ref()))
+        .collect();
+
     for backend in active_backends {
         let mut backend_deployed = Vec::new();
 
         for (art, _) in effective_artifacts {
-            // Deduplication: if the agents backend is also active and this backend reads from
-            // .agents/skills/, skip the skill deploy to avoid double-deploying the same file.
             if art.kind == ArtifactKind::Skill && backend.reads_agents_skills() && has_agents {
                 continue;
             }
@@ -84,10 +88,9 @@ pub(crate) fn deploy_to_backends(
         let deployed_entries: Vec<DeployedArtifactEntry> = backend_deployed
             .iter()
             .map(|d| {
-                let original = effective_artifacts
-                    .iter()
-                    .find(|(art, _)| art.name == d.artifact_name && art.kind == d.artifact_kind)
-                    .and_then(|(_, orig)| orig.clone());
+                let original = original_names
+                    .get(&(&d.artifact_kind, d.artifact_name.as_str()))
+                    .and_then(|o| o.cloned());
                 DeployedArtifactEntry {
                     artifact_type: d.artifact_kind.clone(),
                     name: d.artifact_name.clone(),

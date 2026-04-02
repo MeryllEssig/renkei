@@ -52,7 +52,6 @@ pub(crate) fn resolve_conflicts_and_rename(
         .map(|art| {
             let key = (art.kind.clone(), art.name.clone());
             if let Some(new_name) = renames.get(&key) {
-                // Read source, rewrite frontmatter, write to temp file
                 let content = std::fs::read_to_string(&art.source_path).map_err(|e| {
                     RenkeiError::DeploymentFailed(format!(
                         "Cannot read {}: {e}",
