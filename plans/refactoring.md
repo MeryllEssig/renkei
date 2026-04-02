@@ -327,27 +327,27 @@ pub fn install_from_lock_entry(...) -> Result<()> {
 
 **Tasks**:
 
-- [ ] Create `CorePipeline` struct in `install/pipeline.rs` (or inline in `install/mod.rs`)
-- [ ] Implement `CorePipeline::discover()`: manifest load + validate, backend filtering, artifact discovery
-- [ ] Implement `CorePipeline::cleanup_and_resolve()`: cleanup previous install + conflict resolution
-- [ ] Implement `CorePipeline::deploy()`: multi-backend deployment with rollback on failure
-- [ ] Refactor `install_local` to use `CorePipeline` + `PackageStore`
-- [ ] Create `install_from_lock_entry` using `CorePipeline` without archive creation
-- [ ] Refactor `lockfile.rs::install_from_lockfile()` to iterate lockfile entries and call `install_from_lock_entry`
-- [ ] Remove `from_lockfile` boolean from `InstallOptions`
-- [ ] Remove `SourceKind` from `InstallOptions` if no longer needed (source info passed directly)
-- [ ] Update integration tests to cover both paths
-- [ ] Write boundary tests for `CorePipeline::discover()`, `cleanup_and_resolve()`, `deploy()` individually
-- [ ] Run full test suite, verify iso-functionality
+- [x] Create `CorePipeline` struct in `install/pipeline.rs` (or inline in `install/mod.rs`)
+- [x] Implement `CorePipeline::discover()`: manifest load + validate, backend filtering, artifact discovery
+- [x] Implement `CorePipeline::cleanup_and_resolve()`: cleanup previous install + conflict resolution
+- [x] Implement `CorePipeline::deploy()`: multi-backend deployment with rollback on failure *(implemented as `ResolvedPipeline::deploy()` — type-state pattern: CorePipeline → ResolvedPipeline after conflict resolution)*
+- [x] Refactor `install_local` to use `CorePipeline` + `PackageStore`
+- [x] Create `install_from_lock_entry` using `CorePipeline` without archive creation
+- [x] Refactor `lockfile.rs::install_from_lockfile()` to iterate lockfile entries and call `install_from_lock_entry`
+- [x] Remove `from_lockfile` boolean from `InstallOptions`
+- [ ] Remove `SourceKind` from `InstallOptions` if no longer needed (source info passed directly) *(kept: SourceKind is still needed by install_local to distinguish git vs local source paths in PackageEntry)*
+- [x] Update integration tests to cover both paths *(existing integration tests cover both paths; new pipeline_tests cover CorePipeline + install_from_lock_entry)*
+- [x] Write boundary tests for `CorePipeline::discover()`, `cleanup_and_resolve()`, `deploy()` individually
+- [x] Run full test suite, verify iso-functionality
 
 ---
 
 ## Cleanup Tasks (After All Phases)
 
-- [ ] Delete `json_file.rs` if confirmed dead code (20 LOC)
+- [ ] Delete `json_file.rs` if confirmed dead code (20 LOC) *(not dead code: used by doctor, hook, user_config, migrate, package, mcp)*
 - [ ] Remove any `#[allow(dead_code)]` that are no longer needed
-- [ ] Run `cargo clippy` and fix any new warnings
-- [ ] Run full integration test suite one final time
+- [x] Run `cargo clippy` and fix any new warnings *(no new warnings in refactored code)*
+- [x] Run full integration test suite one final time
 
 ---
 
