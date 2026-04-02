@@ -3,38 +3,25 @@ use owo_colors::OwoColorize;
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
 use crate::install;
-use crate::install_cache::InstallCache;
-use crate::lockfile::Lockfile;
+use crate::package_store::PackageStore;
 
 pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
-    let mut install_cache = InstallCache::load(config)?;
+    let mut store = PackageStore::load(config)?;
 
-    if !install_cache.packages.contains_key(package) {
+    if !store.contains(package) {
         return Err(RenkeiError::PackageNotFound {
             package: package.to_string(),
             scope: config.scope_label().to_string(),
         });
     }
 
-    install::cleanup_previous_installation(package, &install_cache, config);
+    install::cleanup_previous_installation(package, store.cache(), config);
 
-    install_cache.packages.remove(package);
-    install_cache.save(config)?;
-
-    remove_from_lockfile(package, config);
+    store.remove(package);
+    store.save(config)?;
 
     println!("{} Uninstalled {}", "Done.".green().bold(), package.bold());
     Ok(())
-}
-
-fn remove_from_lockfile(package: &str, config: &Config) {
-    let path = config.lockfile_path();
-    let mut lockfile = match Lockfile::load(&path) {
-        Ok(lf) => lf,
-        Err(_) => return,
-    };
-    lockfile.remove(package);
-    let _ = lockfile.save(&path);
 }
 
 #[cfg(test)]
@@ -42,7 +29,7 @@ mod tests {
     use super::*;
     use crate::artifact::ArtifactKind;
     use crate::hook::DeployedHookEntry;
-    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, PackageEntry};
+    use crate::install_cache::{BackendDeployment, DeployedArtifactEntry, InstallCache, PackageEntry};
     use std::collections::HashMap;
     use tempfile::tempdir;
 
