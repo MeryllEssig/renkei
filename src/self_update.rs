@@ -94,9 +94,10 @@ pub fn perform_update(latest: &Version) -> Result<()> {
     fs::rename(&tmp_path, &current_exe).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         if e.kind() == std::io::ErrorKind::PermissionDenied {
-            RenkeiError::SelfUpdateFailed(format!(
+            RenkeiError::SelfUpdateFailed(
                 "Permission denied. Run with elevated privileges:\n  sudo rk self-update"
-            ))
+                    .to_string(),
+            )
         } else {
             RenkeiError::SelfUpdateFailed(format!("Failed to replace binary: {e}"))
         }
