@@ -215,3 +215,48 @@ fn test_uninstall_outside_git_repo() {
         .failure()
         .stderr(predicate::str::contains("No project root"));
 }
+
+#[test]
+fn test_uninstall_removes_from_all_backends() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install a multi-backend package
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("multi-backend-package"))
+        .assert()
+        .success();
+
+    // Verify both backends have the skill
+    let claude_skill = home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md");
+    let agents_skill = home
+        .path()
+        .join(".agents/skills/renkei-review/SKILL.md");
+    assert!(claude_skill.exists());
+    assert!(agents_skill.exists());
+
+    // Uninstall
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .args(["uninstall", "-g", "@test/multi-backend"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Uninstalled"));
+
+    // Both locations cleaned up
+    assert!(
+        !claude_skill.exists(),
+        "Claude skill should be removed after uninstall"
+    );
+    assert!(
+        !agents_skill.exists(),
+        "Agents skill should be removed after uninstall"
+    );
+}

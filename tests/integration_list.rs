@@ -330,3 +330,31 @@ fn test_list_after_real_install() {
         .stdout(predicate::str::contains("0.1.0"))
         .stdout(predicate::str::contains("1 skill"));
 }
+
+#[test]
+fn test_list_shows_per_backend_breakdown() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    // Install a multi-backend package
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("multi-backend-package"))
+        .assert()
+        .success();
+
+    // List should show per-backend lines
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("list")
+        .arg("-g")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("@test/multi-backend"))
+        .stdout(predicate::str::contains("claude"))
+        .stdout(predicate::str::contains("agents"));
+}

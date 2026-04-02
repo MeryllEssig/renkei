@@ -1528,3 +1528,74 @@ fn test_force_preserves_other_artifacts() {
     assert_eq!(multi_artifacts.len(), 1, "Should only have 'lint' left");
     assert_eq!(multi_artifacts[0]["name"], "lint");
 }
+
+// --- Multi-backend integration tests ---
+
+#[test]
+fn test_install_multi_backend_claude_and_agents() {
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("multi-backend-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Skill deployed to claude
+    let claude_skill = home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md");
+    assert!(claude_skill.exists(), "Skill should exist in .claude/");
+
+    // Skill deployed to agents
+    let agents_skill = home
+        .path()
+        .join(".agents/skills/renkei-review/SKILL.md");
+    assert!(agents_skill.exists(), "Skill should exist in .agents/");
+
+    // Cache has both backends
+    let cache: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".renkei/install-cache.json")).unwrap(),
+    )
+    .unwrap();
+    let deployed = &cache["packages"]["@test/multi-backend"]["deployed"];
+    assert!(deployed["claude"]["artifacts"].as_array().unwrap().len() == 1);
+    assert!(deployed["agents"]["artifacts"].as_array().unwrap().len() == 1);
+}
+
+#[test]
+fn test_install_claude_only_still_works() {
+    // Regression: a claude-only package should still install correctly
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+
+    Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .arg("install")
+        .arg("-g")
+        .arg(fixture_path("valid-package"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Done."));
+
+    // Claude skill exists
+    assert!(home
+        .path()
+        .join(".claude/skills/renkei-review/SKILL.md")
+        .exists());
+
+    // Agents skill should NOT exist (manifest only lists "claude")
+    assert!(
+        !home
+            .path()
+            .join(".agents/skills/renkei-review/SKILL.md")
+            .exists(),
+        "Agents backend should not deploy when not in manifest"
+    );
+}

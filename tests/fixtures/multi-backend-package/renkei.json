@@ -1,0 +1,8 @@
+{
+  "name": "@test/multi-backend",
+  "version": "1.0.0",
+  "description": "A package targeting claude and agents",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude", "agents"]
+}
