@@ -140,9 +140,9 @@ mod tests {
             r#"{"name":"@test/sample","version":"0.1.0","description":"test","author":"tester","license":"MIT","backends":["claude"]}"#,
         )
         .unwrap();
-        let skills = dir.join("skills");
-        fs::create_dir_all(&skills).unwrap();
-        fs::write(skills.join("review.md"), "# Review").unwrap();
+        let skill_dir = dir.join("skills/review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Review").unwrap();
     }
 
     #[test]
@@ -186,7 +186,7 @@ mod tests {
             .collect();
 
         assert!(entries.contains(&"renkei.json".to_string()));
-        assert!(entries.iter().any(|e| e.contains("review.md")));
+        assert!(entries.iter().any(|e| e.contains("review/SKILL.md")));
     }
 
     #[test]
@@ -210,7 +210,7 @@ mod tests {
         let manifest = make_test_manifest();
         let (archive_path, _) = create_archive(pkg.path(), &manifest, &config).unwrap();
 
-        let content = extract_file_from_archive(&archive_path, "skills/review.md").unwrap();
+        let content = extract_file_from_archive(&archive_path, "skills/review/SKILL.md").unwrap();
         assert_eq!(content, b"# Review");
     }
 
@@ -264,6 +264,6 @@ mod tests {
         extract_archive_to_dir(&archive_path, dest.path()).unwrap();
 
         assert!(dest.path().join("renkei.json").exists());
-        assert!(dest.path().join("skills/review.md").exists());
+        assert!(dest.path().join("skills/review/SKILL.md").exists());
     }
 }

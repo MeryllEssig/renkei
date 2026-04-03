@@ -98,9 +98,9 @@ mod tests {
             work.path().join("renkei.json"),
             r#"{"name":"@test/git-pkg","version":"1.0.0","description":"test","author":"t","license":"MIT","backends":["claude"]}"#,
         ).unwrap();
-        let skills = work.path().join("skills");
-        fs::create_dir_all(&skills).unwrap();
-        fs::write(skills.join("review.md"), "# Review skill").unwrap();
+        let skill_dir = work.path().join("skills/review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Review skill").unwrap();
 
         Command::new("git")
             .args(["add", "."])
@@ -156,7 +156,7 @@ mod tests {
         let (_bare, url, _sha) = setup_test_repo(None);
         let tmp = clone_repo(&url, None).unwrap();
         assert!(tmp.path().join("renkei.json").exists());
-        assert!(tmp.path().join("skills/review.md").exists());
+        assert!(tmp.path().join("skills/review/SKILL.md").exists());
     }
 
     #[test]

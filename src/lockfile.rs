@@ -491,10 +491,10 @@ mod tests {
             ),
         )
         .unwrap();
-        let skills = pkg.path().join("skills");
-        fs::create_dir_all(&skills).unwrap();
+        let skill_dir = pkg.path().join("skills").join(skill_name);
+        fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
-            skills.join(format!("{skill_name}.md")),
+            skill_dir.join("SKILL.md"),
             format!("---\nname: {skill_name}\ndescription: test\n---\nContent of {skill_name}"),
         )
         .unwrap();

@@ -61,9 +61,9 @@ pub fn make_backend_test_pkg(backends_json: &str) -> tempfile::TempDir {
         ),
     )
     .unwrap();
-    let skills = pkg.path().join("skills");
-    fs::create_dir_all(&skills).unwrap();
-    fs::write(skills.join("check.md"), "# Check").unwrap();
+    let skill_dir = pkg.path().join("skills/check");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Check").unwrap();
     pkg
 }
 
@@ -76,10 +76,10 @@ pub fn make_pkg_with_skill(name: &str, skill_name: &str) -> tempfile::TempDir {
         ),
     )
     .unwrap();
-    let skills = pkg.path().join("skills");
-    fs::create_dir_all(&skills).unwrap();
+    let skill_dir = pkg.path().join("skills").join(skill_name);
+    fs::create_dir_all(&skill_dir).unwrap();
     fs::write(
-        skills.join(format!("{skill_name}.md")),
+        skill_dir.join("SKILL.md"),
         format!("---\nname: {skill_name}\ndescription: test\n---\nContent of {skill_name}"),
     )
     .unwrap();
@@ -95,9 +95,9 @@ pub fn make_multi_backend_pkg(backends_json: &str) -> tempfile::TempDir {
         ),
     )
     .unwrap();
-    let skills = pkg.path().join("skills");
-    fs::create_dir_all(&skills).unwrap();
-    fs::write(skills.join("check.md"), "# Check").unwrap();
+    let skill_dir = pkg.path().join("skills/check");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Check").unwrap();
     let agents = pkg.path().join("agents");
     fs::create_dir_all(&agents).unwrap();
     fs::write(agents.join("helper.md"), "# Helper").unwrap();

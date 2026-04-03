@@ -29,9 +29,9 @@ fn setup_package_with_skill(dir: &std::path::Path, skill_name: &str, content: &s
         dir.join("renkei.json"),
         r#"{"name":"@test/sample","version":"0.1.0","description":"test","author":"tester","license":"MIT","backends":["claude"]}"#,
     ).unwrap();
-    let skills = dir.join("skills");
-    std::fs::create_dir_all(&skills).unwrap();
-    std::fs::write(skills.join(format!("{skill_name}.md")), content).unwrap();
+    let skill_dir = dir.join("skills").join(skill_name);
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), content).unwrap();
 }
 
 #[test]
@@ -45,13 +45,14 @@ fn test_skill_unmodified() {
     let manifest = make_test_manifest();
     let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
 
-    let deployed_path = deploy.path().join("SKILL.md");
-    std::fs::write(&deployed_path, "# Review skill").unwrap();
+    let deployed_dir = deploy.path().join("renkei-review");
+    std::fs::create_dir_all(&deployed_dir).unwrap();
+    std::fs::write(deployed_dir.join("SKILL.md"), "# Review skill").unwrap();
 
     let mut entry = make_entry(vec![make_artifact(
         ArtifactKind::Skill,
         "review",
-        deployed_path.to_str().unwrap(),
+        deployed_dir.to_str().unwrap(),
     )]);
     entry.archive_path = archive_path.to_string_lossy().to_string();
 
@@ -69,13 +70,14 @@ fn test_skill_modified() {
     let manifest = make_test_manifest();
     let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
 
-    let deployed_path = deploy.path().join("SKILL.md");
-    std::fs::write(&deployed_path, "# Modified review skill").unwrap();
+    let deployed_dir = deploy.path().join("renkei-review");
+    std::fs::create_dir_all(&deployed_dir).unwrap();
+    std::fs::write(deployed_dir.join("SKILL.md"), "# Modified review skill").unwrap();
 
     let mut entry = make_entry(vec![make_artifact(
         ArtifactKind::Skill,
         "review",
-        deployed_path.to_str().unwrap(),
+        deployed_dir.to_str().unwrap(),
     )]);
     entry.archive_path = archive_path.to_string_lossy().to_string();
 
@@ -91,7 +93,7 @@ fn test_skill_modification_missing_file_skipped() {
     let entry = make_entry(vec![make_artifact(
         ArtifactKind::Skill,
         "review",
-        "/nonexistent/SKILL.md",
+        "/nonexistent/renkei-review",
     )]);
     assert!(checks::check_skill_modifications(&entry).is_empty());
 }
@@ -99,13 +101,14 @@ fn test_skill_modification_missing_file_skipped() {
 #[test]
 fn test_skill_modification_missing_archive_skips() {
     let deploy = tempdir().unwrap();
-    let deployed_path = deploy.path().join("SKILL.md");
-    std::fs::write(&deployed_path, "# Skill").unwrap();
+    let deployed_dir = deploy.path().join("renkei-review");
+    std::fs::create_dir_all(&deployed_dir).unwrap();
+    std::fs::write(deployed_dir.join("SKILL.md"), "# Skill").unwrap();
 
     let mut entry = make_entry(vec![make_artifact(
         ArtifactKind::Skill,
         "review",
-        deployed_path.to_str().unwrap(),
+        deployed_dir.to_str().unwrap(),
     )]);
     entry.archive_path = "/nonexistent/archive.tar.gz".to_string();
 
@@ -147,13 +150,14 @@ fn test_skill_modification_uses_original_name() {
     let manifest = make_test_manifest();
     let (archive_path, _) = cache::create_archive(pkg.path(), &manifest, &config).unwrap();
 
-    let deployed_path = deploy.path().join("SKILL.md");
-    std::fs::write(&deployed_path, "# Review skill").unwrap();
+    let deployed_dir = deploy.path().join("renkei-review-v2");
+    std::fs::create_dir_all(&deployed_dir).unwrap();
+    std::fs::write(deployed_dir.join("SKILL.md"), "# Review skill").unwrap();
 
     let mut entry = make_entry(vec![DeployedArtifactEntry {
         artifact_type: ArtifactKind::Skill,
         name: "review-v2".to_string(),
-        deployed_path: deployed_path.to_string_lossy().to_string(),
+        deployed_path: deployed_dir.to_string_lossy().to_string(),
         deployed_hooks: vec![],
         original_name: Some("review".to_string()),
     }]);

@@ -10,13 +10,14 @@ use super::{make_artifact, make_entry};
 #[test]
 fn test_deployed_files_all_exist() {
     let dir = tempdir().unwrap();
-    let skill_path = dir.path().join("skill.md");
+    let skill_dir = dir.path().join("review");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), "# Skill").unwrap();
     let agent_path = dir.path().join("agent.md");
-    std::fs::write(&skill_path, "# Skill").unwrap();
     std::fs::write(&agent_path, "# Agent").unwrap();
 
     let entry = make_entry(vec![
-        make_artifact(ArtifactKind::Skill, "review", skill_path.to_str().unwrap()),
+        make_artifact(ArtifactKind::Skill, "review", skill_dir.to_str().unwrap()),
         make_artifact(ArtifactKind::Agent, "deploy", agent_path.to_str().unwrap()),
     ]);
     assert!(checks::check_deployed_files(&entry).is_empty());

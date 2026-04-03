@@ -4,7 +4,7 @@ pub mod codex;
 pub mod cursor;
 pub mod gemini;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::artifact::{Artifact, ArtifactKind};
 use crate::config::{BackendId, Config};
@@ -43,6 +43,65 @@ pub(super) fn deploy_file(
         deployed_path: dest,
         deployed_hooks: vec![],
     })
+}
+
+/// Deploy a skill directory: copies SKILL.md and all subdirectories (recursively).
+/// Files at the root of the source directory other than SKILL.md are ignored.
+pub(super) fn deploy_skill_dir(artifact: &Artifact, dest_dir: PathBuf) -> Result<DeployedArtifact> {
+    std::fs::create_dir_all(&dest_dir)?;
+
+    // Copy SKILL.md
+    let skill_md = artifact.source_path.join("SKILL.md");
+    std::fs::copy(&skill_md, dest_dir.join("SKILL.md")).map_err(|e| {
+        RenkeiError::DeploymentFailed(format!(
+            "Failed to copy {} to {}: {}",
+            skill_md.display(),
+            dest_dir.join("SKILL.md").display(),
+            e
+        ))
+    })?;
+
+    // Copy subdirectories recursively
+    for entry in std::fs::read_dir(&artifact.source_path).map_err(|e| {
+        RenkeiError::DeploymentFailed(format!(
+            "Failed to read skill directory {}: {}",
+            artifact.source_path.display(),
+            e
+        ))
+    })? {
+        let entry = entry?;
+        if entry.path().is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_dir.join(entry.file_name()))?;
+        }
+    }
+
+    Ok(DeployedArtifact {
+        artifact_kind: artifact.kind.clone(),
+        artifact_name: artifact.name.clone(),
+        deployed_path: dest_dir,
+        deployed_hooks: vec![],
+    })
+}
+
+pub(crate) fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let dest_path = dest.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            std::fs::copy(entry.path(), &dest_path).map_err(|e| {
+                RenkeiError::DeploymentFailed(format!(
+                    "Failed to copy {} to {}: {}",
+                    entry.path().display(),
+                    dest_path.display(),
+                    e
+                ))
+            })?;
+        }
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -180,14 +239,13 @@ pub(crate) mod test_helpers {
     use crate::artifact::{Artifact, ArtifactKind};
 
     pub fn make_skill_artifact(pkg_dir: &std::path::Path, name: &str, content: &str) -> Artifact {
-        let skills_dir = pkg_dir.join("skills");
-        fs::create_dir_all(&skills_dir).unwrap();
-        let source = skills_dir.join(format!("{name}.md"));
-        fs::write(&source, content).unwrap();
+        let skill_dir = pkg_dir.join("skills").join(name);
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), content).unwrap();
         Artifact {
             kind: ArtifactKind::Skill,
             name: name.to_string(),
-            source_path: source,
+            source_path: skill_dir,
         }
     }
 

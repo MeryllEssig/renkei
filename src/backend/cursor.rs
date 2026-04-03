@@ -28,12 +28,9 @@ impl Backend for CursorBackend {
         let dest_dir = dirs.skills_dir.unwrap();
         fs::create_dir_all(&dest_dir)?;
 
-        let source_content = fs::read_to_string(&artifact.source_path).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "Failed to read {}: {}",
-                artifact.source_path.display(),
-                e
-            ))
+        let skill_md = artifact.source_path.join("SKILL.md");
+        let source_content = fs::read_to_string(&skill_md).map_err(|e| {
+            RenkeiError::DeploymentFailed(format!("Failed to read {}: {}", skill_md.display(), e))
         })?;
 
         let frontmatter = "---\ndescription: \"\"\nalwaysApply: false\n---\n";

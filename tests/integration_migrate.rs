@@ -26,8 +26,8 @@ fn test_migrate_flat_skills() {
         .stdout(predicate::str::contains("Migrated successfully"));
 
     assert!(dir.path().join("renkei.json").exists());
-    assert!(dir.path().join("skills/review.md").exists());
-    assert!(dir.path().join("skills/lint.md").exists());
+    assert!(dir.path().join("skills/review/SKILL.md").exists());
+    assert!(dir.path().join("skills/lint/SKILL.md").exists());
 }
 
 #[test]
@@ -85,8 +85,9 @@ fn test_migrate_empty_dir() {
 #[test]
 fn test_migrate_pre_organized() {
     let dir = tempdir().unwrap();
-    fs::create_dir_all(dir.path().join("skills")).unwrap();
-    fs::write(dir.path().join("skills/review.md"), "# Review skill").unwrap();
+    let skill_dir = dir.path().join("skills/review");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Review skill").unwrap();
 
     Command::cargo_bin("rk")
         .unwrap()
@@ -96,7 +97,7 @@ fn test_migrate_pre_organized() {
         .success();
 
     // File stays in place
-    assert!(dir.path().join("skills/review.md").exists());
+    assert!(dir.path().join("skills/review/SKILL.md").exists());
     assert!(dir.path().join("renkei.json").exists());
 
     // Manifest is valid
@@ -157,7 +158,7 @@ fn test_migrate_mixed_content() {
         .stdout(predicate::str::contains("1 hook(s)"))
         .stdout(predicate::str::contains("1 agent(s)"));
 
-    assert!(dir.path().join("skills/review.md").exists());
+    assert!(dir.path().join("skills/review/SKILL.md").exists());
     assert!(dir.path().join("hooks/hook.json").exists());
     assert!(dir.path().join("agents/helper.md").exists());
 }

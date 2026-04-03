@@ -31,7 +31,7 @@ impl Backend for GeminiBackend {
             .skills_dir
             .unwrap()
             .join(format!("renkei-{}", artifact.name));
-        super::deploy_file(artifact, skill_dir, "SKILL.md")
+        super::deploy_skill_dir(artifact, skill_dir)
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
@@ -106,12 +106,12 @@ mod tests {
 
         let result = GeminiBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = home.path().join(".gemini/skills/renkei-review/SKILL.md");
-        assert_eq!(result.deployed_path, expected);
+        let expected_dir = home.path().join(".gemini/skills/renkei-review");
+        assert_eq!(result.deployed_path, expected_dir);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
-        assert!(expected.exists());
+        assert!(expected_dir.join("SKILL.md").exists());
         assert_eq!(
-            fs::read_to_string(&expected).unwrap(),
+            fs::read_to_string(expected_dir.join("SKILL.md")).unwrap(),
             "# Review\nDo a review."
         );
     }
@@ -127,8 +127,8 @@ mod tests {
 
         GeminiBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = project.path().join(".gemini/skills/renkei-lint/SKILL.md");
-        assert!(expected.exists());
+        let expected_dir = project.path().join(".gemini/skills/renkei-lint");
+        assert!(expected_dir.join("SKILL.md").exists());
     }
 
     #[test]

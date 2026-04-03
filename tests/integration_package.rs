@@ -17,9 +17,9 @@ fn write_manifest(dir: &Path, version: &str) {
 
 fn setup_full_package(dir: &Path) {
     write_manifest(dir, "1.0.0");
-    let skills = dir.join("skills");
-    fs::create_dir_all(&skills).unwrap();
-    fs::write(skills.join("review.md"), "# Review").unwrap();
+    let skill_dir = dir.join("skills/review");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Review").unwrap();
     let agents = dir.join("agents");
     fs::create_dir_all(&agents).unwrap();
     fs::write(agents.join("deploy.md"), "# Deploy").unwrap();
@@ -61,7 +61,7 @@ fn test_package_creates_archive() {
 
     let entries = tar_entry_names(&archive);
     assert!(entries.contains(&"renkei.json".to_string()));
-    assert!(entries.iter().any(|e| e.contains("review.md")));
+    assert!(entries.iter().any(|e| e.contains("review/SKILL.md")));
     assert!(entries.iter().any(|e| e.contains("deploy.md")));
     assert!(entries.iter().any(|e| e.contains("lint.json")));
     assert!(entries.iter().any(|e| e.contains("build.sh")));
@@ -158,7 +158,7 @@ fn test_package_summary_output() {
         .assert()
         .success()
         .stdout(predicate::str::contains("renkei.json"))
-        .stdout(predicate::str::contains("skills/review.md"))
+        .stdout(predicate::str::contains("skills/review/SKILL.md"))
         .stdout(predicate::str::contains("agents/deploy.md"))
         .stdout(predicate::str::contains("hooks/lint.json"))
         .stdout(predicate::str::contains("scripts/build.sh"))

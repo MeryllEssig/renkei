@@ -117,6 +117,21 @@ fn scan_entries(dir: &Path, discovered: &mut Vec<DiscoveredFile>) -> Result<()> 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let entry_path = entry.path();
+
+        // Skills in new directory format: skills/{name}/SKILL.md
+        if entry_path.is_dir() && parent_name == "skills" {
+            if entry_path.join("SKILL.md").exists() {
+                let dirname = entry.file_name().to_string_lossy().to_string();
+                discovered.push(DiscoveredFile {
+                    original_path: entry_path,
+                    kind: ArtifactKind::Skill,
+                    filename: dirname,
+                    already_placed: true,
+                });
+            }
+            continue;
+        }
+
         if !entry_path.is_file() {
             continue;
         }
@@ -134,11 +149,13 @@ fn scan_entries(dir: &Path, discovered: &mut Vec<DiscoveredFile>) -> Result<()> 
                 } else {
                     ArtifactKind::Skill
                 };
+                // Skills in skills/ dir with old flat format need migration
+                let already_placed = is_conventional && !matches!(kind, ArtifactKind::Skill);
                 discovered.push(DiscoveredFile {
                     original_path: entry_path,
                     kind,
                     filename,
-                    already_placed: is_conventional,
+                    already_placed,
                 });
             }
             Some("json") => {
@@ -209,24 +226,36 @@ fn reorganize_files(root: &Path, discovered: &[DiscoveredFile]) -> Result<()> {
         }
 
         let target_dir = root.join(file.kind.dir_name());
-        let mut target = target_dir.join(&file.filename);
-
         let stem = Path::new(&file.filename)
             .file_stem()
             .unwrap()
-            .to_string_lossy();
-        let ext = Path::new(&file.filename)
-            .extension()
-            .map(|e| e.to_string_lossy().to_string())
-            .unwrap_or_default();
+            .to_string_lossy()
+            .to_string();
 
-        let mut counter = 1;
-        while target.exists() {
-            target = target_dir.join(format!("{}-{}.{}", stem, counter, ext));
-            counter += 1;
+        if matches!(file.kind, ArtifactKind::Skill) {
+            // Skills go into skills/{stem}/SKILL.md
+            let mut skill_dir = target_dir.join(&stem);
+            let mut counter = 1;
+            while skill_dir.exists() {
+                skill_dir = target_dir.join(format!("{}-{}", stem, counter));
+                counter += 1;
+            }
+            fs::create_dir_all(&skill_dir)?;
+            fs::rename(&file.original_path, skill_dir.join("SKILL.md"))?;
+        } else {
+            // Hooks and agents remain flat files
+            let ext = Path::new(&file.filename)
+                .extension()
+                .map(|e| e.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let mut target = target_dir.join(&file.filename);
+            let mut counter = 1;
+            while target.exists() {
+                target = target_dir.join(format!("{}-{}.{}", stem, counter, ext));
+                counter += 1;
+            }
+            fs::rename(&file.original_path, &target)?;
         }
-
-        fs::rename(&file.original_path, &target)?;
     }
     Ok(())
 }
@@ -362,17 +391,28 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_skills_dir_already_placed() {
+    fn test_scan_skills_dir_old_format_needs_migration() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join("skills")).unwrap();
         fs::write(dir.path().join("skills/review.md"), "# Skill").unwrap();
+        let discovered = scan_directory(dir.path()).unwrap();
+        assert_eq!(discovered.len(), 1);
+        assert!(!discovered[0].already_placed); // old flat format needs migration
+    }
+
+    #[test]
+    fn test_scan_skills_dir_new_format_already_placed() {
+        let dir = tempdir().unwrap();
+        let skill_dir = dir.path().join("skills/review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Skill").unwrap();
         let discovered = scan_directory(dir.path()).unwrap();
         assert_eq!(discovered.len(), 1);
         assert!(discovered[0].already_placed);
     }
 
     #[test]
-    fn test_reorganize_moves_files() {
+    fn test_reorganize_moves_skill_to_directory() {
         let dir = tempdir().unwrap();
         let md_path = dir.path().join("review.md");
         fs::write(&md_path, "content").unwrap();
@@ -385,26 +425,43 @@ mod tests {
         }];
 
         reorganize_files(dir.path(), &discovered).unwrap();
-        assert!(dir.path().join("skills/review.md").exists());
+        assert!(dir.path().join("skills/review/SKILL.md").exists());
         assert!(!dir.path().join("review.md").exists());
+    }
+
+    #[test]
+    fn test_reorganize_moves_hook_flat() {
+        let dir = tempdir().unwrap();
+        let hook_path = dir.path().join("lint.json");
+        fs::write(&hook_path, "[]").unwrap();
+
+        let discovered = vec![DiscoveredFile {
+            original_path: hook_path,
+            kind: ArtifactKind::Hook,
+            filename: "lint.json".to_string(),
+            already_placed: false,
+        }];
+
+        reorganize_files(dir.path(), &discovered).unwrap();
+        assert!(dir.path().join("hooks/lint.json").exists());
     }
 
     #[test]
     fn test_reorganize_skips_already_placed() {
         let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join("skills")).unwrap();
-        let md_path = dir.path().join("skills/review.md");
-        fs::write(&md_path, "content").unwrap();
+        let skill_dir = dir.path().join("skills/review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "content").unwrap();
 
         let discovered = vec![DiscoveredFile {
-            original_path: md_path.clone(),
+            original_path: skill_dir.clone(),
             kind: ArtifactKind::Skill,
-            filename: "review.md".to_string(),
+            filename: "review".to_string(),
             already_placed: true,
         }];
 
         reorganize_files(dir.path(), &discovered).unwrap();
-        assert!(md_path.exists());
+        assert!(skill_dir.join("SKILL.md").exists());
     }
 
     #[test]
@@ -451,7 +508,7 @@ mod tests {
         run_migrate(dir.path().to_str().unwrap()).unwrap();
 
         assert!(dir.path().join("renkei.json").exists());
-        assert!(dir.path().join("skills/review.md").exists());
+        assert!(dir.path().join("skills/review/SKILL.md").exists());
         assert!(dir.path().join("hooks/lint.json").exists());
 
         let manifest = Manifest::from_path(dir.path()).unwrap();

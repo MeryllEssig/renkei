@@ -13,6 +13,7 @@ use super::types::ConflictResolver;
 pub(crate) struct ResolvedArtifacts {
     pub effective: Vec<(Artifact, Option<String>)>,
     _temp_files: Vec<tempfile::NamedTempFile>,
+    _temp_dirs: Vec<tempfile::TempDir>,
 }
 
 /// Detect conflicts, resolve via the callback, apply renames + frontmatter rewrite.
@@ -47,34 +48,81 @@ pub(crate) fn resolve_conflicts_and_rename(
 
     // Build effective artifacts (apply renames).
     let mut temp_files: Vec<tempfile::NamedTempFile> = Vec::new();
+    let mut temp_dirs: Vec<tempfile::TempDir> = Vec::new();
     let effective: Vec<(Artifact, Option<String>)> = artifacts
         .into_iter()
         .map(|art| {
             let key = (art.kind.clone(), art.name.clone());
             if let Some(new_name) = renames.get(&key) {
-                let content = std::fs::read_to_string(&art.source_path).map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!(
-                        "Cannot read {}: {e}",
-                        art.source_path.display()
-                    ))
-                })?;
-                let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
+                if art.kind == ArtifactKind::Skill {
+                    // Skills are directories: read SKILL.md, rewrite frontmatter,
+                    // create a temp dir mirroring the structure
+                    let skill_md_path = art.source_path.join("SKILL.md");
+                    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!(
+                            "Cannot read {}: {e}",
+                            skill_md_path.display()
+                        ))
+                    })?;
+                    let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
 
-                let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}"))
-                })?;
-                std::io::Write::write_all(&mut tmp, rewritten.as_bytes()).map_err(|e| {
-                    RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}"))
-                })?;
+                    let tmp_dir = tempfile::tempdir().map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!("Cannot create temp dir: {e}"))
+                    })?;
+                    std::fs::write(tmp_dir.path().join("SKILL.md"), rewritten).map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!("Cannot write temp SKILL.md: {e}"))
+                    })?;
 
-                let original_name = art.name;
-                let renamed_artifact = Artifact {
-                    kind: art.kind,
-                    name: new_name.to_string(),
-                    source_path: tmp.path().to_path_buf(),
-                };
-                temp_files.push(tmp);
-                Ok((renamed_artifact, Some(original_name)))
+                    // Copy subdirectories from original
+                    for entry in std::fs::read_dir(&art.source_path).map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!(
+                            "Cannot read skill dir {}: {e}",
+                            art.source_path.display()
+                        ))
+                    })? {
+                        let entry = entry?;
+                        if entry.path().is_dir() {
+                            crate::backend::copy_dir_recursive(
+                                &entry.path(),
+                                &tmp_dir.path().join(entry.file_name()),
+                            )?;
+                        }
+                    }
+
+                    let original_name = art.name;
+                    let renamed_artifact = Artifact {
+                        kind: art.kind,
+                        name: new_name.to_string(),
+                        source_path: tmp_dir.path().to_path_buf(),
+                    };
+                    temp_dirs.push(tmp_dir);
+                    Ok((renamed_artifact, Some(original_name)))
+                } else {
+                    // Flat file artifacts (agents, hooks)
+                    let content = std::fs::read_to_string(&art.source_path).map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!(
+                            "Cannot read {}: {e}",
+                            art.source_path.display()
+                        ))
+                    })?;
+                    let rewritten = frontmatter::replace_frontmatter_name(&content, new_name)?;
+
+                    let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!("Cannot create temp file: {e}"))
+                    })?;
+                    std::io::Write::write_all(&mut tmp, rewritten.as_bytes()).map_err(|e| {
+                        RenkeiError::DeploymentFailed(format!("Cannot write temp file: {e}"))
+                    })?;
+
+                    let original_name = art.name;
+                    let renamed_artifact = Artifact {
+                        kind: art.kind,
+                        name: new_name.to_string(),
+                        source_path: tmp.path().to_path_buf(),
+                    };
+                    temp_files.push(tmp);
+                    Ok((renamed_artifact, Some(original_name)))
+                }
             } else {
                 Ok((art, None))
             }
@@ -84,5 +132,6 @@ pub(crate) fn resolve_conflicts_and_rename(
     Ok(ResolvedArtifacts {
         effective,
         _temp_files: temp_files,
+        _temp_dirs: temp_dirs,
     })
 }

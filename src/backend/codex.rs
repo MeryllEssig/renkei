@@ -35,7 +35,7 @@ impl Backend for CodexBackend {
             .skills_dir
             .unwrap()
             .join(format!("renkei-{}", artifact.name));
-        super::deploy_file(artifact, skill_dir, "SKILL.md")
+        super::deploy_skill_dir(artifact, skill_dir)
     }
 
     /// Deploy agent as TOML file to `.codex/agents/{name}.toml`.
@@ -237,11 +237,11 @@ mod tests {
 
         let result = CodexBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = home.path().join(".agents/skills/renkei-review/SKILL.md");
-        assert_eq!(result.deployed_path, expected);
-        assert!(expected.exists());
+        let expected_dir = home.path().join(".agents/skills/renkei-review");
+        assert_eq!(result.deployed_path, expected_dir);
+        assert!(expected_dir.join("SKILL.md").exists());
         assert_eq!(
-            fs::read_to_string(&expected).unwrap(),
+            fs::read_to_string(expected_dir.join("SKILL.md")).unwrap(),
             "# Review\nDo a review."
         );
     }

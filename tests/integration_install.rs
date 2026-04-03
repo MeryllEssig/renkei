@@ -45,7 +45,7 @@ fn test_install_valid_local_package() {
     let source = fs::read_to_string(
         std::env::current_dir()
             .unwrap()
-            .join("tests/fixtures/valid-package/skills/review.md"),
+            .join("tests/fixtures/valid-package/skills/review/SKILL.md"),
     )
     .unwrap();
     assert_eq!(deployed, source);
@@ -1122,9 +1122,9 @@ fn setup_bare_repo(tag: Option<&str>) -> (tempfile::TempDir, String) {
         work.path().join("renkei.json"),
         r#"{"name":"@test/git-pkg","version":"1.0.0","description":"test","author":"t","license":"MIT","backends":["claude"]}"#,
     ).unwrap();
-    let skills = work.path().join("skills");
-    fs::create_dir_all(&skills).unwrap();
-    fs::write(skills.join("review.md"), "# Review skill from git").unwrap();
+    let skill_dir = work.path().join("skills/review");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Review skill from git").unwrap();
 
     std::process::Command::new("git")
         .args(["add", "."])

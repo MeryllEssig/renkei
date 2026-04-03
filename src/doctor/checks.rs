@@ -11,7 +11,16 @@ pub fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
     let mut issues = Vec::new();
     for artifact in entry.all_artifacts() {
         match artifact.artifact_type {
-            ArtifactKind::Skill | ArtifactKind::Agent => {
+            ArtifactKind::Skill => {
+                let deployed = Path::new(&artifact.deployed_path);
+                // Skills are directories: check dir AND SKILL.md inside
+                if !deployed.exists() || !deployed.join("SKILL.md").exists() {
+                    issues.push(DiagnosticKind::FileMissing {
+                        artifact_name: artifact.name.clone(),
+                    });
+                }
+            }
+            ArtifactKind::Agent => {
                 if !Path::new(&artifact.deployed_path).exists() {
                     issues.push(DiagnosticKind::FileMissing {
                         artifact_name: artifact.name.clone(),
@@ -47,7 +56,7 @@ pub fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         }
 
         let archive_name = artifact.original_name.as_deref().unwrap_or(&artifact.name);
-        let inner_path = format!("skills/{}.md", archive_name);
+        let inner_path = format!("skills/{}/SKILL.md", archive_name);
 
         let original_bytes = match cache::extract_file_from_archive(archive_path, &inner_path) {
             Ok(bytes) => bytes,
@@ -55,7 +64,8 @@ pub fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         };
 
         let original_hash = cache::compute_sha256_bytes(&original_bytes);
-        let deployed_hash = match cache::compute_sha256(deployed_path) {
+        let deployed_skill_md = deployed_path.join("SKILL.md");
+        let deployed_hash = match cache::compute_sha256(&deployed_skill_md) {
             Ok(h) => h,
             Err(_) => continue,
         };

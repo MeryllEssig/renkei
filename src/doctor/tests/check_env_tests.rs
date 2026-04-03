@@ -27,9 +27,9 @@ fn setup_package_with_skill(dir: &std::path::Path, skill_name: &str, content: &s
         dir.join("renkei.json"),
         r#"{"name":"@test/sample","version":"0.1.0","description":"test","author":"tester","license":"MIT","backends":["claude"]}"#,
     ).unwrap();
-    let skills = dir.join("skills");
-    std::fs::create_dir_all(&skills).unwrap();
-    std::fs::write(skills.join(format!("{skill_name}.md")), content).unwrap();
+    let skill_dir = dir.join("skills").join(skill_name);
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), content).unwrap();
 }
 
 fn setup_package_with_env(dir: &std::path::Path, required_env: &str) {
@@ -39,9 +39,9 @@ fn setup_package_with_env(dir: &std::path::Path, required_env: &str) {
             r#"{{"name":"@test/sample","version":"0.1.0","description":"test","author":"tester","license":"MIT","backends":["claude"],"requiredEnv":{required_env}}}"#
         ),
     ).unwrap();
-    let skills = dir.join("skills");
-    std::fs::create_dir_all(&skills).unwrap();
-    std::fs::write(skills.join("review.md"), "# Review").unwrap();
+    let skill_dir = dir.join("skills/review");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), "# Review").unwrap();
 }
 
 #[test]

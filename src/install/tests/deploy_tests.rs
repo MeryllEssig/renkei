@@ -28,10 +28,12 @@ fn test_rollback_cleans_partial_deploy() {
     )
     .unwrap();
 
-    let skills_dir = pkg.path().join("skills");
-    fs::create_dir_all(&skills_dir).unwrap();
-    fs::write(skills_dir.join("lint.md"), "# Lint").unwrap();
-    fs::write(skills_dir.join("review.md"), "# Review").unwrap();
+    let lint_dir = pkg.path().join("skills/lint");
+    let review_dir = pkg.path().join("skills/review");
+    fs::create_dir_all(&lint_dir).unwrap();
+    fs::create_dir_all(&review_dir).unwrap();
+    fs::write(lint_dir.join("SKILL.md"), "# Lint").unwrap();
+    fs::write(review_dir.join("SKILL.md"), "# Review").unwrap();
 
     let agents_dir = pkg.path().join("agents");
     fs::create_dir_all(&agents_dir).unwrap();

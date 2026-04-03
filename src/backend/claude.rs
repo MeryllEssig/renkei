@@ -26,7 +26,7 @@ impl Backend for ClaudeBackend {
             .skills_dir
             .unwrap()
             .join(format!("renkei-{}", artifact.name));
-        super::deploy_file(artifact, skill_dir, "SKILL.md")
+        super::deploy_skill_dir(artifact, skill_dir)
     }
 
     fn deploy_agent(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
@@ -121,27 +121,26 @@ mod tests {
         let home = tempdir().unwrap();
         let pkg = tempdir().unwrap();
 
-        let skills_dir = pkg.path().join("skills");
-        fs::create_dir_all(&skills_dir).unwrap();
-        let source = skills_dir.join("review.md");
-        fs::write(&source, "# Review\nReview the code.").unwrap();
+        let skill_dir = pkg.path().join("skills/review");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Review\nReview the code.").unwrap();
 
         let config = Config::with_home_dir(home.path().to_path_buf());
         let artifact = Artifact {
             kind: ArtifactKind::Skill,
             name: "review".to_string(),
-            source_path: source,
+            source_path: skill_dir,
         };
 
         let backend = ClaudeBackend;
         let result = backend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = home.path().join(".claude/skills/renkei-review/SKILL.md");
-        assert_eq!(result.deployed_path, expected);
+        let expected_dir = home.path().join(".claude/skills/renkei-review");
+        assert_eq!(result.deployed_path, expected_dir);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
-        assert!(expected.exists());
+        assert!(expected_dir.join("SKILL.md").exists());
         assert_eq!(
-            fs::read_to_string(&expected).unwrap(),
+            fs::read_to_string(expected_dir.join("SKILL.md")).unwrap(),
             "# Review\nReview the code."
         );
     }

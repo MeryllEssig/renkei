@@ -80,7 +80,8 @@ mod tests {
 
         for (dir_name, pkg_name, skill_name) in members {
             let member_dir = ws.path().join(dir_name);
-            fs::create_dir_all(member_dir.join("skills")).unwrap();
+            let skill_dir = member_dir.join("skills").join(skill_name);
+            fs::create_dir_all(&skill_dir).unwrap();
             fs::write(
                 member_dir.join("renkei.json"),
                 format!(
@@ -89,7 +90,7 @@ mod tests {
             )
             .unwrap();
             fs::write(
-                member_dir.join("skills").join(format!("{skill_name}.md")),
+                skill_dir.join("SKILL.md"),
                 format!("---\nname: {skill_name}\ndescription: test\n---\nContent of {skill_name}"),
             )
             .unwrap();
@@ -160,14 +161,15 @@ mod tests {
         .unwrap();
 
         let exists_dir = ws.path().join("exists");
-        fs::create_dir_all(exists_dir.join("skills")).unwrap();
+        let foo_dir = exists_dir.join("skills/foo");
+        fs::create_dir_all(&foo_dir).unwrap();
         fs::write(
             exists_dir.join("renkei.json"),
             r#"{"name":"@test/exists","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]}"#,
         )
         .unwrap();
         fs::write(
-            exists_dir.join("skills/foo.md"),
+            foo_dir.join("SKILL.md"),
             "---\nname: foo\ndescription: test\n---\nFoo",
         )
         .unwrap();
