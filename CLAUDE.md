@@ -1,7 +1,7 @@
 ## Rules 
 
 * Always code in TDD
-* Always run tests before giving 
+* Running tests is not necessary because there is a pre-commit hook for this.
 * Always do a conventional commit after every atomic step
 * When you implement a task from a plan file in `./plans`, you must tick it to keep trace of progress.
 * Everything written in this repo should be in english.
