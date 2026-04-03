@@ -1,0 +1,10 @@
+{
+  "name": "@MeryllEssig/renkei",
+  "version": "1.0.0",
+  "description": "Claude Code skill for the rk CLI — install, create, and manage renkei packages",
+  "author": "Meryll Essig",
+  "license": "MIT",
+  "backends": ["claude"],
+  "scope": "global",
+  "keywords": ["renkei", "rk", "package-manager", "skills", "agentic"]
+}
