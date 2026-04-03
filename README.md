@@ -60,7 +60,8 @@ cargo install --path .
 my-workflow/
 ├── renkei.json
 ├── skills/
-│   └── code-review.md
+│   └── code-review/
+│       └── SKILL.md
 ├── agents/
 │   └── researcher.md
 └── hooks/

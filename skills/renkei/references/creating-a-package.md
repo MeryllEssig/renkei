@@ -7,7 +7,7 @@ A package is a folder with a `renkei.json` manifest and conventional directories
 ```
 my-package/
 ├── renkei.json        # required
-├── skills/            # markdown files (*.md)
+├── skills/            # skill directories (each with SKILL.md)
 ├── hooks/             # JSON hook definitions (*.json)
 ├── agents/            # markdown files (*.md)
 └── scripts/           # supporting scripts
