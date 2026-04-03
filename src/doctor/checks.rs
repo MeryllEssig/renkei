@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::artifact::ArtifactKind;
+use crate::artifact::{ArtifactKind, SKILL_FILENAME};
 use crate::cache;
 use crate::env_check;
 use crate::install_cache::PackageEntry;
@@ -13,8 +13,7 @@ pub fn check_deployed_files(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         match artifact.artifact_type {
             ArtifactKind::Skill => {
                 let deployed = Path::new(&artifact.deployed_path);
-                // Skills are directories: check dir AND SKILL.md inside
-                if !deployed.exists() || !deployed.join("SKILL.md").exists() {
+                if !deployed.join(SKILL_FILENAME).exists() {
                     issues.push(DiagnosticKind::FileMissing {
                         artifact_name: artifact.name.clone(),
                     });
@@ -56,15 +55,15 @@ pub fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
         }
 
         let archive_name = artifact.original_name.as_deref().unwrap_or(&artifact.name);
-        let inner_path = format!("skills/{}/SKILL.md", archive_name);
+        let inner_path = format!("skills/{}/{}", archive_name, SKILL_FILENAME);
 
         let original_bytes = match cache::extract_file_from_archive(archive_path, &inner_path) {
             Ok(bytes) => bytes,
-            Err(_) => break,
+            Err(_) => continue,
         };
 
         let original_hash = cache::compute_sha256_bytes(&original_bytes);
-        let deployed_skill_md = deployed_path.join("SKILL.md");
+        let deployed_skill_md = deployed_path.join(SKILL_FILENAME);
         let deployed_hash = match cache::compute_sha256(&deployed_skill_md) {
             Ok(h) => h,
             Err(_) => continue,

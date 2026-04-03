@@ -6,7 +6,7 @@ pub mod gemini;
 
 use std::path::{Path, PathBuf};
 
-use crate::artifact::{Artifact, ArtifactKind};
+use crate::artifact::{Artifact, ArtifactKind, SKILL_FILENAME};
 use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::hook::DeployedHookEntry;
@@ -50,30 +50,18 @@ pub(super) fn deploy_file(
 pub(super) fn deploy_skill_dir(artifact: &Artifact, dest_dir: PathBuf) -> Result<DeployedArtifact> {
     std::fs::create_dir_all(&dest_dir)?;
 
-    // Copy SKILL.md
-    let skill_md = artifact.source_path.join("SKILL.md");
-    std::fs::copy(&skill_md, dest_dir.join("SKILL.md")).map_err(|e| {
+    let skill_md = artifact.source_path.join(SKILL_FILENAME);
+    let dest_skill_md = dest_dir.join(SKILL_FILENAME);
+    std::fs::copy(&skill_md, &dest_skill_md).map_err(|e| {
         RenkeiError::DeploymentFailed(format!(
             "Failed to copy {} to {}: {}",
             skill_md.display(),
-            dest_dir.join("SKILL.md").display(),
+            dest_skill_md.display(),
             e
         ))
     })?;
 
-    // Copy subdirectories recursively
-    for entry in std::fs::read_dir(&artifact.source_path).map_err(|e| {
-        RenkeiError::DeploymentFailed(format!(
-            "Failed to read skill directory {}: {}",
-            artifact.source_path.display(),
-            e
-        ))
-    })? {
-        let entry = entry?;
-        if entry.path().is_dir() {
-            copy_dir_recursive(&entry.path(), &dest_dir.join(entry.file_name()))?;
-        }
-    }
+    copy_skill_subdirs(&artifact.source_path, &dest_dir)?;
 
     Ok(DeployedArtifact {
         artifact_kind: artifact.kind.clone(),
@@ -83,12 +71,29 @@ pub(super) fn deploy_skill_dir(artifact: &Artifact, dest_dir: PathBuf) -> Result
     })
 }
 
+/// Copy only subdirectories from a skill source dir into dest (skips files).
+pub(crate) fn copy_skill_subdirs(src: &Path, dest: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(src).map_err(|e| {
+        RenkeiError::DeploymentFailed(format!(
+            "Failed to read skill directory {}: {}",
+            src.display(),
+            e
+        ))
+    })? {
+        let entry = entry?;
+        if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+            copy_dir_recursive(&entry.path(), &dest.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
     std::fs::create_dir_all(dest)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         let dest_path = dest.join(entry.file_name());
-        if entry.path().is_dir() {
+        if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
             copy_dir_recursive(&entry.path(), &dest_path)?;
         } else {
             std::fs::copy(entry.path(), &dest_path).map_err(|e| {

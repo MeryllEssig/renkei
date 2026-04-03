@@ -23,6 +23,9 @@ impl ArtifactKind {
     }
 }
 
+/// The filename expected inside a skill directory.
+pub const SKILL_FILENAME: &str = "SKILL.md";
+
 impl fmt::Display for ArtifactKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -49,7 +52,7 @@ pub fn discover_artifacts(package_dir: &Path) -> Result<Vec<Artifact>> {
         for entry in std::fs::read_dir(&skills_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_dir() && path.join("SKILL.md").exists() {
+            if path.is_dir() && path.join(SKILL_FILENAME).exists() {
                 let name = path
                     .file_name()
                     .unwrap_or_default()

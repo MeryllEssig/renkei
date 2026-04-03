@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::artifact::{Artifact, ArtifactKind};
+use crate::artifact::{Artifact, ArtifactKind, SKILL_FILENAME};
 use crate::conflict;
 use crate::error::{RenkeiError, Result};
 use crate::frontmatter;
@@ -55,9 +55,7 @@ pub(crate) fn resolve_conflicts_and_rename(
             let key = (art.kind.clone(), art.name.clone());
             if let Some(new_name) = renames.get(&key) {
                 if art.kind == ArtifactKind::Skill {
-                    // Skills are directories: read SKILL.md, rewrite frontmatter,
-                    // create a temp dir mirroring the structure
-                    let skill_md_path = art.source_path.join("SKILL.md");
+                    let skill_md_path = art.source_path.join(SKILL_FILENAME);
                     let content = std::fs::read_to_string(&skill_md_path).map_err(|e| {
                         RenkeiError::DeploymentFailed(format!(
                             "Cannot read {}: {e}",
@@ -69,25 +67,15 @@ pub(crate) fn resolve_conflicts_and_rename(
                     let tmp_dir = tempfile::tempdir().map_err(|e| {
                         RenkeiError::DeploymentFailed(format!("Cannot create temp dir: {e}"))
                     })?;
-                    std::fs::write(tmp_dir.path().join("SKILL.md"), rewritten).map_err(|e| {
-                        RenkeiError::DeploymentFailed(format!("Cannot write temp SKILL.md: {e}"))
-                    })?;
+                    std::fs::write(tmp_dir.path().join(SKILL_FILENAME), rewritten).map_err(
+                        |e| {
+                            RenkeiError::DeploymentFailed(format!(
+                                "Cannot write temp {SKILL_FILENAME}: {e}"
+                            ))
+                        },
+                    )?;
 
-                    // Copy subdirectories from original
-                    for entry in std::fs::read_dir(&art.source_path).map_err(|e| {
-                        RenkeiError::DeploymentFailed(format!(
-                            "Cannot read skill dir {}: {e}",
-                            art.source_path.display()
-                        ))
-                    })? {
-                        let entry = entry?;
-                        if entry.path().is_dir() {
-                            crate::backend::copy_dir_recursive(
-                                &entry.path(),
-                                &tmp_dir.path().join(entry.file_name()),
-                            )?;
-                        }
-                    }
+                    crate::backend::copy_skill_subdirs(&art.source_path, tmp_dir.path())?;
 
                     let original_name = art.name;
                     let renamed_artifact = Artifact {

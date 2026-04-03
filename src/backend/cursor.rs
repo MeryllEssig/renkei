@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::artifact::{Artifact, ArtifactKind};
+use crate::artifact::{Artifact, ArtifactKind, SKILL_FILENAME};
 use crate::config::{BackendId, Config};
 use crate::error::{RenkeiError, Result};
 use crate::hook;
@@ -28,7 +28,7 @@ impl Backend for CursorBackend {
         let dest_dir = dirs.skills_dir.unwrap();
         fs::create_dir_all(&dest_dir)?;
 
-        let skill_md = artifact.source_path.join("SKILL.md");
+        let skill_md = artifact.source_path.join(SKILL_FILENAME);
         let source_content = fs::read_to_string(&skill_md).map_err(|e| {
             RenkeiError::DeploymentFailed(format!("Failed to read {}: {}", skill_md.display(), e))
         })?;

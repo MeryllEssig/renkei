@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
 
-use crate::artifact::ArtifactKind;
+use crate::artifact::{ArtifactKind, SKILL_FILENAME};
 use crate::error::{RenkeiError, Result};
 use crate::hook;
 use crate::json_file;
@@ -120,7 +120,7 @@ fn scan_entries(dir: &Path, discovered: &mut Vec<DiscoveredFile>) -> Result<()> 
 
         // Skills in new directory format: skills/{name}/SKILL.md
         if entry_path.is_dir() && parent_name == "skills" {
-            if entry_path.join("SKILL.md").exists() {
+            if entry_path.join(SKILL_FILENAME).exists() {
                 let dirname = entry.file_name().to_string_lossy().to_string();
                 discovered.push(DiscoveredFile {
                     original_path: entry_path,
@@ -241,7 +241,7 @@ fn reorganize_files(root: &Path, discovered: &[DiscoveredFile]) -> Result<()> {
                 counter += 1;
             }
             fs::create_dir_all(&skill_dir)?;
-            fs::rename(&file.original_path, skill_dir.join("SKILL.md"))?;
+            fs::rename(&file.original_path, skill_dir.join(SKILL_FILENAME))?;
         } else {
             // Hooks and agents remain flat files
             let ext = Path::new(&file.filename)
