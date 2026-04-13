@@ -73,9 +73,9 @@ On the first error during installation, immediate stop and rollback of all alrea
 ## Conflict management
 
 - Detection via `install-cache.json` before any deployment.
-- **TTY (interactive)**: prompt to rename the conflicting artifact. Renaming updates the `name` field in the skill's frontmatter.
-- **Non-TTY (CI)**: error with exit code 1.
-- **`--force`**: last installed silently overwrites.
+- **Default (TTY and non-TTY)**: the colliding artifact is automatically renamed to `{scope}-{name}`, where `scope` comes from the incoming package's manifest. The `name:` field in the skill's frontmatter is rewritten to match.
+- **Residual conflict** (the renamed target is itself already owned by another package): hard error with exit code 1. The user must choose between `--force` and manual uninstall.
+- **`--force`**: last installed silently overwrites, no rename.
 - The original-name → deployed-name mapping is persisted in `install-cache.json`.
 
 ## Environment variables
@@ -106,7 +106,7 @@ Packages may also declare a `messages.postinstall` string. After a successful in
 
 ```
 Done. Deployed 2 artifact(s) for @meryll/mr-review
-  → /home/user/.claude/skills/renkei-review/SKILL.md
+  → /home/user/.claude/skills/review/SKILL.md
 Postinstall notice:
   Run `rk doctor` to verify the install, then restart Claude Code.
 ```

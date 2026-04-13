@@ -161,7 +161,7 @@ The install-cache groups deployed artifacts by backend:
       "deployed": {
         "claude": {
           "artifacts": [
-            { "artifact_type": "skill", "name": "review", "deployed_path": "~/.claude/skills/renkei-review/SKILL.md" }
+            { "artifact_type": "skill", "name": "review", "deployed_path": "~/.claude/skills/review/SKILL.md" }
           ],
           "hooks": [
             { "event": "PreToolUse", "matcher": "Edit", "command": "..." }

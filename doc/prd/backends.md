@@ -22,25 +22,25 @@ See [Multi-Backend Configuration](./multi-backend.md) for user-facing backend se
 
 | Artifact   | Claude Code (global)                      | Claude Code (project)                              | Cursor (global)                        | Cursor (project)                      |
 |------------|-------------------------------------------|-----------------------------------------------------|----------------------------------------|---------------------------------------|
-| Skills     | `~/.claude/skills/renkei-<name>/SKILL.md` | `<project>/.claude/skills/renkei-<name>/SKILL.md`  | `~/.cursor/rules/renkei-<name>.mdc`    | `.cursor/rules/renkei-<name>.mdc`     |
+| Skills     | `~/.claude/skills/<name>/SKILL.md` | `<project>/.claude/skills/<name>/SKILL.md`  | `~/.cursor/rules/<name>.mdc`    | `.cursor/rules/<name>.mdc`     |
 | Hooks      | Merge into `~/.claude/settings.json`      | Merge into `~/.claude/settings.json` (always global)| `~/.cursor/hooks.json`                 | `.cursor/hooks.json`                  |
 | Agents     | `~/.claude/agents/<name>.md`              | `<project>/.claude/agents/<name>.md`               | `~/.cursor/agents/<name>.md`           | `.cursor/agents/<name>.md`            |
 | MCP config | Merge into `~/.claude.json`               | Merge into `~/.claude.json` (always global)        | `~/.cursor/mcp.json`                   | `.cursor/mcp.json`                    |
 
 | Artifact   | Codex (global)                             | Codex (project)                              | Gemini (global)                         | Gemini (project)                       |
 |------------|--------------------------------------------|----------------------------------------------|-----------------------------------------|----------------------------------------|
-| Skills     | `~/.agents/skills/renkei-<name>/SKILL.md`  | `.agents/skills/renkei-<name>/SKILL.md`      | `~/.gemini/skills/renkei-<name>/SKILL.md` | `.gemini/skills/renkei-<name>/SKILL.md` |
+| Skills     | `~/.agents/skills/<name>/SKILL.md`  | `.agents/skills/<name>/SKILL.md`      | `~/.gemini/skills/<name>/SKILL.md` | `.gemini/skills/<name>/SKILL.md` |
 | Hooks      | `~/.codex/hooks.json`                      | `.codex/hooks.json`                          | Merge into `~/.gemini/settings.json`    | Merge into `.gemini/settings.json`     |
 | Agents     | `~/.codex/agents/<name>.toml`              | `.codex/agents/<name>.toml`                  | `~/.gemini/agents/<name>.md`            | `.gemini/agents/<name>.md`             |
 | MCP config | In `~/.codex/config.toml`                  | In `.codex/config.toml`                      | In `~/.gemini/settings.json`            | In `.gemini/settings.json`             |
 
 | Artifact   | Agents (global)                             | Agents (project)                            |
 |------------|---------------------------------------------|---------------------------------------------|
-| Skills     | `~/.agents/skills/renkei-<name>/SKILL.md`   | `.agents/skills/renkei-<name>/SKILL.md`     |
+| Skills     | `~/.agents/skills/<name>/SKILL.md`   | `.agents/skills/<name>/SKILL.md`     |
 | Hooks      | Not supported                               | Not supported                               |
 | Agents     | Not supported                               | Not supported                               |
 | MCP config | Not supported                               | Not supported                               |
 
-In project scope, skills and agents deploy to the equivalent paths under `<project_root>/` instead of `~/`. The `renkei-` prefix on skills creates a clear namespace and avoids collisions with native skills.
+In project scope, skills and agents deploy to the equivalent paths under `<project_root>/` instead of `~/`. Skills are deployed under their base name (same rule as agents); collisions between packages are resolved by the conflict manager described in [Installation](./installation.md#conflict-management).
 
 **Scope behavior per backend**: Claude Code hooks and MCP always deploy globally regardless of scope. Cursor, Codex, and Gemini support project-level hooks and MCP.

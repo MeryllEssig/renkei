@@ -10,7 +10,7 @@
 6. As a developer, I want `rk install` to automatically detect the installed backend (Claude Code, Cursor) so it only deploys where relevant.
 7. As a developer, I want to be warned if the package doesn't support my backend before installation to avoid partial or inconsistent deployment.
 8. As a developer, I want to force-install an incompatible package via `--force` to install it despite the declared incompatibility, at my own risk.
-9. As a developer, I want skills to be deployed under `~/.claude/skills/renkei-<name>/` so they are isolated from native skills and easily identifiable.
+9. As a developer, I want skills to be deployed under `~/.claude/skills/<name>/` using their base name, with automatic scope-based renaming when another package already owns that name, so they stay easy to identify without the artificial `renkei-` prefix.
 10. As a developer, I want hooks to be merged into `~/.claude/settings.json` so they activate automatically in Claude Code.
 11. As a developer, I want agents to be deployed in `~/.claude/agents/` so they are available directly from Claude Code.
 12. As a developer, I want MCP configurations declared in `renkei.json` to be registered in `~/.claude.json` to automatically activate the required MCP servers.

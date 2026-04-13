@@ -81,7 +81,7 @@ Supported events: `before_tool`, `after_tool`, `before_command`, `after_command`
 
 | Artifact | Project scope | Global scope |
 |----------|--------------|--------------|
-| Skills | `.claude/skills/renkei-<name>/SKILL.md` | `~/.claude/skills/renkei-<name>/SKILL.md` |
+| Skills | `.claude/skills/<name>/SKILL.md` | `~/.claude/skills/<name>/SKILL.md` |
 | Agents | `.claude/agents/<name>.md` | `~/.claude/agents/<name>.md` |
 | Hooks | `~/.claude/settings.json` (always global) | `~/.claude/settings.json` |
 | MCP | `~/.claude.json` (always global) | `~/.claude.json` |

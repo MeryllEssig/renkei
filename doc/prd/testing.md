@@ -6,7 +6,7 @@
 
 - **Manifest parsing**: validate that a valid `renkei.json` is accepted, that missing required fields produce a descriptive error, that incorrect types are rejected, that the `@scope/name` scope is required.
 - **Convention-based artifact discovery**: verify that files in `skills/`, `hooks/`, `agents/` are correctly detected as artifacts.
-- **Artifact deployment** (`ClaudeBackend`): verify that files are copied to the correct paths after `rk install`, that the merge into `settings.json` and `~/.claude.json` is correct, that the `renkei-` prefix is applied.
+- **Artifact deployment** (`ClaudeBackend`): verify that files are copied to the correct paths after `rk install` (skills under `<skills_dir>/<name>/`, no prefix), that the merge into `settings.json` and `~/.claude.json` is correct, and that scope-based renaming kicks in on conflict.
 - **Hook translation**: verify that the abstract Renkei format (`before_tool`, etc.) is correctly translated into native Claude Code events (`PreToolUse`, etc.).
 - **Hook tracking**: verify that deployed hooks are recorded in `install-cache.json` and that rollback removes them correctly.
 - **Lockfile**: verify that `rk.lock` is created with the correct versions and hashes, that `rk install` without arguments installs the exact lockfile versions.
