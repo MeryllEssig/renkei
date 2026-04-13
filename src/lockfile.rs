@@ -195,16 +195,16 @@ pub fn install_from_lockfile(
 }
 
 /// Materialized lockfile entry held across the preinstall prompt and the
-/// actual install. The held temp dirs ensure the install root remains valid
-/// until each `install_from_lock_entry` call completes.
+/// actual install. The held temp dir (if any) ensures the install root
+/// remains valid until each `install_from_lock_entry` call completes.
 struct PreparedEntry {
     install_root: PathBuf,
     source: install::SourceInfo,
     manifest: Manifest,
-    /// Extracted archive directory (cached path) — kept alive for the install.
-    _archive_tmp: Option<tempfile::TempDir>,
-    /// Cloned git repo directory (fallback path) — kept alive for the install.
-    _clone_tmp: Option<tempfile::TempDir>,
+    /// Owned temp directory backing `install_root` (extracted archive or
+    /// cloned git repo). `None` for a local source where the install root
+    /// is the user's own filesystem.
+    _owned_tmp: Option<tempfile::TempDir>,
 }
 
 fn prepare_entry(
@@ -236,8 +236,7 @@ fn prepare_entry(
                 install_root,
                 source,
                 manifest,
-                _archive_tmp: Some(tmp),
-                _clone_tmp: None,
+                _owned_tmp: Some(tmp),
             })
         }
         Err(_) => prepare_from_source(entry),
@@ -264,8 +263,7 @@ fn prepare_from_source(entry: &LockfileEntry) -> Result<PreparedEntry> {
                 install_root,
                 source,
                 manifest,
-                _archive_tmp: None,
-                _clone_tmp: Some(tmp_dir),
+                _owned_tmp: Some(tmp_dir),
             })
         }
         source::PackageSource::Local(path_str) => {
@@ -283,8 +281,7 @@ fn prepare_from_source(entry: &LockfileEntry) -> Result<PreparedEntry> {
                 install_root,
                 source,
                 manifest,
-                _archive_tmp: None,
-                _clone_tmp: None,
+                _owned_tmp: None,
             })
         }
     }

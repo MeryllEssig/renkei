@@ -38,11 +38,7 @@ fn prompt_rename(conflict: &Conflict) -> Result<String> {
 }
 
 /// Build the conflict resolver based on --force and TTY detection.
-pub(crate) fn default_conflict_resolver(force: bool) -> Box<ConflictResolver> {
-    default_resolver(force)
-}
-
-fn default_resolver(force: bool) -> Box<ConflictResolver> {
+pub(crate) fn default_resolver(force: bool) -> Box<ConflictResolver> {
     if force {
         Box::new(|_: &Conflict| Ok(None))
     } else if std::io::stdin().is_terminal() {
@@ -136,7 +132,12 @@ pub(crate) fn install_local_with_resolver(
         &deployment.all_deployed,
         &resolved.raw_manifest,
     );
-    Ok(extract_postinstall(&resolved.raw_manifest))
+    Ok(resolved
+        .raw_manifest
+        .messages
+        .as_ref()
+        .and_then(|m| m.postinstall.clone())
+        .filter(|s| !s.is_empty()))
 }
 
 pub(crate) fn print_post_deploy(
@@ -160,17 +161,6 @@ pub(crate) fn print_post_deploy(
             env_check::print_env_warnings(&missing);
         }
     }
-}
-
-/// Pull the optional `messages.postinstall` string out of a manifest, returning
-/// `None` for missing or empty entries so callers can `if let Some(..)` cleanly.
-pub(crate) fn extract_postinstall(raw_manifest: &crate::manifest::Manifest) -> Option<String> {
-    raw_manifest
-        .messages
-        .as_ref()
-        .and_then(|m| m.postinstall.as_ref())
-        .filter(|s| !s.is_empty())
-        .cloned()
 }
 
 /// Render a single postinstall block, optionally prefixed with a package label
@@ -251,7 +241,12 @@ pub fn install_from_lock_entry(
         &deployment.all_deployed,
         &resolved.raw_manifest,
     );
-    Ok(extract_postinstall(&resolved.raw_manifest))
+    Ok(resolved
+        .raw_manifest
+        .messages
+        .as_ref()
+        .and_then(|m| m.postinstall.clone())
+        .filter(|s| !s.is_empty()))
 }
 
 #[cfg(test)]

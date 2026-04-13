@@ -16,6 +16,55 @@ fn setup_claude_home(home: &Path) {
     fs::create_dir_all(home.join(".claude")).unwrap();
 }
 
+/// Render the optional `, "messages": { ... }` JSON fragment that gets
+/// spliced into a renkei.json string. Returns an empty string when both
+/// inputs are `None`, so callers can interpolate unconditionally.
+fn build_messages_json(preinstall: Option<&str>, postinstall: Option<&str>) -> String {
+    let mut parts = Vec::new();
+    if let Some(p) = preinstall {
+        parts.push(format!(
+            r#""preinstall": {}"#,
+            serde_json::to_string(p).unwrap()
+        ));
+    }
+    if let Some(p) = postinstall {
+        parts.push(format!(
+            r#""postinstall": {}"#,
+            serde_json::to_string(p).unwrap()
+        ));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(r#", "messages": {{ {} }}"#, parts.join(", "))
+    }
+}
+
+/// Write a renkei.json + a single SKILL.md inside `pkg_dir`.
+fn write_pkg(
+    pkg_dir: &Path,
+    full_name: &str,
+    skill: &str,
+    preinstall: Option<&str>,
+    postinstall: Option<&str>,
+) {
+    let messages = build_messages_json(preinstall, postinstall);
+    fs::write(
+        pkg_dir.join("renkei.json"),
+        format!(
+            r#"{{"name":"{full_name}","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]{messages}}}"#
+        ),
+    )
+    .unwrap();
+    let sdir = pkg_dir.join("skills").join(skill);
+    fs::create_dir_all(&sdir).unwrap();
+    fs::write(
+        sdir.join("SKILL.md"),
+        format!("---\nname: {skill}\ndescription: test\n---\nContent of {skill}"),
+    )
+    .unwrap();
+}
+
 /// Build a single-skill package directory with optional pre/post messages.
 fn build_pkg(
     full_name: &str,
@@ -24,41 +73,7 @@ fn build_pkg(
     postinstall: Option<&str>,
 ) -> tempfile::TempDir {
     let pkg = tempdir().unwrap();
-    let messages = match (preinstall, postinstall) {
-        (None, None) => String::new(),
-        _ => {
-            let mut parts = Vec::new();
-            if let Some(p) = preinstall {
-                parts.push(format!(
-                    r#""preinstall": {}"#,
-                    serde_json::to_string(p).unwrap()
-                ));
-            }
-            if let Some(p) = postinstall {
-                parts.push(format!(
-                    r#""postinstall": {}"#,
-                    serde_json::to_string(p).unwrap()
-                ));
-            }
-            format!(r#", "messages": {{ {} }}"#, parts.join(", "))
-        }
-    };
-    fs::write(
-        pkg.path().join("renkei.json"),
-        format!(
-            r#"{{"name":"{full_name}","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]{messages}}}"#
-        ),
-    )
-    .unwrap();
-    let sdir = pkg.path().join("skills").join(skill);
-    fs::create_dir_all(&sdir).unwrap();
-    fs::write(
-        sdir.join("SKILL.md"),
-        format!(
-            "---\nname: {skill}\ndescription: test\n---\nContent of {skill}"
-        ),
-    )
-    .unwrap();
+    write_pkg(pkg.path(), full_name, skill, preinstall, postinstall);
     pkg
 }
 
@@ -78,41 +93,8 @@ fn build_workspace(
     .unwrap();
     for (dir, full_name, skill, pre, post) in members {
         let mdir = ws.path().join(dir);
-        let messages = match (pre, post) {
-            (None, None) => String::new(),
-            _ => {
-                let mut parts = Vec::new();
-                if let Some(p) = pre {
-                    parts.push(format!(
-                        r#""preinstall": {}"#,
-                        serde_json::to_string(p).unwrap()
-                    ));
-                }
-                if let Some(p) = post {
-                    parts.push(format!(
-                        r#""postinstall": {}"#,
-                        serde_json::to_string(p).unwrap()
-                    ));
-                }
-                format!(r#", "messages": {{ {} }}"#, parts.join(", "))
-            }
-        };
-        let sdir = mdir.join("skills").join(skill);
-        fs::create_dir_all(&sdir).unwrap();
-        fs::write(
-            mdir.join("renkei.json"),
-            format!(
-                r#"{{"name":"{full_name}","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"]{messages}}}"#
-            ),
-        )
-        .unwrap();
-        fs::write(
-            sdir.join("SKILL.md"),
-            format!(
-                "---\nname: {skill}\ndescription: test\n---\nContent of {skill}",
-            ),
-        )
-        .unwrap();
+        fs::create_dir_all(&mdir).unwrap();
+        write_pkg(&mdir, full_name, skill, *pre, *post);
     }
     ws
 }

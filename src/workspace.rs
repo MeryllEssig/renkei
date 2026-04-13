@@ -77,7 +77,7 @@ pub fn install_workspace(
         return Ok(());
     }
 
-    let resolver = install::default_conflict_resolver(options.force);
+    let resolver = install::default_resolver(options.force);
     let mut postinstalls: Vec<(String, String)> = Vec::new();
     for (member, manifest) in to_install.iter().zip(manifests.iter()) {
         let member_dir = workspace_dir.join(member);
