@@ -17,6 +17,7 @@ JSON with `lockfileVersion: 1` and a `packages` object. Each entry contains:
 - `tag` — git tag/branch (optional)
 - `resolved` — commit SHA (for git sources)
 - `integrity` — SHA-256 hash of the cached archive
+- `member` — workspace member name (optional; set when the entry comes from a selective workspace install)
 
 ## Usage
 

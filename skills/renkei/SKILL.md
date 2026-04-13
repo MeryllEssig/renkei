@@ -1,6 +1,7 @@
 ---
 name: renkei
 description: Explain what Renkei is and how to use it. Use when the user asks about Renkei, wants to install a renkei package, create a renkei package, or manage agentic workflows — "what is renkei", "how do I install", "create a package", "renkei help".
+allowed-tools: Read(references/*), Glob(references/*), Bash(rk:*)
 ---
 
 Renkei (`rk`) is a CLI package manager written in Rust that installs, versions, and shares agentic workflows (skills, hooks, agents, MCP configs) across AI coding tools.

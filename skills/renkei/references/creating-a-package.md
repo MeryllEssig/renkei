@@ -28,6 +28,10 @@ Artifacts are discovered automatically from `skills/`, `hooks/`, `agents/` — n
   "scope": "any",
   "keywords": ["review", "testing"],
   "requiredEnv": ["GITHUB_TOKEN"],
+  "messages": {
+    "preinstall": "This workflow requires a configured Redmine MCP server.",
+    "postinstall": "Run `rk doctor` to verify the setup."
+  },
   "mcp": {
     "server-name": {
       "command": "npx",
@@ -55,6 +59,7 @@ Artifacts are discovered automatically from `skills/`, `hooks/`, `agents/` — n
 | `scope` | `"any"` | `"any"`, `"global"`, or `"project"` |
 | `keywords` | `[]` | Search keywords |
 | `requiredEnv` | `[]` | Env vars checked post-install (warning only) |
+| `messages` | `{}` | `preinstall` (requires user confirmation) and `postinstall` (passive notice). Each capped at 2000 chars. |
 | `mcp` | `{}` | MCP servers to register in `~/.claude.json` |
 
 ## Hooks format
