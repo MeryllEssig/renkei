@@ -53,14 +53,14 @@ Today, `rk install <giturl>` on a workspace repo always installs **all** declare
 
 ## Phase 5: CLI dispatch wiring
 
-- [ ] 5.1 Pass `members` from `Commands::Install` through `run_install` to `install_or_workspace`.
-- [ ] 5.2 Source-side resolution: when `members` non-empty, force the workspace path (error if manifest is not a workspace).
-- [ ] 5.3 Propagate `--tag` / `--branch` / `--force` / `--backend` once (single clone, single tag) — already the case via current `InstallOptions`, just verify.
+- [x] 5.1 Pass `members` from `Commands::Install` through `run_install` to `install_or_workspace`.
+- [x] 5.2 Source-side resolution: when `members` non-empty, force the workspace path (error if manifest is not a workspace).
+- [x] 5.3 Propagate `--tag` / `--branch` / `--force` / `--backend` once (single clone, single tag) — already the case via current `InstallOptions`, just verify.
 
 ## Phase 6: `rk list` display
 
-- [ ] 6.1 In `src/list.rs`, append `#<member>` to the source column when `entry.member.is_some()`.
-- [ ] 6.2 TDD: snapshot/string assertion on listing output for an entry with a member.
+- [x] 6.1 In `src/list.rs`, append `#<member>` to the source column when `entry.member.is_some()`.
+- [x] 6.2 TDD: snapshot/string assertion on listing output for an entry with a member.
 
 ## Phase 7: Integration tests
 

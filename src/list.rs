@@ -59,8 +59,13 @@ fn format_package_line(name: &str, entry: &PackageEntry) -> String {
         String::new()
     };
 
+    let member_suffix = match &entry.member {
+        Some(m) => format!(" {}", format!("#{m}").dimmed()),
+        None => String::new(),
+    };
+
     format!(
-        "  {} v{} {source_badge}{git_detail}",
+        "  {} v{} {source_badge}{git_detail}{member_suffix}",
         name.bold(),
         entry.version
     )
@@ -132,6 +137,62 @@ mod tests {
     use super::*;
     use crate::install_cache::{BackendDeployment, DeployedArtifactEntry};
     use std::collections::HashMap;
+
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == 0x1b {
+                // skip until 'm' (SGR terminator)
+                while i < bytes.len() && bytes[i] != b'm' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+            } else {
+                out.push(bytes[i] as char);
+                i += 1;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_format_package_line_with_member_suffix() {
+        let entry = PackageEntry {
+            version: "1.0.0".to_string(),
+            source: "git".to_string(),
+            source_path: "git@github.com:u/r".to_string(),
+            integrity: "abc".to_string(),
+            archive_path: "/tmp/a.tar.gz".to_string(),
+            deployed: HashMap::new(),
+            resolved: Some("abcdef1234567890".to_string()),
+            tag: Some("v1.0.0".to_string()),
+            member: Some("mr-review".to_string()),
+        };
+        let line = strip_ansi(&format_package_line("@test/pkg", &entry));
+        assert!(line.contains("#mr-review"), "got: {line}");
+        assert!(line.contains("[git]"));
+    }
+
+    #[test]
+    fn test_format_package_line_without_member_no_suffix() {
+        let entry = PackageEntry {
+            version: "1.0.0".to_string(),
+            source: "local".to_string(),
+            source_path: "/tmp/pkg".to_string(),
+            integrity: "abc".to_string(),
+            archive_path: "/tmp/a.tar.gz".to_string(),
+            deployed: HashMap::new(),
+            resolved: None,
+            tag: None,
+            member: None,
+        };
+        let line = strip_ansi(&format_package_line("@test/pkg", &entry));
+        assert!(!line.contains('#'), "got: {line}");
+    }
 
     fn make_entry(
         source: &str,
