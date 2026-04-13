@@ -67,24 +67,24 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 - [x] 4.3 Single-package non-workspace install (`install_local`): wrap in the coordinator with a single-element batch; preserve current behavior when no preinstall is declared. _→ Done in `main.rs::install_or_workspace`._
 - [x] 4.4 Workspace install (`install_workspace`): batch all selected members; one prompt for the lot.
 - [x] 4.5 Lockfile replay (no-arg `rk install`): batch all entries; one prompt; non-TTY behaviour same as everything else. _→ Two-pass `prepare_entry` materializes archives/clones up-front; tempdirs held in `PreparedEntry` across the prompt._
-- [ ] 4.6 TDD: per-path tests asserting collection across multiple manifests, refusal short-circuits before any deploy, `--yes` bypasses prompt across all paths, single package without `messages` keeps current zero-prompt UX. _→ Existing 437 unit + 124 integration tests still pass; dedicated coverage lands in Phase 7._
+- [x] 4.6 TDD: per-path tests asserting collection across multiple manifests, refusal short-circuits before any deploy, `--yes` bypasses prompt across all paths, single package without `messages` keeps current zero-prompt UX. _→ Covered by `tests/integration_install_messages.rs` (Phase 7)._
 
 ## Phase 5: Postinstall display
 
 - [x] 5.1 Extend `print_post_deploy` in `src/install/mod.rs` to take an optional `postinstall: Option<&str>` and a `package_label: Option<&str>` (used in workspace mode for the `@scope/member:` prefix). _→ Reads postinstall straight from `raw_manifest.messages.postinstall` and accepts `package_label`. Helper `print_postinstall_block` is reusable for the batch coordinator._
 - [x] 5.2 Render order: existing `Done.` line → existing `requiredEnv` warnings → postinstall block (yellow/bold framed).
-- [ ] 5.3 In the workspace coordinator, after each member deploy, accumulate postinstalls; print them in order at the end of the batch (one block per member with prefix). _→ Deferred to Phase 4 (needs the new coordinator)._
-- [ ] 5.4 TDD: single package without postinstall → unchanged output. With postinstall → block appears after env warnings. Workspace with N postinstalls → N blocks in order, each labeled. Workspace where some members have no postinstall → only the ones with messages render. _→ Single-package paths exercised via Phase 7 integration tests; workspace coverage joins Phase 4._
+- [x] 5.3 In the workspace coordinator, after each member deploy, accumulate postinstalls; print them in order at the end of the batch (one block per member with prefix). _→ Done in Phase 4: `workspace::install_workspace` collects each member's `Option<String>` and calls `batch::print_postinstall_summary` at the end._
+- [x] 5.4 TDD: single package without postinstall → unchanged output. With postinstall → block appears after env warnings. Workspace with N postinstalls → N blocks in order, each labeled. Workspace where some members have no postinstall → only the ones with messages render. _→ Covered by `tests/integration_install_messages.rs`._
 
 ## Phase 6: Error variant and exit codes
 
-- [ ] 6.1 Add `RenkeiError::PreinstallDeclined` (or reuse a generic cancellation path) — but per design, refusal is `exit 0`, not an error. So this is just a control-flow `bool`/early-return, not an error variant.
+- [x] 6.1 Add `RenkeiError::PreinstallDeclined` (or reuse a generic cancellation path) — but per design, refusal is `exit 0`, not an error. So this is just a control-flow `bool`/early-return, not an error variant. _→ No new variant. `confirm_batch` returns `Ok(false)`; callers `return Ok(())`._
 - [x] 6.2 Add `RenkeiError::PreinstallRequiresConfirmation` for the non-TTY case, with the suggested `--yes` message. _→ Landed alongside Phase 3 because `confirm_preinstall`'s signature depends on it._
-- [ ] 6.3 Wire the early-return through `main.rs` so refusal does not produce an error stack trace.
+- [x] 6.3 Wire the early-return through `main.rs` so refusal does not produce an error stack trace. _→ `install_or_workspace`, `install_workspace`, and `install_from_lockfile` all `return Ok(())` on `Ok(false)`. main.rs treats `Ok(())` as exit 0._
 
 ## Phase 7: Integration tests
 
-- [ ] 7.1 Add `tests/integration_install_messages.rs`:
+- [x] 7.1 Add `tests/integration_install_messages.rs`:
   - Single local install with `messages.preinstall`: TTY simulated → prompt accepted → installs; refused → exits 0, no artifacts deployed, no lockfile entry.
   - Same with `--yes`: no prompt, installs.
   - Same in non-TTY (stdin redirected from `/dev/null`) without `--yes` → exit non-zero, error mentions `--yes`.
