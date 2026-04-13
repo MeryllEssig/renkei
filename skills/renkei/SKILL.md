@@ -18,4 +18,5 @@ Dig into these files only when you need details on a specific action:
 - [Lockfile](references/lockfile.md) — reproducible installs with `rk.lock`
 - [Packaging for distribution](references/package.md) — `rk package` archive creation
 - [Workspace support](references/workspace.md) — multi-package monorepos
+- [Local MCP servers](references/local-mcp.md) — ship a server source under `mcp/<name>/`, build consent, `--link`, ref counting
 - [Migration](references/migrate.md) — `rk migrate` from old format

@@ -10,10 +10,15 @@ my-package/
 ├── skills/            # skill directories (each with SKILL.md)
 ├── hooks/             # JSON hook definitions (*.json)
 ├── agents/            # markdown files (*.md)
-└── scripts/           # supporting scripts
+├── scripts/           # supporting scripts
+└── mcp/               # local MCP server sources (one folder per server)
+    └── my-server/     # name MUST match mcp.<name> in the manifest
+        └── …
 ```
 
-Artifacts are discovered automatically from `skills/`, `hooks/`, `agents/` — no listing needed in the manifest.
+Artifacts are discovered automatically from `skills/`, `hooks/`, `agents/` — no listing needed in the manifest. Local MCP servers under `mcp/<name>/` are picked up by matching the folder name to a `mcp.<name>` entry in the manifest — see [Local MCP servers](local-mcp.md).
+
+A `.rkignore` file at the package root (gitignore syntax) extends the always-on exclusion list (`node_modules/`, `dist/`, `build/`, `target/`, `.venv/`, `venv/`, `__pycache__/`, `.pytest_cache/`, `*.pyc`, `.DS_Store`, `.git/`). Inside `mcp/<name>/`, the `dist/build/target` defaults are relaxed so prebuilt entrypoints survive the archive.
 
 ## Manifest (`renkei.json`)
 

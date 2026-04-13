@@ -34,6 +34,8 @@ The manifest's `scope` field (`"any"`, `"global"`, `"project"`) controls where a
 | `--force` | Install even if backend is incompatible |
 | `-m` / `--member <name>` | Workspace only: install a subset of members (repeatable or CSV) |
 | `-y` / `--yes` | Auto-accept preinstall confirmation prompts |
+| `--allow-build` | Auto-accept the build prompt for bundled local MCP servers (required in CI / non-TTY when a local MCP needs building). See [Local MCP servers](local-mcp.md). |
+| `--link` | Symlink the source instead of copying. For local MCPs, also symlinks `~/.renkei/mcp/<name>/` and skips the build entirely. |
 
 ## Selective workspace install
 
@@ -64,9 +66,11 @@ Packages may declare `messages.preinstall` and/or `messages.postinstall` in thei
 
 1. Manifest (`renkei.json`) is read and validated
 2. Preinstall messages collected across the batch → single confirmation prompt (skipped if none declared or `--yes`)
-3. Artifacts are discovered from `skills/`, `hooks/`, `agents/`
-4. Archive is created in `~/.renkei/archives/`
-5. Artifacts are deployed to the correct paths
-6. Install-cache is updated
-7. Postinstall messages rendered after `Done.` + `requiredEnv` warnings
-8. If any step fails, all deployed artifacts are rolled back
+3. **Build notices** for bundled local MCP servers collected → single confirmation prompt (skipped if none declared or `--allow-build`)
+4. Artifacts are discovered from `skills/`, `hooks/`, `agents/`
+5. Archive is created in `~/.renkei/archives/`
+6. Local MCPs (if any) are copied to `~/.renkei/mcp/<name>.new/`, built, then atomically swapped into `~/.renkei/mcp/<name>/`
+7. Artifacts are deployed to the correct paths
+8. Install-cache is updated (including `mcp_local` refs)
+9. Postinstall messages rendered after `Done.` + `requiredEnv` warnings
+10. If any step fails, all deployed artifacts are rolled back; staged MCP folders are removed and the previous version is left intact
