@@ -278,8 +278,8 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 11: Integration tests
 
-- [ ] 11.1 New file `tests/integration_local_mcp.rs` with fixtures under `tests/fixtures/local-mcp-pkg/` (a minimal package whose `build` is `[["sh","-c","mkdir -p dist && printf '#!/usr/bin/env node\\nconsole.log(1)' > dist/index.js"]]` — wait, no shell. Use `[["cp","entry-src.js","dist/index.js"]]` with a pre-mkdir'd `dist/`, or a vendored `dist/index.js` with `build: [["true"]]`). Keep it portable and fast.
-- [ ] 11.2 Scenarios:
+- [x] 11.1 New file `tests/integration_local_mcp.rs` with fixtures under `tests/fixtures/local-mcp-pkg/` (vendored `dist/index.js` with `build: [["true"]]` for portability).
+- [x] 11.2 Scenarios:
   - Fresh install: folder + backend config + cache entry.
   - Re-install on second "project" (simulated via different `CWD` + git init): same folder, two refs.
   - Uninstall from one of two projects: folder stays, ref count decrements.
