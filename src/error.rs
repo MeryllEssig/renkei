@@ -74,6 +74,18 @@ pub enum RenkeiError {
     #[error("Nothing to migrate: no skills, hooks, or agents found in {0}")]
     NothingToMigrate(PathBuf),
 
+    #[error("Workspace member '{requested}' not found. Available members: {}", .available.join(", "))]
+    MemberNotInWorkspace {
+        requested: String,
+        available: Vec<String>,
+    },
+
+    #[error("`-m`/`--member` requires a workspace package; this manifest has no `workspace` array.")]
+    MemberFlagOnNonWorkspace,
+
+    #[error("`-m`/`--member` cannot be combined with a no-argument `rk install` (lockfile restore).")]
+    MemberFlagWithLockfileInstall,
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -173,6 +185,32 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("/projects/my-workspace"));
         assert!(msg.contains("rk install --link ."));
+    }
+
+    #[test]
+    fn test_member_not_in_workspace_message() {
+        let err = RenkeiError::MemberNotInWorkspace {
+            requested: "bogus".to_string(),
+            available: vec!["mr-review".to_string(), "auto-test".to_string()],
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("bogus"));
+        assert!(msg.contains("mr-review"));
+        assert!(msg.contains("auto-test"));
+    }
+
+    #[test]
+    fn test_member_flag_on_non_workspace_message() {
+        let msg = RenkeiError::MemberFlagOnNonWorkspace.to_string();
+        assert!(msg.contains("workspace"));
+        assert!(msg.contains("-m"));
+    }
+
+    #[test]
+    fn test_member_flag_with_lockfile_install_message() {
+        let msg = RenkeiError::MemberFlagWithLockfileInstall.to_string();
+        assert!(msg.contains("-m"));
+        assert!(msg.contains("lockfile"));
     }
 
     #[test]

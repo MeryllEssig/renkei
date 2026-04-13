@@ -58,8 +58,14 @@ fn install_or_workspace(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &install::InstallOptions,
+    selected_members: &[String],
 ) -> error::Result<()> {
     if let Some(members) = manifest::try_load_workspace(package_dir) {
+        let selected = if selected_members.is_empty() {
+            None
+        } else {
+            Some(selected_members)
+        };
         workspace::install_workspace(
             package_dir,
             &members,
@@ -67,7 +73,10 @@ fn install_or_workspace(
             backends,
             requested_scope,
             options,
+            selected,
         )
+    } else if !selected_members.is_empty() {
+        Err(RenkeiError::MemberFlagOnNonWorkspace)
     } else {
         install::install_local(package_dir, config, backends, requested_scope, options)
     }
@@ -108,6 +117,7 @@ fn run_install(
     tag: Option<&str>,
     force: bool,
     backend_override: Option<&str>,
+    members: &[String],
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let requested_scope = if global {
@@ -126,7 +136,7 @@ fn run_install(
                 force: force || backend_override.is_some(),
                 ..install::InstallOptions::local(path_str)
             };
-            install_or_workspace(&path, &config, &backends, requested_scope, &options)
+            install_or_workspace(&path, &config, &backends, requested_scope, &options, members)
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
@@ -141,6 +151,7 @@ fn run_install(
                 &backends,
                 requested_scope,
                 &options,
+                members,
             )
         }
     }
@@ -192,14 +203,21 @@ fn main() {
             tag,
             force,
             backend,
+            members,
         } => run_install(
             &source,
             global,
             tag.as_deref(),
             force,
             backend.as_deref(),
+            &members,
             &registry,
         ),
+        Commands::Install {
+            source: None,
+            members,
+            ..
+        } if !members.is_empty() => Err(RenkeiError::MemberFlagWithLockfileInstall),
         Commands::Install {
             source: None,
             global,

@@ -36,6 +36,14 @@ pub enum Commands {
         /// Force a specific backend, bypassing manifest and config (e.g. --backend cursor)
         #[arg(long = "backend")]
         backend: Option<String>,
+        /// Install only the specified workspace member(s). Repeatable; comma-separated also accepted.
+        #[arg(
+            short = 'm',
+            long = "member",
+            value_delimiter = ',',
+            action = clap::ArgAction::Append
+        )]
+        members: Vec<String>,
     },
     /// Uninstall a workflow package
     Uninstall {
@@ -94,4 +102,53 @@ pub enum ConfigAction {
     },
     /// List all configuration
     List,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn install_members(args: &[&str]) -> Vec<String> {
+        let cli = Cli::try_parse_from(args).expect("parse should succeed");
+        match cli.command {
+            Commands::Install { members, .. } => members,
+            other => panic!("expected Install, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn install_without_member_flag_yields_empty_vec() {
+        assert!(install_members(&["rk", "install", "./pkg"]).is_empty());
+    }
+
+    #[test]
+    fn install_accepts_repeated_member_flags() {
+        let members = install_members(&["rk", "install", "./pkg", "-m", "a", "-m", "b"]);
+        assert_eq!(members, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn install_accepts_comma_separated_members() {
+        let members = install_members(&["rk", "install", "./pkg", "-m", "a,b,c"]);
+        assert_eq!(
+            members,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn install_mixes_repeated_and_csv_members() {
+        let members = install_members(&["rk", "install", "./pkg", "-m", "a,b", "-m", "c"]);
+        assert_eq!(
+            members,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn install_member_long_flag_works() {
+        let members = install_members(&["rk", "install", "./pkg", "--member", "mr-review"]);
+        assert_eq!(members, vec!["mr-review".to_string()]);
+    }
 }

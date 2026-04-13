@@ -8,10 +8,13 @@ use crate::error::{RenkeiError, Result};
 use crate::install::{self, InstallOptions, SourceKind};
 use crate::manifest::RequestedScope;
 
-/// Install all members of a workspace.
+/// Install all (or a selected subset of) members of a workspace.
 ///
-/// Validates that every member directory contains a `renkei.json` before
-/// installing any member (fail-fast). Then installs each member independently.
+/// `selected = None`: install every member declared in `members`.
+/// `selected = Some(names)`: install only the named members, in the order
+/// requested. Every requested name must exist in `members` (fail-fast → no
+/// install runs if validation fails). Validates that every member-to-install
+/// directory contains a `renkei.json` before installing any of them.
 pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],
@@ -19,14 +22,34 @@ pub fn install_workspace(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &InstallOptions,
+    selected: Option<&[String]>,
 ) -> Result<()> {
+    let to_install: Vec<String> = match selected {
+        None => members.to_vec(),
+        Some(requested) => {
+            let mut deduped: Vec<String> = Vec::with_capacity(requested.len());
+            for name in requested {
+                if !members.iter().any(|m| m == name) {
+                    return Err(RenkeiError::MemberNotInWorkspace {
+                        requested: name.clone(),
+                        available: members.to_vec(),
+                    });
+                }
+                if !deduped.iter().any(|n| n == name) {
+                    deduped.push(name.clone());
+                }
+            }
+            deduped
+        }
+    };
+
     println!(
         "{} workspace with {} member(s)",
         "Detected".green().bold(),
-        members.len()
+        to_install.len()
     );
 
-    for member in members {
+    for member in &to_install {
         let member_dir = workspace_dir.join(member);
         if !member_dir.join("renkei.json").exists() {
             return Err(RenkeiError::ManifestNotFound(
@@ -35,7 +58,7 @@ pub fn install_workspace(
         }
     }
 
-    for member in members {
+    for member in &to_install {
         let member_dir = workspace_dir.join(member);
         let member_options = build_member_options(&member_dir, options);
         install::install_local(
@@ -130,6 +153,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
+            None,
         )
         .unwrap();
 
@@ -185,6 +209,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
+            None,
         );
 
         assert!(result.is_err());
@@ -213,9 +238,109 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
+            None,
         );
 
         assert!(result.is_ok(), "Force flag should bypass backend detection");
+    }
+
+    #[test]
+    fn test_install_workspace_selected_subset_only_installs_named() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let ws = make_workspace(&[
+            ("member-a", "@test/member-a", "review"),
+            ("member-b", "@test/member-b", "lint"),
+        ]);
+
+        let options = local_options(&ws.path().to_string_lossy());
+
+        install_workspace(
+            ws.path(),
+            &["member-a".to_string(), "member-b".to_string()],
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &options,
+            Some(&["member-a".to_string()]),
+        )
+        .unwrap();
+
+        assert!(home
+            .path()
+            .join(".claude/skills/renkei-review/SKILL.md")
+            .exists());
+        assert!(!home
+            .path()
+            .join(".claude/skills/renkei-lint/SKILL.md")
+            .exists());
+
+        let cache = crate::install_cache::InstallCache::load(&config).unwrap();
+        assert!(cache.packages.contains_key("@test/member-a"));
+        assert!(!cache.packages.contains_key("@test/member-b"));
+    }
+
+    #[test]
+    fn test_install_workspace_unknown_member_fails_before_any_install() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let ws = make_workspace(&[
+            ("member-a", "@test/member-a", "review"),
+            ("member-b", "@test/member-b", "lint"),
+        ]);
+
+        let options = local_options(&ws.path().to_string_lossy());
+
+        let result = install_workspace(
+            ws.path(),
+            &["member-a".to_string(), "member-b".to_string()],
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &options,
+            Some(&["member-a".to_string(), "bogus".to_string()]),
+        );
+
+        assert!(matches!(
+            result,
+            Err(RenkeiError::MemberNotInWorkspace { .. })
+        ));
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("bogus"));
+        assert!(msg.contains("member-a"));
+        assert!(msg.contains("member-b"));
+        assert!(!home
+            .path()
+            .join(".claude/skills/renkei-review/SKILL.md")
+            .exists());
+    }
+
+    #[test]
+    fn test_install_workspace_selected_dedups_repeated_names() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let ws = make_workspace(&[("member-a", "@test/member-a", "review")]);
+        let options = local_options(&ws.path().to_string_lossy());
+
+        install_workspace(
+            ws.path(),
+            &["member-a".to_string()],
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &options,
+            Some(&["member-a".to_string(), "member-a".to_string()]),
+        )
+        .unwrap();
+
+        let cache = crate::install_cache::InstallCache::load(&config).unwrap();
+        assert!(cache.packages.contains_key("@test/member-a"));
     }
 
     #[test]
@@ -238,6 +363,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &options,
+            None,
         )
         .unwrap();
 
