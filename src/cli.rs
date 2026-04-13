@@ -47,6 +47,9 @@ pub enum Commands {
         /// Skip the preinstall confirmation prompt and accept all messages.
         #[arg(short = 'y', long = "yes")]
         yes: bool,
+        /// Skip the build confirmation prompt for local MCP servers.
+        #[arg(long = "allow-build")]
+        allow_build: bool,
     },
     /// Uninstall a workflow package
     Uninstall {

@@ -24,7 +24,11 @@ use super::print_postinstall_block;
 /// - `Ok(true)` → proceed with installs.
 /// - `Ok(false)` → user declined; caller should exit 0 without side effects.
 /// - `Err(PreinstallRequiresConfirmation)` → non-TTY environment without `--yes`.
-pub(crate) fn confirm_batch(manifests: &[&Manifest], yes: bool) -> Result<bool> {
+pub(crate) fn confirm_batch(
+    manifests: &[&Manifest],
+    yes: bool,
+    _allow_build: bool,
+) -> Result<bool> {
     let notices = collect_preinstall(manifests);
     confirm_preinstall(&notices, yes)
 }
@@ -64,6 +68,6 @@ mod tests {
             required_env: None,
             messages: None,
         };
-        assert!(confirm_batch(&[&m], false).unwrap());
+        assert!(confirm_batch(&[&m], false, false).unwrap());
     }
 }

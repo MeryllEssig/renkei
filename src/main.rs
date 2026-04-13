@@ -52,6 +52,7 @@ fn build_config(global: bool) -> error::Result<Config> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn install_or_workspace(
     package_dir: &Path,
     config: &Config,
@@ -60,6 +61,7 @@ fn install_or_workspace(
     options: &install::InstallOptions,
     selected_members: Option<&[String]>,
     yes: bool,
+    allow_build: bool,
 ) -> error::Result<()> {
     match (manifest::try_load_workspace(package_dir), selected_members) {
         (Some(members), selected) => workspace::install_workspace(
@@ -71,6 +73,7 @@ fn install_or_workspace(
             options,
             selected,
             yes,
+            allow_build,
         ),
         (None, Some(_)) => Err(RenkeiError::MemberFlagOnNonWorkspace),
         (None, None) => {
@@ -79,7 +82,7 @@ fn install_or_workspace(
             // (which would otherwise mutate the on-disk install state).
             let raw = manifest::Manifest::from_path(package_dir)?;
             raw.validate()?;
-            if !install::batch::confirm_batch(&[&raw], yes)? {
+            if !install::batch::confirm_batch(&[&raw], yes, allow_build)? {
                 return Ok(());
             }
             install::install_local(package_dir, config, backends, requested_scope, options)
@@ -125,6 +128,7 @@ fn run_install(
     backend_override: Option<&str>,
     members: Option<&[String]>,
     yes: bool,
+    allow_build: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let requested_scope = if global {
@@ -151,6 +155,7 @@ fn run_install(
                 &options,
                 members,
                 yes,
+                allow_build,
             )
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
@@ -168,6 +173,7 @@ fn run_install(
                 &options,
                 members,
                 yes,
+                allow_build,
             )
         }
     }
@@ -177,11 +183,12 @@ fn run_install_from_lockfile(
     global: bool,
     backend_override: Option<&str>,
     yes: bool,
+    allow_build: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let config = build_config(global)?;
     let backends = resolve_backends(registry, &config, backend_override)?;
-    lockfile::install_from_lockfile(&config, &backends, yes)
+    lockfile::install_from_lockfile(&config, &backends, yes, allow_build)
 }
 
 fn run_uninstall(package: &str, global: bool) -> error::Result<()> {
@@ -222,6 +229,7 @@ fn main() {
             backend,
             members,
             yes,
+            allow_build,
         } => run_install(
             &source,
             global,
@@ -234,6 +242,7 @@ fn main() {
                 Some(members.as_slice())
             },
             yes,
+            allow_build,
             &registry,
         ),
         Commands::Install {
@@ -246,8 +255,9 @@ fn main() {
             global,
             backend,
             yes,
+            allow_build,
             ..
-        } => run_install_from_lockfile(global, backend.as_deref(), yes, &registry),
+        } => run_install_from_lockfile(global, backend.as_deref(), yes, allow_build, &registry),
         Commands::List { global } => run_list(global),
         Commands::Doctor { global } => run_doctor(global, &registry),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),

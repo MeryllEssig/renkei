@@ -28,6 +28,7 @@ pub fn install_workspace(
     options: &InstallOptions,
     selected: Option<&[String]>,
     yes: bool,
+    allow_build: bool,
 ) -> Result<()> {
     let to_install: Vec<String> = match selected {
         None => members.to_vec(),
@@ -74,7 +75,7 @@ pub fn install_workspace(
         .collect::<Result<_>>()?;
 
     let manifest_refs: Vec<&Manifest> = manifests.iter().collect();
-    if !batch::confirm_batch(&manifest_refs, yes)? {
+    if !batch::confirm_batch(&manifest_refs, yes, allow_build)? {
         return Ok(());
     }
 
@@ -188,6 +189,7 @@ mod tests {
             &options,
             None,
             true,
+            false,
         )
         .unwrap();
 
@@ -239,6 +241,7 @@ mod tests {
             &options,
             None,
             true,
+            false,
         );
 
         assert!(result.is_err());
@@ -266,6 +269,7 @@ mod tests {
             &options,
             None,
             true,
+            false,
         );
 
         assert!(result.is_ok(), "Force flag should bypass backend detection");
@@ -293,6 +297,7 @@ mod tests {
             &options,
             Some(&["member-a".to_string()]),
             true,
+            false,
         )
         .unwrap();
 
@@ -326,6 +331,7 @@ mod tests {
             &options,
             Some(&["member-a".to_string(), "bogus".to_string()]),
             true,
+            false,
         );
 
         assert!(matches!(
@@ -357,6 +363,7 @@ mod tests {
             &options,
             Some(&["member-a".to_string(), "member-a".to_string()]),
             true,
+            false,
         )
         .unwrap();
 
@@ -386,6 +393,7 @@ mod tests {
             &options,
             None,
             true,
+            false,
         )
         .unwrap();
 
@@ -422,6 +430,7 @@ mod tests {
             &options,
             None,
             true,
+            false,
         )
         .unwrap();
 

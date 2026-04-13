@@ -116,7 +116,12 @@ fn strip_integrity_prefix(integrity: &str) -> &str {
         .unwrap_or(integrity)
 }
 
-pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend], yes: bool) -> Result<()> {
+pub fn install_from_lockfile(
+    config: &Config,
+    backends: &[&dyn Backend],
+    yes: bool,
+    allow_build: bool,
+) -> Result<()> {
     let lockfile_path = config.lockfile_path();
 
     if config.is_project() && !lockfile_path.exists() {
@@ -168,7 +173,7 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend], yes: bo
     }
 
     let manifest_refs: Vec<&Manifest> = prepared.iter().map(|p| &p.manifest).collect();
-    if !batch::confirm_batch(&manifest_refs, yes)? {
+    if !batch::confirm_batch(&manifest_refs, yes, allow_build)? {
         return Ok(());
     }
 
@@ -700,7 +705,7 @@ mod tests {
         assert!(!skill_path.exists());
 
         // Step 3: install from lockfile
-        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false).unwrap();
 
         // Verify skill is re-deployed
         assert!(skill_path.exists());
@@ -733,7 +738,7 @@ mod tests {
         lockfile.save(&lockfile_path).unwrap();
 
         // Install from lockfile should fail with integrity error
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Integrity check failed"));
@@ -745,7 +750,7 @@ mod tests {
         let home = tempdir().unwrap();
         let config = Config::with_home_dir(home.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -758,7 +763,7 @@ mod tests {
         let project = tempdir().unwrap();
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -779,7 +784,7 @@ mod tests {
 
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Workspace detected"));
@@ -813,7 +818,7 @@ mod tests {
         fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
 
         // Install from lockfile — should fall back to local source
-        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false).unwrap();
 
         let skill_path = home.path().join(".claude/skills/review/SKILL.md");
         assert!(skill_path.exists());
