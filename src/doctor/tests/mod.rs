@@ -31,6 +31,7 @@ pub fn make_entry(artifacts: Vec<DeployedArtifactEntry>) -> PackageEntry {
         resolved: None,
         tag: None,
         member: None,
+        mcp_local_sources: std::collections::HashMap::new(),
     }
 }
 

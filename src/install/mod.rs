@@ -119,6 +119,10 @@ pub(crate) fn install_local_with_resolver(
         }
     };
 
+    let mcp_local_sources: std::collections::HashMap<String, String> = staged
+        .iter()
+        .map(|s| (s.name.clone(), s.source_sha256.clone()))
+        .collect();
     mcp_local::commit_local_mcps(staged, &mut store)?;
 
     store.record_install(
@@ -136,6 +140,7 @@ pub(crate) fn install_local_with_resolver(
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
             member: options.member.clone(),
+            mcp_local_sources,
         },
     );
     store.save(config)?;
@@ -254,6 +259,10 @@ pub fn install_from_lock_entry(
         }
     };
 
+    let mcp_local_sources: std::collections::HashMap<String, String> = staged
+        .iter()
+        .map(|s| (s.name.clone(), s.source_sha256.clone()))
+        .collect();
     mcp_local::commit_local_mcps(staged, &mut store)?;
 
     store.record_install_from_lockfile(
@@ -268,6 +277,7 @@ pub fn install_from_lock_entry(
             resolved: source.resolved.clone(),
             tag: source.tag.clone(),
             member: source.member.clone(),
+            mcp_local_sources,
         },
     );
     store.save(config)?;

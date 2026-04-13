@@ -500,6 +500,7 @@ mod tests {
             resolved: Some("abc123".to_string()),
             tag: Some("v1.0.0".to_string()),
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let lockfile_entry = LockfileEntry::from_package_entry(&entry);
         assert_eq!(lockfile_entry.version, "1.0.0");
@@ -521,6 +522,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let lockfile_entry = LockfileEntry::from_package_entry(&entry);
         assert_eq!(lockfile_entry.source, "/tmp/pkg");
@@ -541,6 +543,7 @@ mod tests {
             resolved: Some("sha".to_string()),
             tag: None,
             member: Some("mr-review".to_string()),
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let lf = LockfileEntry::from_package_entry(&entry);
         assert_eq!(lf.member.as_deref(), Some("mr-review"));

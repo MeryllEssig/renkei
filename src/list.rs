@@ -170,6 +170,7 @@ mod tests {
             resolved: Some("abcdef1234567890".to_string()),
             tag: Some("v1.0.0".to_string()),
             member: Some("mr-review".to_string()),
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let line = strip_ansi(&format_package_line("@test/pkg", &entry));
         assert!(line.contains("#mr-review"), "got: {line}");
@@ -188,6 +189,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let line = strip_ansi(&format_package_line("@test/pkg", &entry));
         assert!(!line.contains('#'), "got: {line}");
@@ -233,6 +235,7 @@ mod tests {
             },
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         }
     }
 
@@ -413,6 +416,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
         let cache = make_cache(vec![("@test/multi-backend", entry)]);
         let output = format_package_list(&cache, false);

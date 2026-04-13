@@ -67,6 +67,11 @@ pub struct PackageEntry {
     pub tag: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member: Option<String>,
+    /// Per local-MCP source content hash, keyed by MCP name. Persisted
+    /// here so that lockfile replay can detect when a published archive
+    /// no longer matches the originally locked source content.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mcp_local_sources: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -190,6 +195,7 @@ impl InstallCache {
                     resolved: v1_entry.resolved,
                     tag: v1_entry.tag,
                     member: None,
+                    mcp_local_sources: HashMap::new(),
                 },
             );
         }
@@ -319,6 +325,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         }
     }
 
@@ -399,6 +406,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
 
         // all_artifacts flattens across backends
@@ -647,6 +655,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
 
         let mut cache = InstallCache::load(&config).unwrap();
@@ -977,6 +986,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         };
 
         let mut cache = InstallCache::load(&config).unwrap();

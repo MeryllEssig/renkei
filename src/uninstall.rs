@@ -65,6 +65,7 @@ mod tests {
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         }
     }
 

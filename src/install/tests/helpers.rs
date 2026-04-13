@@ -45,6 +45,7 @@ pub fn make_cache_with_artifacts(artifacts: Vec<(ArtifactKind, &str, &str)>) -> 
             resolved: None,
             tag: None,
             member: None,
+            mcp_local_sources: std::collections::HashMap::new(),
         },
     );
     InstallCache {
