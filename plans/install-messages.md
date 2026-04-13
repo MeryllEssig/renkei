@@ -71,10 +71,10 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 
 ## Phase 5: Postinstall display
 
-- [ ] 5.1 Extend `print_post_deploy` in `src/install/mod.rs` to take an optional `postinstall: Option<&str>` and a `package_label: Option<&str>` (used in workspace mode for the `@scope/member:` prefix).
-- [ ] 5.2 Render order: existing `Done.` line → existing `requiredEnv` warnings → postinstall block (yellow/bold framed).
-- [ ] 5.3 In the workspace coordinator, after each member deploy, accumulate postinstalls; print them in order at the end of the batch (one block per member with prefix).
-- [ ] 5.4 TDD: single package without postinstall → unchanged output. With postinstall → block appears after env warnings. Workspace with N postinstalls → N blocks in order, each labeled. Workspace where some members have no postinstall → only the ones with messages render.
+- [x] 5.1 Extend `print_post_deploy` in `src/install/mod.rs` to take an optional `postinstall: Option<&str>` and a `package_label: Option<&str>` (used in workspace mode for the `@scope/member:` prefix). _→ Reads postinstall straight from `raw_manifest.messages.postinstall` and accepts `package_label`. Helper `print_postinstall_block` is reusable for the batch coordinator._
+- [x] 5.2 Render order: existing `Done.` line → existing `requiredEnv` warnings → postinstall block (yellow/bold framed).
+- [ ] 5.3 In the workspace coordinator, after each member deploy, accumulate postinstalls; print them in order at the end of the batch (one block per member with prefix). _→ Deferred to Phase 4 (needs the new coordinator)._
+- [ ] 5.4 TDD: single package without postinstall → unchanged output. With postinstall → block appears after env warnings. Workspace with N postinstalls → N blocks in order, each labeled. Workspace where some members have no postinstall → only the ones with messages render. _→ Single-package paths exercised via Phase 7 integration tests; workspace coverage joins Phase 4._
 
 ## Phase 6: Error variant and exit codes
 

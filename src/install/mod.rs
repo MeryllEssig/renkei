@@ -121,14 +121,16 @@ pub(crate) fn install_local_with_resolver(
         &resolved.manifest.full_name,
         &deployment.all_deployed,
         &resolved.raw_manifest,
+        None,
     );
     Ok(())
 }
 
-fn print_post_deploy(
+pub(crate) fn print_post_deploy(
     full_name: &str,
     deployed: &[crate::backend::DeployedArtifact],
     raw_manifest: &crate::manifest::Manifest,
+    package_label: Option<&str>,
 ) {
     println!(
         "{} Deployed {} artifact(s) for {}",
@@ -145,6 +147,32 @@ fn print_post_deploy(
         if !missing.is_empty() {
             env_check::print_env_warnings(&missing);
         }
+    }
+
+    if let Some(msg) = raw_manifest
+        .messages
+        .as_ref()
+        .and_then(|m| m.postinstall.as_deref())
+    {
+        if !msg.is_empty() {
+            print_postinstall_block(msg, package_label);
+        }
+    }
+}
+
+pub(crate) fn print_postinstall_block(message: &str, package_label: Option<&str>) {
+    println!("{}", "Postinstall notice:".yellow().bold());
+    let prefix = package_label.map(|p| format!("{p}: ")).unwrap_or_default();
+    let mut lines = message.lines();
+    if let Some(first) = lines.next() {
+        if prefix.is_empty() {
+            println!("  {}", first);
+        } else {
+            println!("  {}{}", prefix.bold(), first);
+        }
+    }
+    for line in lines {
+        println!("  {}", line);
     }
 }
 
@@ -207,6 +235,7 @@ pub fn install_from_lock_entry(
         &resolved.manifest.full_name,
         &deployment.all_deployed,
         &resolved.raw_manifest,
+        None,
     );
     Ok(())
 }
