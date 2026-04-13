@@ -16,6 +16,7 @@ pub fn run_uninstall(package: &str, config: &Config) -> Result<()> {
     }
 
     install::cleanup_previous_installation(package, store.cache(), config);
+    install::cleanup_local_mcp_refs(package, store.cache_mut(), config);
 
     store.remove(package);
     store.save(config)?;
@@ -399,5 +400,193 @@ mod tests {
         // No lockfile exists — should succeed silently
         assert!(!config.lockfile_path().exists());
         run_uninstall("@test/pkg", &config).unwrap();
+    }
+
+    // ---- Local MCP GC tests (phase 8) ----
+
+    use crate::install_cache::{McpLocalEntry, McpLocalRef};
+
+    fn setup_local_mcp_cache(
+        config: &Config,
+        package: &str,
+        mcp_name: &str,
+        refs: Vec<McpLocalRef>,
+    ) {
+        let mut cache = InstallCache::load(config).unwrap();
+        cache.upsert_package(
+            package,
+            make_v2_package(vec![], vec![mcp_name.to_string()]),
+        );
+        cache.mcp_local.insert(
+            mcp_name.to_string(),
+            McpLocalEntry {
+                owner_package: package.to_string(),
+                version: "1.0.0".to_string(),
+                source_sha256: "sha-1".to_string(),
+                referenced_by: refs,
+            },
+        );
+        cache.save(config).unwrap();
+    }
+
+    fn write_claude_json_with_mcp(config: &Config, server_name: &str) {
+        let config_path = config
+            .backend(crate::config::BackendId::Claude)
+            .config_path
+            .unwrap();
+        std::fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        let claude_json = serde_json::json!({
+            "mcpServers": {
+                server_name: { "command": "node", "args": ["/foo.js"] }
+            }
+        });
+        std::fs::write(&config_path, serde_json::to_string_pretty(&claude_json).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_uninstall_local_mcp_decrements_ref_only_when_others_remain() {
+        let home = tempdir().unwrap();
+        let config = make_config_global(home.path());
+        let mcp_dir = config.global_mcp_dir().join("my-srv");
+        std::fs::create_dir_all(&mcp_dir).unwrap();
+        std::fs::write(mcp_dir.join("dist.js"), "module.exports=1;").unwrap();
+
+        write_claude_json_with_mcp(&config, "my-srv");
+        setup_local_mcp_cache(
+            &config,
+            "@acme/pkg",
+            "my-srv",
+            vec![
+                McpLocalRef {
+                    package: "@acme/pkg".to_string(),
+                    version: "1.0.0".to_string(),
+                    scope: "global".to_string(),
+                    project_root: None,
+                },
+                McpLocalRef {
+                    package: "@acme/pkg".to_string(),
+                    version: "1.0.0".to_string(),
+                    scope: "project".to_string(),
+                    project_root: Some("/other/project".to_string()),
+                },
+            ],
+        );
+
+        run_uninstall("@acme/pkg", &config).unwrap();
+
+        // Folder still there (other ref remains)
+        assert!(mcp_dir.exists());
+        // Backend config still has my-srv
+        let claude_json_path = config
+            .backend(crate::config::BackendId::Claude)
+            .config_path
+            .unwrap();
+        let content = std::fs::read_to_string(&claude_json_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed["mcpServers"].get("my-srv").is_some());
+
+        // Cache: mcp_local still has entry with 1 ref
+        let loaded = InstallCache::load(&config).unwrap();
+        let entry = loaded.mcp_local.get("my-srv").expect("entry kept");
+        assert_eq!(entry.referenced_by.len(), 1);
+        assert_eq!(entry.referenced_by[0].project_root.as_deref(), Some("/other/project"));
+    }
+
+    #[test]
+    fn test_uninstall_last_local_mcp_ref_removes_folder_and_config() {
+        let home = tempdir().unwrap();
+        let config = make_config_global(home.path());
+        let mcp_dir = config.global_mcp_dir().join("my-srv");
+        std::fs::create_dir_all(&mcp_dir).unwrap();
+        std::fs::write(mcp_dir.join("dist.js"), "x").unwrap();
+
+        write_claude_json_with_mcp(&config, "my-srv");
+        setup_local_mcp_cache(
+            &config,
+            "@acme/pkg",
+            "my-srv",
+            vec![McpLocalRef {
+                package: "@acme/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                scope: "global".to_string(),
+                project_root: None,
+            }],
+        );
+
+        run_uninstall("@acme/pkg", &config).unwrap();
+
+        assert!(!mcp_dir.exists(), "folder GC'd");
+        let claude_json_path = config
+            .backend(crate::config::BackendId::Claude)
+            .config_path
+            .unwrap();
+        let content = std::fs::read_to_string(&claude_json_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("mcpServers").is_none(), "backend entry cleaned");
+
+        let loaded = InstallCache::load(&config).unwrap();
+        assert!(!loaded.mcp_local.contains_key("my-srv"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_uninstall_linked_local_mcp_removes_symlink_only() {
+        use std::os::unix::fs::symlink;
+
+        let home = tempdir().unwrap();
+        let config = make_config_global(home.path());
+
+        // "Workspace" source folder — must survive uninstall.
+        let workspace = home.path().join("workspace").join("mcp").join("my-srv");
+        std::fs::create_dir_all(&workspace).unwrap();
+        let marker = workspace.join("marker.txt");
+        std::fs::write(&marker, "keep-me").unwrap();
+
+        let link_target = config.global_mcp_dir().join("my-srv");
+        std::fs::create_dir_all(link_target.parent().unwrap()).unwrap();
+        symlink(&workspace, &link_target).unwrap();
+
+        write_claude_json_with_mcp(&config, "my-srv");
+        setup_local_mcp_cache(
+            &config,
+            "@acme/pkg",
+            "my-srv",
+            vec![McpLocalRef {
+                package: "@acme/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                scope: "global".to_string(),
+                project_root: None,
+            }],
+        );
+
+        run_uninstall("@acme/pkg", &config).unwrap();
+
+        // Symlink removed, workspace source intact.
+        assert!(!link_target.exists());
+        assert!(!link_target.is_symlink());
+        assert!(marker.exists(), "workspace source must not be touched");
+    }
+
+    #[test]
+    fn test_uninstall_tolerates_missing_mcp_folder() {
+        let home = tempdir().unwrap();
+        let config = make_config_global(home.path());
+        // No folder on disk, but cache has the entry.
+        setup_local_mcp_cache(
+            &config,
+            "@acme/pkg",
+            "my-srv",
+            vec![McpLocalRef {
+                package: "@acme/pkg".to_string(),
+                version: "1.0.0".to_string(),
+                scope: "global".to_string(),
+                project_root: None,
+            }],
+        );
+
+        run_uninstall("@acme/pkg", &config).unwrap();
+
+        let loaded = InstallCache::load(&config).unwrap();
+        assert!(!loaded.mcp_local.contains_key("my-srv"));
     }
 }

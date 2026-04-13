@@ -8,7 +8,7 @@ pub(crate) mod pipeline;
 mod resolve;
 mod types;
 
-pub(crate) use cleanup::cleanup_previous_installation;
+pub(crate) use cleanup::{cleanup_local_mcp_refs, cleanup_previous_installation};
 pub use types::{ConflictResolver, InstallOptions, SourceInfo, SourceKind};
 
 use std::path::Path;
