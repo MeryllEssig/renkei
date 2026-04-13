@@ -34,6 +34,14 @@ pub fn validate_scope(manifest_scope: &ManifestScope, requested: RequestedScope)
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct Messages {
+    #[serde(default)]
+    pub preinstall: Option<String>,
+    #[serde(default)]
+    pub postinstall: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
     pub name: String,
     pub version: String,
@@ -50,7 +58,11 @@ pub struct Manifest {
     pub mcp: Option<serde_json::Value>,
     #[serde(rename = "requiredEnv", default)]
     pub required_env: Option<serde_json::Value>,
+    #[serde(default)]
+    pub messages: Option<Messages>,
 }
+
+pub const MESSAGE_MAX_LEN: usize = 2000;
 
 #[derive(Debug, Clone)]
 pub struct ValidatedManifest {
@@ -95,6 +107,21 @@ impl Manifest {
             return Err(RenkeiError::InvalidManifest(
                 "backends must contain at least one entry".into(),
             ));
+        }
+
+        if let Some(messages) = &self.messages {
+            for (field, value) in [
+                ("messages.preinstall", &messages.preinstall),
+                ("messages.postinstall", &messages.postinstall),
+            ] {
+                if let Some(text) = value {
+                    if text.chars().count() > MESSAGE_MAX_LEN {
+                        return Err(RenkeiError::InvalidManifest(format!(
+                            "{field} exceeds {MESSAGE_MAX_LEN} character limit"
+                        )));
+                    }
+                }
+            }
         }
 
         Ok(ValidatedManifest {
@@ -325,6 +352,76 @@ mod tests {
     fn test_validate_scope_project_with_global_fails() {
         let err = validate_scope(&ManifestScope::Project, RequestedScope::Global).unwrap_err();
         assert!(err.to_string().contains("project-only"));
+    }
+
+    #[test]
+    fn test_messages_absent_parses_as_none() {
+        let m: Manifest = serde_json::from_str(valid_json()).unwrap();
+        assert!(m.messages.is_none());
+    }
+
+    #[test]
+    fn test_messages_with_both_fields_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{"preinstall":"pre","postinstall":"post"}}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        let msgs = m.messages.as_ref().unwrap();
+        assert_eq!(msgs.preinstall.as_deref(), Some("pre"));
+        assert_eq!(msgs.postinstall.as_deref(), Some("post"));
+        m.validate().unwrap();
+    }
+
+    #[test]
+    fn test_messages_with_only_preinstall_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{"preinstall":"pre"}}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        let msgs = m.messages.as_ref().unwrap();
+        assert_eq!(msgs.preinstall.as_deref(), Some("pre"));
+        assert!(msgs.postinstall.is_none());
+    }
+
+    #[test]
+    fn test_messages_with_only_postinstall_parses() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{"postinstall":"post"}}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        let msgs = m.messages.as_ref().unwrap();
+        assert!(msgs.preinstall.is_none());
+        assert_eq!(msgs.postinstall.as_deref(), Some("post"));
+    }
+
+    #[test]
+    fn test_messages_preinstall_exceeding_limit_fails_validation() {
+        let big = "x".repeat(MESSAGE_MAX_LEN + 1);
+        let json = format!(
+            r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{{"preinstall":{}}}}}"#,
+            serde_json::to_string(&big).unwrap()
+        );
+        let m: Manifest = serde_json::from_str(&json).unwrap();
+        let err = m.validate().unwrap_err();
+        assert!(err.to_string().contains("messages.preinstall"));
+        assert!(err.to_string().contains("2000"));
+    }
+
+    #[test]
+    fn test_messages_postinstall_exceeding_limit_fails_validation() {
+        let big = "y".repeat(MESSAGE_MAX_LEN + 1);
+        let json = format!(
+            r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{{"postinstall":{}}}}}"#,
+            serde_json::to_string(&big).unwrap()
+        );
+        let m: Manifest = serde_json::from_str(&json).unwrap();
+        let err = m.validate().unwrap_err();
+        assert!(err.to_string().contains("messages.postinstall"));
+    }
+
+    #[test]
+    fn test_messages_at_exact_limit_passes_validation() {
+        let exact = "z".repeat(MESSAGE_MAX_LEN);
+        let json = format!(
+            r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"messages":{{"preinstall":{}}}}}"#,
+            serde_json::to_string(&exact).unwrap()
+        );
+        let m: Manifest = serde_json::from_str(&json).unwrap();
+        m.validate().unwrap();
     }
 
     #[test]
