@@ -291,7 +291,7 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 12: Documentation / PRD
 
-- [ ] 12.1 New thematic file `doc/prd/mcp.md`:
+- [x] 12.1 New thematic file `doc/prd/mcp.md`:
   - Convention `mcp/<name>/`, manifest fields `entrypoint`/`build`.
   - Scope decoupling: MCP sources always global; package scope independent.
   - Install flow (preinstall prompt → build prompt → copy → build → swap → merge → postinstall).
@@ -301,15 +301,15 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
   - `--link` semantics.
   - Doctor checks.
   - Packaging exclusions + `.rkignore`.
-- [ ] 12.2 Update `PRD.md` index: add a line under the existing entries pointing to `doc/prd/mcp.md` (with the one-sentence summary style used by neighbours).
-- [ ] 12.3 Update `doc/prd/manifest.md`: extend the `mcp.<name>` description with `entrypoint` and `build`; cross-link to `mcp.md`. Replace the current "native `command`/`args`/`env` format (already portable across backends)" paragraph to mention local MCPs.
-- [ ] 12.4 Update `doc/prd/installation.md`: add a "Local MCP builds" section under the existing "Environment variables" / "Preinstall confirmation" neighbourhood, covering the build prompt, `--allow-build`, and the atomic swap + rollback guarantee.
-- [ ] 12.5 Update `doc/prd/scope.md`: document the MCP scope exception (always global, regardless of package scope).
-- [ ] 12.6 Update `doc/prd/storage.md`: add `~/.renkei/mcp/<name>/` to the directory layout; document `install-cache` v3 `mcp_local` section.
-- [ ] 12.7 Update `doc/prd/commands.md` if a flag list exists there (fall back to `README.md` otherwise): add `--allow-build`. Add the new `rk doctor` checks to the diagnostics list.
-- [ ] 12.8 Update `doc/prd/user-stories.md`: add stories for shipping a local MCP (author), installing a workflow with a bundled MCP (user), and the build-consent UX.
-- [ ] 12.9 Update `README.md`: a `renkei.json` example with `entrypoint` + `build`, a one-line note about `--allow-build`, and a short paragraph explaining that MCP sources always deploy globally.
-- [ ] 12.10 Update `BACKENDS.md` if it discusses MCP registration: clarify that absolute paths in `args` come from local MCPs.
+- [x] 12.2 Update `PRD.md` index: add a line under the existing entries pointing to `doc/prd/mcp.md` (with the one-sentence summary style used by neighbours).
+- [x] 12.3 Update `doc/prd/manifest.md`: extend the `mcp.<name>` description with `entrypoint` and `build`; cross-link to `mcp.md`. Replace the current "native `command`/`args`/`env` format (already portable across backends)" paragraph to mention local MCPs.
+- [x] 12.4 Update `doc/prd/installation.md`: add a "Local MCP builds" section under the existing "Environment variables" / "Preinstall confirmation" neighbourhood, covering the build prompt, `--allow-build`, and the atomic swap + rollback guarantee.
+- [x] 12.5 Update `doc/prd/scope.md`: document the MCP scope exception (always global, regardless of package scope).
+- [x] 12.6 Update `doc/prd/storage.md`: add `~/.renkei/mcp/<name>/` to the directory layout; document `install-cache` v3 `mcp_local` section.
+- [x] 12.7 Update `doc/prd/commands.md` if a flag list exists there (fall back to `README.md` otherwise): add `--allow-build`. Add the new `rk doctor` checks to the diagnostics list.
+- [x] 12.8 Update `doc/prd/user-stories.md`: add stories for shipping a local MCP (author), installing a workflow with a bundled MCP (user), and the build-consent UX.
+- [x] 12.9 Update `README.md`: a `renkei.json` example with `entrypoint` + `build`, a one-line note about `--allow-build`, and a short paragraph explaining that MCP sources always deploy globally.
+- [x] 12.10 Update `BACKENDS.md` if it discusses MCP registration: clarify that absolute paths in `args` come from local MCPs.
 
 ## Phase 13: Update Skill
 
