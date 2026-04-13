@@ -1,0 +1,15 @@
+{
+  "name": "@test/local-mcp",
+  "version": "2.0.0",
+  "description": "Package shipping a local MCP server (v2)",
+  "author": "tester",
+  "license": "MIT",
+  "backends": ["claude"],
+  "mcp": {
+    "my-server": {
+      "command": "node",
+      "entrypoint": "dist/index.js",
+      "build": [["true"]]
+    }
+  }
+}
