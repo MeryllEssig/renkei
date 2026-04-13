@@ -167,11 +167,11 @@ impl Manifest {
     #[allow(dead_code)]
     pub fn validate_local_mcp(&self, package_root: &Path) -> Result<()> {
         let mcp_root = package_root.join("mcp");
-        let declared: HashMap<String, &McpServer> = self
-            .mcp
-            .as_ref()
-            .map(|m| m.iter().map(|(k, v)| (k.clone(), v)).collect())
-            .unwrap_or_default();
+        let declared: HashMap<String, &McpServer> = match &self.mcp {
+            Some(m) => m.iter().map(|(k, v)| (k.clone(), v)).collect(),
+            None if !mcp_root.exists() => return Ok(()),
+            None => HashMap::new(),
+        };
 
         for (name, server) in &declared {
             if let Some(build) = &server.build {
