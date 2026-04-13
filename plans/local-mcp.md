@@ -268,6 +268,7 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 ## Phase 10: `rk package` exclusions + `.rkignore`
 
 - [ ] 10.1 Refactor `src/package.rs` archive builder to delegate to `rkignore::is_ignored` for each candidate file.
+- [ ] 10.1b Also refactor `src/cache.rs::create_archive` (currently appends `mcp/` raw via `tar::Builder::append_dir_all`) to apply rkignore so `node_modules/` etc. inside `mcp/<name>/` are excluded from the install archive too. Phase 5 wired the `mcp/` tree into the archive minimally; this completes the filter pass.
 - [ ] 10.2 If `.rkignore` exists at the package root, read and apply.
 - [ ] 10.3 Default exclusions always apply, even without `.rkignore`.
 - [ ] 10.4 TDD:
