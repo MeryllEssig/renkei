@@ -21,6 +21,7 @@ mod mcp;
 mod migrate;
 mod package;
 mod package_store;
+mod rkignore;
 mod self_update;
 mod source;
 mod uninstall;

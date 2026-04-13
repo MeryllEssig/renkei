@@ -110,8 +110,8 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 2: Install-cache v3 — `mcp_local` reference counting
 
-- [x] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
-- [x] 2.2 Add types:
+- [ ] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
+- [ ] 2.2 Add types:
   ```rust
   pub struct McpLocalEntry {
       pub owner_package: String,
@@ -126,11 +126,11 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
       pub project_root: Option<String>,  // None for global installs
   }
   ```
-- [x] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
-- [x] 2.4 Helpers on `InstallCache`:
+- [ ] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
+- [ ] 2.4 Helpers on `InstallCache`:
   - `add_mcp_local_ref(name, entry_ctor, new_ref) -> McpLocalOutcome` where the outcome is one of `{ FreshInstall, AddedRef, UpgradeRequired, ConflictDifferentOwner }`.
   - `remove_mcp_local_ref(name, match: McpLocalRef) -> Vec<String>` returning names to GC (empty-refs) for caller-driven cleanup.
-- [x] 2.5 TDD in `src/install_cache.rs`:
+- [ ] 2.5 TDD in `src/install_cache.rs`:
   - v2 cache migrates to v3 with empty `mcp_local`.
   - Fresh install → `FreshInstall`.
   - Second install of same `owner_package`, same version, new project → `AddedRef`, refs length == 2.
@@ -140,14 +140,14 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 3: Rkignore + source hashing
 
-- [ ] 3.1 New module `src/rkignore.rs`:
+- [x] 3.1 New module `src/rkignore.rs`:
   - `DEFAULT_IGNORES: &[&str]` (hardcoded list from the design summary).
   - `pub fn load_rkignore(root: &Path) -> Vec<String>` — reads `<root>/.rkignore` if present, appends to defaults.
   - `pub fn is_ignored(relative_path: &Path, patterns: &[String]) -> bool` — implement via the `ignore` crate (already transitive via `globset`?) or fall back to a minimal gitignore-like matcher if adding a dep is undesirable. **Decision to record:** prefer the `ignore` crate unless Cargo.toml review shows it's not present and a tiny in-house matcher is enough.
-- [ ] 3.2 `pub fn hash_directory(root: &Path, patterns: &[String]) -> Result<String>`:
+- [x] 3.2 `pub fn hash_directory(root: &Path, patterns: &[String]) -> Result<String>`:
   - Walk `root` deterministically (sorted), skip ignored paths, hash `(relative_path_bytes, file_mode, file_contents)` into a `Sha256`, return hex.
   - Reused by packaging (Phase 7) and install-time hashing (Phase 4/5).
-- [ ] 3.3 TDD:
+- [x] 3.3 TDD:
   - Default ignores exclude `node_modules/`, `.DS_Store`, etc.
   - `.rkignore` additions merge with defaults.
   - Hash is stable across platforms (normalize path separators).
@@ -309,3 +309,7 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 - [ ] 12.8 Update `doc/prd/user-stories.md`: add stories for shipping a local MCP (author), installing a workflow with a bundled MCP (user), and the build-consent UX.
 - [ ] 12.9 Update `README.md`: a `renkei.json` example with `entrypoint` + `build`, a one-line note about `--allow-build`, and a short paragraph explaining that MCP sources always deploy globally.
 - [ ] 12.10 Update `BACKENDS.md` if it discusses MCP registration: clarify that absolute paths in `args` come from local MCPs.
+
+## Phase 13: Update Skill
+
+- [ ] 13.1 Update Skill in skills/renkei/ in accordance with the changes
