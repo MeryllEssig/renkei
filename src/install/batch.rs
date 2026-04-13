@@ -34,6 +34,17 @@ pub(crate) enum BatchDecision {
     Declined,
 }
 
+impl BatchDecision {
+    /// `Some(allow_build)` when the batch should proceed, `None` when the
+    /// user declined (caller should exit 0 with no side effects).
+    pub(crate) fn proceed(self) -> Option<bool> {
+        match self {
+            BatchDecision::Proceed { allow_build } => Some(allow_build),
+            BatchDecision::Declined => None,
+        }
+    }
+}
+
 /// Render the consolidated preinstall block (if any) and prompt the user.
 ///
 /// - `Ok(Proceed { allow_build })` → proceed with installs; `allow_build`

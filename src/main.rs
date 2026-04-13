@@ -83,14 +83,10 @@ fn install_or_workspace(
             let raw = manifest::Manifest::from_path(package_dir)?;
             raw.validate()?;
             let link_mode = options.source_kind == install::SourceKind::LocalLink;
-            let effective_allow_build = match install::batch::confirm_batch(
-                &[&raw],
-                yes,
-                allow_build,
-                link_mode,
-            )? {
-                install::batch::BatchDecision::Declined => return Ok(()),
-                install::batch::BatchDecision::Proceed { allow_build } => allow_build,
+            let Some(effective_allow_build) =
+                install::batch::confirm_batch(&[&raw], yes, allow_build, link_mode)?.proceed()
+            else {
+                return Ok(());
             };
             install::install_local(
                 package_dir,
