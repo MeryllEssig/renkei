@@ -33,6 +33,16 @@ pub struct LockfileEntry {
     pub integrity: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member: Option<String>,
+    /// Per local-MCP source content hash, mirroring
+    /// `PackageEntry.mcp_local_sources`. Lockfile replay reads this back
+    /// to detect when a published archive's MCP sources no longer match
+    /// what was locked at install time.
+    #[serde(
+        default,
+        rename = "mcpLocalSources",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
+    pub mcp_local_sources: HashMap<String, String>,
 }
 
 impl Lockfile {
@@ -89,6 +99,7 @@ impl LockfileEntry {
             resolved: entry.resolved.clone(),
             integrity: format!("{INTEGRITY_PREFIX}{}", entry.integrity),
             member: entry.member.clone(),
+            mcp_local_sources: entry.mcp_local_sources.clone(),
         }
     }
 }
@@ -211,7 +222,7 @@ struct PreparedEntry {
 
 fn prepare_entry(config: &Config, name: &str, entry: &LockfileEntry) -> Result<PreparedEntry> {
     let archive = archive_path_for_entry(config, name, entry)?;
-    match cache::compute_sha256(&archive) {
+    let prepared = match cache::compute_sha256(&archive) {
         Ok(actual_hash) => {
             let expected_hash = strip_integrity_prefix(&entry.integrity);
             if actual_hash != expected_hash {
@@ -230,15 +241,55 @@ fn prepare_entry(config: &Config, name: &str, entry: &LockfileEntry) -> Result<P
             let manifest = Manifest::from_path(&install_root)?;
             manifest.validate()?;
             let source = build_source_info(entry);
-            Ok(PreparedEntry {
+            PreparedEntry {
                 install_root,
                 source,
                 manifest,
                 _owned_tmp: Some(tmp),
-            })
+            }
         }
-        Err(_) => prepare_from_source(entry),
+        Err(_) => prepare_from_source(entry)?,
+    };
+    verify_mcp_local_drift(name, &prepared.install_root, &prepared.manifest, entry)?;
+    Ok(prepared)
+}
+
+/// Compare the on-disk hash of every local MCP source folder against
+/// the hash recorded in the lockfile entry. Mismatch → `LockfileDrift`,
+/// raised before any build runs so `--allow-build` consent is not
+/// consumed for an archive that no longer matches what was locked.
+fn verify_mcp_local_drift(
+    name: &str,
+    install_root: &Path,
+    manifest: &Manifest,
+    entry: &LockfileEntry,
+) -> Result<()> {
+    let Some(ref mcps) = manifest.mcp else {
+        return Ok(());
+    };
+    let patterns = crate::rkignore::load_mcp_ignores(install_root);
+    for (mcp_name, server) in mcps {
+        if !server.is_local() {
+            continue;
+        }
+        let mcp_dir = install_root.join("mcp").join(mcp_name);
+        if !mcp_dir.exists() {
+            continue; // manifest validation will surface this elsewhere
+        }
+        let actual = crate::rkignore::hash_with_patterns(&mcp_dir, &patterns)?;
+        match entry.mcp_local_sources.get(mcp_name) {
+            Some(expected) if expected != &actual => {
+                return Err(RenkeiError::LockfileDrift {
+                    package: name.to_string(),
+                    mcp_name: mcp_name.clone(),
+                    expected: expected.clone(),
+                    actual,
+                });
+            }
+            _ => {}
+        }
     }
+    Ok(())
 }
 
 fn prepare_from_source(entry: &LockfileEntry) -> Result<PreparedEntry> {
@@ -333,6 +384,7 @@ mod tests {
                 resolved: Some("abc123".to_string()),
                 integrity: "sha256-deadbeef".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
 
@@ -385,6 +437,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         lockfile.save(&path).unwrap();
@@ -410,6 +463,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-a".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         assert_eq!(lockfile.packages.len(), 1);
@@ -430,6 +484,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-a".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         lockfile.upsert(
@@ -441,6 +496,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-b".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         assert_eq!(lockfile.packages.len(), 1);
@@ -462,6 +518,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-a".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         lockfile.remove("@test/a");
@@ -564,6 +621,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         let json = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -585,6 +643,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
                 member: Some("mr-review".to_string()),
+                mcp_local_sources: HashMap::new(),
             },
         );
         let json = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -608,6 +667,7 @@ mod tests {
                 resolved: Some("sha".to_string()),
                 integrity: "sha256-abc".to_string(),
                 member: Some("auto-test".to_string()),
+                mcp_local_sources: HashMap::new(),
             },
         );
         lockfile.save(&path).unwrap();
@@ -649,6 +709,7 @@ mod tests {
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
                 member: None,
+                mcp_local_sources: HashMap::new(),
             },
         );
         let json = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -678,6 +739,118 @@ mod tests {
         )
         .unwrap();
         pkg
+    }
+
+    fn make_local_mcp_package(name: &str, mcp_name: &str) -> tempfile::TempDir {
+        let pkg = tempdir().unwrap();
+        fs::write(
+            pkg.path().join("renkei.json"),
+            format!(
+                r#"{{
+                    "name":"{name}","version":"1.0.0","description":"t","author":"t","license":"MIT",
+                    "backends":["claude"],
+                    "mcp":{{
+                        "{mcp_name}":{{
+                            "command":"node",
+                            "entrypoint":"dist/index.js"
+                        }}
+                    }}
+                }}"#
+            ),
+        )
+        .unwrap();
+        // A skill so the package has at least one artifact.
+        let skill_dir = pkg.path().join("skills").join("noop");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: noop\ndescription: test\n---\nbody",
+        )
+        .unwrap();
+        // The MCP source with a prebuilt entrypoint (no build step).
+        let dist = pkg.path().join("mcp").join(mcp_name).join("dist");
+        fs::create_dir_all(&dist).unwrap();
+        fs::write(dist.join("index.js"), "console.log('v1')").unwrap();
+        pkg
+    }
+
+    #[test]
+    fn test_install_from_lockfile_drift_detected() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let pkg = make_local_mcp_package("@test/with-mcp", "srv");
+        let opts = install::InstallOptions::local(pkg.path().to_string_lossy().to_string());
+        install::install_local(
+            pkg.path(),
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &opts,
+            false,
+        )
+        .unwrap();
+
+        // Tamper: replace the locked MCP hash with a wrong value while
+        // keeping the archive itself intact. The replay should now flag
+        // drift before any install side effects.
+        let lockfile_path = config.lockfile_path();
+        let mut lockfile = Lockfile::load(&lockfile_path).unwrap();
+        let entry = lockfile.packages.get_mut("@test/with-mcp").unwrap();
+        entry.mcp_local_sources.insert(
+            "srv".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        );
+        lockfile.save(&lockfile_path).unwrap();
+
+        let result = install_from_lockfile(
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            true,
+            false,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            crate::error::RenkeiError::LockfileDrift {
+                ref package,
+                ref mcp_name,
+                ..
+            } => {
+                assert_eq!(package, "@test/with-mcp");
+                assert_eq!(mcp_name, "srv");
+            }
+            other => panic!("expected LockfileDrift, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_install_from_lockfile_records_mcp_sources() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let pkg = make_local_mcp_package("@test/sources", "srv");
+        let opts = install::InstallOptions::local(pkg.path().to_string_lossy().to_string());
+        install::install_local(
+            pkg.path(),
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &opts,
+            false,
+        )
+        .unwrap();
+
+        let lockfile = Lockfile::load(&config.lockfile_path()).unwrap();
+        let entry = &lockfile.packages["@test/sources"];
+        assert!(
+            entry.mcp_local_sources.contains_key("srv"),
+            "mcp_local_sources must be persisted in the lockfile"
+        );
+        let hash = &entry.mcp_local_sources["srv"];
+        assert_eq!(hash.len(), 64, "expected hex sha256, got {hash}");
     }
 
     #[test]
@@ -841,6 +1014,7 @@ mod tests {
             resolved: None,
             integrity: "sha256-abc".to_string(),
             member: None,
+            mcp_local_sources: HashMap::new(),
         };
         let path = archive_path_for_entry(&config, "@test/pkg", &entry).unwrap();
         assert_eq!(

@@ -46,7 +46,7 @@ pub fn create_archive(
 
     tar_builder.append_path_with_name(package_dir.join("renkei.json"), "renkei.json")?;
 
-    for dir_name in &["skills", "hooks", "agents", "scripts"] {
+    for dir_name in &["skills", "hooks", "agents", "scripts", "mcp"] {
         let dir = package_dir.join(dir_name);
         if dir.is_dir() {
             tar_builder.append_dir_all(*dir_name, &dir)?;

@@ -120,6 +120,16 @@ pub enum RenkeiError {
     )]
     McpEntrypointMissing { name: String, entrypoint: String },
 
+    #[error(
+        "Lockfile drift for '{package}': local MCP '{mcp_name}' source hash changed (expected {expected}, got {actual}).\nThe published archive no longer matches the locked source content."
+    )]
+    LockfileDrift {
+        package: String,
+        mcp_name: String,
+        expected: String,
+        actual: String,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
