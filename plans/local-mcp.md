@@ -155,18 +155,18 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 4: Build execution (env filter, argv runner, streaming)
 
-- [ ] 4.1 New module `src/install/build.rs`:
+- [x] 4.1 New module `src/install/build.rs`:
   - `pub fn build_env() -> HashMap<String, String>` — apply the whitelist + prefixes + exclude list described above. Log filtered-out variables at debug level only.
   - `pub struct BuildStep { pub argv: Vec<String> }`.
   - `pub fn run_build(steps: &[BuildStep], cwd: &Path) -> Result<()>` — executes sequentially, `Command::new(argv[0]).args(&argv[1..]).current_dir(cwd).env_clear().envs(build_env())`, stdout/stderr inherited (streams live). On non-zero exit: stop, return `RenkeiError::BuildFailed { step: argv.join(" "), exit_code }`.
-- [ ] 4.2 Error variant `RenkeiError::BuildFailed { step, exit_code }` in `src/error.rs`. Message includes the failed argv string and the exit code; no stdout capture (user already saw it live).
-- [ ] 4.3 TDD — integration-style tests with real processes (gated to Unix for simplicity; `sh` / `echo` / `false` present):
+- [x] 4.2 Error variant `RenkeiError::BuildFailed { step, exit_code }` in `src/error.rs`. Message includes the failed argv string and the exit code; no stdout capture (user already saw it live).
+- [x] 4.3 TDD — integration-style tests with real processes (gated to Unix for simplicity; `sh` / `echo` / `false` present):
   - Single `["true"]` step → Ok.
   - `["false"]` → `BuildFailed` with exit code 1.
   - Multi-step, second fails → first ran, error carries second step's argv.
   - Env filter: run `["env"]`, capture output via a variant helper that swaps stdio → assert `HOME`, `PATH` present, `AWS_SECRET_ACCESS_KEY` absent, `npm_config_foo` preserved.
   - cwd respected: `["pwd"]` matches the passed path.
-- [ ] 4.4 Non-Unix fallback: guard the process-based tests with `#[cfg(unix)]`; document that Windows support of `run_build` is out of scope for v1.
+- [x] 4.4 Non-Unix fallback: guard the process-based tests with `#[cfg(unix)]`; document that Windows support of `run_build` is out of scope for v1.
 
 ## Phase 5: CLI flag, build prompt, deploy orchestration
 

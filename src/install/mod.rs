@@ -1,4 +1,5 @@
 pub(crate) mod batch;
+pub(crate) mod build;
 mod cleanup;
 mod deploy;
 pub(crate) mod messages;

@@ -95,6 +95,12 @@ pub enum RenkeiError {
     )]
     PreinstallRequiresConfirmation,
 
+    #[error("Build step failed: `{step}` exited with code {exit_code:?}")]
+    BuildFailed {
+        step: String,
+        exit_code: Option<i32>,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
