@@ -92,6 +92,7 @@ pub fn install_workspace(
             requested_scope,
             &member_options,
             &*resolver,
+            allow_build,
         )?;
         if let Some(msg) = post {
             postinstalls.push((manifest.name.clone(), msg));

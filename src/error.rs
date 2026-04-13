@@ -106,6 +106,20 @@ pub enum RenkeiError {
         exit_code: Option<i32>,
     },
 
+    #[error(
+        "Local MCP '{name}' is already owned by package '{current_owner}'; '{attempted_by}' cannot install over it.\nUse --force to transfer ownership."
+    )]
+    McpOwnerConflict {
+        name: String,
+        current_owner: String,
+        attempted_by: String,
+    },
+
+    #[error(
+        "Local MCP '{name}': cannot resolve entrypoint at {entrypoint}. Did the build run?"
+    )]
+    McpEntrypointMissing { name: String, entrypoint: String },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

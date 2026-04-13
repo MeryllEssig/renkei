@@ -185,6 +185,7 @@ pub fn install_from_lockfile(
             backends,
             requested_scope,
             &prep.source,
+            allow_build,
         )?;
         if let Some(msg) = post {
             postinstalls.push((prep.manifest.name.clone(), msg));
@@ -691,6 +692,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
+            false,
         )
         .unwrap();
 
@@ -726,6 +728,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
+            false,
         )
         .unwrap();
 
@@ -808,6 +811,7 @@ mod tests {
             &[&ClaudeBackend as &dyn Backend],
             RequestedScope::Global,
             &opts,
+            false,
         )
         .unwrap();
 

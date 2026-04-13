@@ -2,6 +2,7 @@ pub(crate) mod batch;
 pub(crate) mod build;
 mod cleanup;
 mod deploy;
+pub(crate) mod mcp_local;
 pub(crate) mod messages;
 pub(crate) mod pipeline;
 mod resolve;
@@ -45,6 +46,7 @@ pub fn install_local(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &InstallOptions,
+    allow_build: bool,
 ) -> Result<()> {
     let raw_manifest = Manifest::from_path(package_dir)?;
     let validated = raw_manifest.validate()?;
@@ -56,6 +58,7 @@ pub fn install_local(
         requested_scope,
         options,
         &*resolver,
+        allow_build,
     )?;
     if let Some(msg) = postinstall {
         print_postinstall_block(&msg, None);
@@ -76,6 +79,7 @@ pub(crate) fn install_local_with_resolver(
     requested_scope: RequestedScope,
     options: &InstallOptions,
     conflict_resolver: &ConflictResolver,
+    allow_build: bool,
 ) -> Result<Option<String>> {
     let pipeline = CorePipeline::discover(package_dir, backends, options.force)?;
     manifest::validate_scope(&pipeline.manifest.install_scope, requested_scope)?;
@@ -93,7 +97,29 @@ pub(crate) fn install_local_with_resolver(
     let (archive_path, integrity) =
         cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?;
 
-    let deployment = resolved.deploy(config)?;
+    let scope_label = if config.is_project() { "project" } else { "global" };
+    let project_root = config.project_root.as_deref();
+    let (staged, mcp_json) = mcp_local::stage_local_mcps(
+        &resolved.raw_manifest,
+        &resolved.package_dir,
+        &store,
+        config,
+        scope_label,
+        project_root,
+        options.force,
+        false, // link_mode — Phase 7
+        allow_build,
+    )?;
+
+    let deployment = match resolved.deploy(config, mcp_json.as_ref()) {
+        Ok(d) => d,
+        Err(e) => {
+            mcp_local::rollback_staging(&staged);
+            return Err(e);
+        }
+    };
+
+    mcp_local::commit_local_mcps(staged, &mut store)?;
 
     store.record_install(
         &resolved.manifest.full_name,
@@ -180,6 +206,7 @@ pub fn install_from_lock_entry(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     source: &SourceInfo,
+    allow_build: bool,
 ) -> Result<Option<String>> {
     let force_resolver: Box<ConflictResolver> = Box::new(|_: &Conflict| Ok(None));
 
@@ -205,7 +232,29 @@ pub fn install_from_lock_entry(
     );
     let integrity = cache::compute_sha256(&archive_path).unwrap_or_default();
 
-    let deployment = resolved.deploy(config)?;
+    let scope_label = if config.is_project() { "project" } else { "global" };
+    let project_root = config.project_root.as_deref();
+    let (staged, mcp_json) = mcp_local::stage_local_mcps(
+        &resolved.raw_manifest,
+        &resolved.package_dir,
+        &store,
+        config,
+        scope_label,
+        project_root,
+        true, // lockfile replay always force-overwrites
+        false,
+        allow_build,
+    )?;
+
+    let deployment = match resolved.deploy(config, mcp_json.as_ref()) {
+        Ok(d) => d,
+        Err(e) => {
+            mcp_local::rollback_staging(&staged);
+            return Err(e);
+        }
+    };
+
+    mcp_local::commit_local_mcps(staged, &mut store)?;
 
     store.record_install_from_lockfile(
         &resolved.manifest.full_name,

@@ -85,7 +85,14 @@ fn install_or_workspace(
             if !install::batch::confirm_batch(&[&raw], yes, allow_build)? {
                 return Ok(());
             }
-            install::install_local(package_dir, config, backends, requested_scope, options)
+            install::install_local(
+                package_dir,
+                config,
+                backends,
+                requested_scope,
+                options,
+                allow_build,
+            )
         }
     }
 }

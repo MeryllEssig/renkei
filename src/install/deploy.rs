@@ -5,7 +5,6 @@ use crate::backend::{Backend, DeployedArtifact};
 use crate::config::Config;
 use crate::error::Result;
 use crate::install_cache::{BackendDeployment, DeployedArtifactEntry};
-use crate::manifest::Manifest;
 
 use super::cleanup;
 
@@ -28,10 +27,16 @@ fn is_mcp_unsupported(backend_name: &str) -> bool {
 }
 
 /// Deploy artifacts + MCP to all active backends, with dedup and rollback on failure.
+///
+/// `mcp_json` is the already-resolved MCP server map that goes straight
+/// into each backend's `register_mcp`. Callers (notably the local-MCP
+/// pipeline) may have prepended absolute entrypoint paths to `args` and
+/// stripped the renkei-only `entrypoint`/`build` fields before reaching
+/// here. Pass `None` when the manifest declares no MCP servers.
 pub(crate) fn deploy_to_backends(
     effective_artifacts: &[(Artifact, Option<String>)],
     active_backends: &[&dyn Backend],
-    raw_manifest: &Manifest,
+    mcp_json: Option<&serde_json::Value>,
     config: &Config,
 ) -> Result<DeploymentResult> {
     let mut all_deployed: Vec<DeployedArtifact> = Vec::new();
@@ -71,9 +76,8 @@ pub(crate) fn deploy_to_backends(
             }
         }
 
-        let mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
-            let mcp_json = serde_json::to_value(mcp)?;
-            match backend.register_mcp(&mcp_json, config) {
+        let mcp_servers = if let Some(json) = mcp_json {
+            match backend.register_mcp(json, config) {
                 Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
                 Err(_) if is_mcp_unsupported(backend.name()) => vec![],
                 Err(e) => {

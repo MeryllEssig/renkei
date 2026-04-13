@@ -23,12 +23,40 @@ pub const DEFAULT_IGNORES: &[&str] = &[
     ".git/",
 ];
 
+/// Trimmed exclusion list for local-MCP source staging. Same as
+/// [`DEFAULT_IGNORES`] minus the build-output directories (`dist/`,
+/// `build/`, `target/`) — those may be the actual deliverable when an
+/// MCP ships a prebuilt entrypoint, so we let them flow through to the
+/// staging copy and into the source hash.
+pub const MCP_DEFAULT_IGNORES: &[&str] = &[
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    ".pytest_cache/",
+    "*.pyc",
+    ".DS_Store",
+    ".git/",
+];
+
 /// Resolve the effective ignore patterns for a directory: defaults first,
 /// then any non-empty / non-comment line from `<root>/.rkignore` (gitignore
 /// syntax) appended.
 #[allow(dead_code)]
 pub fn load_rkignore(root: &Path) -> Vec<String> {
-    let mut patterns: Vec<String> = DEFAULT_IGNORES.iter().map(|s| s.to_string()).collect();
+    load_with_defaults(root, DEFAULT_IGNORES)
+}
+
+/// Same as [`load_rkignore`] but with the trimmed [`MCP_DEFAULT_IGNORES`]
+/// base — used for local-MCP staging and source hashing where build
+/// outputs may be the actual deliverable.
+#[allow(dead_code)]
+pub fn load_mcp_ignores(package_root: &Path) -> Vec<String> {
+    load_with_defaults(package_root, MCP_DEFAULT_IGNORES)
+}
+
+fn load_with_defaults(root: &Path, defaults: &[&str]) -> Vec<String> {
+    let mut patterns: Vec<String> = defaults.iter().map(|s| s.to_string()).collect();
     let path = root.join(".rkignore");
     if let Ok(content) = std::fs::read_to_string(&path) {
         for line in content.lines() {
@@ -54,9 +82,17 @@ pub fn load_rkignore(root: &Path) -> Vec<String> {
 pub fn hash_directory(root: &Path, extra_patterns: &[String]) -> Result<String> {
     let mut all_patterns = load_rkignore(root);
     all_patterns.extend(extra_patterns.iter().cloned());
+    hash_with_patterns(root, &all_patterns)
+}
 
+/// Like [`hash_directory`] but uses exactly the given patterns — does
+/// not merge `DEFAULT_IGNORES` or read `.rkignore`. Callers (notably the
+/// local-MCP staging path) build their own pattern list to control which
+/// outputs are considered part of the source.
+#[allow(dead_code)]
+pub fn hash_with_patterns(root: &Path, all_patterns: &[String]) -> Result<String> {
     let mut overrides = ignore::overrides::OverrideBuilder::new(root);
-    for pat in &all_patterns {
+    for pat in all_patterns {
         // gitignore semantics: a bare pattern excludes; we invert to make it an
         // explicit ignore in the override builder.
         let inverted = format!("!{pat}");

@@ -64,6 +64,13 @@ impl Config {
         self.home_dir.join(".renkei")
     }
 
+    /// Root directory under which local MCP server sources are deployed.
+    /// Always under `~/.renkei/mcp/`, regardless of the active install scope —
+    /// MCP registration in backends is global by nature (e.g. `~/.claude.json`).
+    pub fn global_mcp_dir(&self) -> PathBuf {
+        self.renkei_dir().join("mcp")
+    }
+
     pub fn archives_dir(&self) -> PathBuf {
         self.renkei_dir().join("archives")
     }

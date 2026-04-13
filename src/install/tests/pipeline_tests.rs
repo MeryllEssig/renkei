@@ -115,7 +115,7 @@ fn test_deploy_creates_files() {
         .cleanup_and_resolve(&mut store, &force_resolver, &config)
         .unwrap();
 
-    let deployment = resolved.deploy(&config).unwrap();
+    let deployment = resolved.deploy(&config, None).unwrap();
 
     assert_eq!(deployment.all_deployed.len(), 1);
     assert!(deployment.deployed_map.contains_key("claude"));
@@ -144,7 +144,7 @@ fn test_full_pipeline_discover_resolve_deploy() {
         .unwrap();
 
     // Deploy
-    let deployment = resolved.deploy(&config).unwrap();
+    let deployment = resolved.deploy(&config, None).unwrap();
     assert!(!deployment.all_deployed.is_empty());
 
     // Verify
@@ -166,7 +166,7 @@ fn test_pipeline_cleanup_removes_previous_install() {
     let resolved = pipeline
         .cleanup_and_resolve(&mut store, &force_resolver, &config)
         .unwrap();
-    let deployment = resolved.deploy(&config).unwrap();
+    let deployment = resolved.deploy(&config, None).unwrap();
 
     store.record_install(
         "@test/up",
@@ -194,7 +194,7 @@ fn test_pipeline_cleanup_removes_previous_install() {
     let resolved2 = pipeline2
         .cleanup_and_resolve(&mut store2, &force_resolver, &config)
         .unwrap();
-    let deployment2 = resolved2.deploy(&config).unwrap();
+    let deployment2 = resolved2.deploy(&config, None).unwrap();
 
     assert!(!deployment2.all_deployed.is_empty());
     assert!(skill_path.exists());
@@ -223,6 +223,7 @@ fn test_install_from_lock_entry_deploys_skill() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &source,
+        false,
     )
     .unwrap();
 
@@ -251,6 +252,7 @@ fn test_install_from_lock_entry_does_not_update_lockfile() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &source,
+        false,
     )
     .unwrap();
 
@@ -277,6 +279,7 @@ fn test_install_from_lock_entry_force_overwrites_conflicts() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -296,6 +299,7 @@ fn test_install_from_lock_entry_force_overwrites_conflicts() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &source,
+        false,
     )
     .unwrap();
 

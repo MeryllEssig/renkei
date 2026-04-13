@@ -25,6 +25,7 @@ fn test_conflict_force_overwrites() {
         RequestedScope::Global,
         &opts_a,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -37,6 +38,7 @@ fn test_conflict_force_overwrites() {
         RequestedScope::Global,
         &opts_b,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -74,6 +76,7 @@ fn test_conflict_error_resolver_aborts() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -86,6 +89,7 @@ fn test_conflict_error_resolver_aborts() {
         RequestedScope::Global,
         &opts_b,
         &error_resolver,
+        false,
     );
 
     assert!(result.is_err());
@@ -109,6 +113,7 @@ fn test_conflict_rename_deploys_under_new_name() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -122,6 +127,7 @@ fn test_conflict_rename_deploys_under_new_name() {
         RequestedScope::Global,
         &opts_b,
         &resolver,
+        false,
     )
     .unwrap();
 
@@ -151,6 +157,7 @@ fn test_conflict_rename_tracks_original_name_in_cache() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -164,6 +171,7 @@ fn test_conflict_rename_tracks_original_name_in_cache() {
         RequestedScope::Global,
         &opts_b,
         &resolver,
+        false,
     )
     .unwrap();
 
@@ -190,6 +198,7 @@ fn test_no_conflict_on_reinstall() {
         RequestedScope::Global,
         &opts,
         &error_resolver,
+        false,
     )
     .unwrap();
     install_local_with_resolver(
@@ -199,6 +208,7 @@ fn test_no_conflict_on_reinstall() {
         RequestedScope::Global,
         &opts,
         &error_resolver,
+        false,
     )
     .unwrap();
 }
@@ -221,6 +231,7 @@ fn test_no_conflict_different_skill_names() {
         RequestedScope::Global,
         &opts_a,
         &error_resolver,
+        false,
     )
     .unwrap();
     install_local_with_resolver(
@@ -230,6 +241,7 @@ fn test_no_conflict_different_skill_names() {
         RequestedScope::Global,
         &opts_b,
         &error_resolver,
+        false,
     )
     .unwrap();
 
@@ -253,6 +265,7 @@ fn test_default_resolver_auto_renames_with_scope() {
         RequestedScope::Global,
         &opts_a,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -269,6 +282,7 @@ fn test_default_resolver_auto_renames_with_scope() {
         RequestedScope::Global,
         &opts_b,
         &*resolver,
+        false,
     )
     .unwrap();
 
@@ -302,6 +316,7 @@ fn test_residual_conflict_on_renamed_target_errors() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -317,6 +332,7 @@ fn test_residual_conflict_on_renamed_target_errors() {
         RequestedScope::Global,
         &opts_h,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -330,6 +346,7 @@ fn test_residual_conflict_on_renamed_target_errors() {
         RequestedScope::Global,
         &opts_b,
         &*resolver,
+        false,
     );
 
     assert!(result.is_err());

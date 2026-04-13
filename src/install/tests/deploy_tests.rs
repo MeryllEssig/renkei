@@ -55,6 +55,7 @@ fn test_rollback_cleans_partial_deploy() {
         &[&backend as &dyn Backend],
         RequestedScope::Global,
         &options,
+        false,
     );
     assert!(result.is_err());
 
@@ -77,6 +78,7 @@ fn test_backend_detected_succeeds() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &options,
+        false,
     );
     assert!(result.is_ok());
 }
@@ -95,6 +97,7 @@ fn test_backend_not_detected_fails() {
         &empty_backends,
         RequestedScope::Global,
         &options,
+        false,
     );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -118,6 +121,7 @@ fn test_backend_force_bypasses_check() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &options,
+        false,
     );
     assert!(result.is_ok());
 }
@@ -136,6 +140,7 @@ fn test_backend_multi_with_partial_match() {
         &[&ClaudeBackend as &dyn Backend],
         RequestedScope::Global,
         &options,
+        false,
     );
     assert!(
         result.is_ok(),
@@ -210,6 +215,7 @@ fn test_dedup_skips_skill_when_agents_and_reads_agents_backend() {
         ],
         RequestedScope::Global,
         &opts,
+        false,
     );
     assert!(result.is_ok(), "{:?}", result);
 
@@ -238,6 +244,7 @@ fn test_no_dedup_when_agents_not_in_active_set() {
         &[&ReadsAgentsSkillsBackend as &dyn Backend],
         RequestedScope::Global,
         &opts,
+        false,
     );
     assert!(result.is_ok(), "{:?}", result);
     assert!(home.path().join(".claude/skills/check/SKILL.md").exists());
@@ -264,6 +271,7 @@ fn test_no_dedup_for_agent_artifacts() {
         ],
         RequestedScope::Global,
         &opts,
+        false,
     );
     assert!(result.is_ok(), "{:?}", result);
 

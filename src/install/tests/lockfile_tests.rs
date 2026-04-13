@@ -25,6 +25,7 @@ fn test_install_writes_lockfile_global() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -54,6 +55,7 @@ fn test_install_writes_lockfile_project() {
         RequestedScope::Project,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -82,6 +84,7 @@ fn test_install_two_packages_lockfile_has_both() {
         RequestedScope::Global,
         &opts_a,
         &force_resolver,
+        false,
     )
     .unwrap();
     install_local_with_resolver(
@@ -91,6 +94,7 @@ fn test_install_two_packages_lockfile_has_both() {
         RequestedScope::Global,
         &opts_b,
         &force_resolver,
+        false,
     )
     .unwrap();
 
@@ -116,6 +120,7 @@ fn test_reinstall_updates_lockfile_entry() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
     install_local_with_resolver(
@@ -125,6 +130,7 @@ fn test_reinstall_updates_lockfile_entry() {
         RequestedScope::Global,
         &opts,
         &force_resolver,
+        false,
     )
     .unwrap();
 

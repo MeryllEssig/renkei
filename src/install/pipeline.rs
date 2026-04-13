@@ -124,12 +124,18 @@ pub(crate) struct ResolvedPipeline<'a> {
 }
 
 impl<'a> ResolvedPipeline<'a> {
-    /// Phase 3: Deploy artifacts to all active backends.
-    pub fn deploy(&self, config: &Config) -> Result<DeploymentResult> {
+    /// Phase 3: Deploy artifacts + (caller-resolved) MCP config to all
+    /// active backends. `mcp_json` is the merged MCP server map ready
+    /// for `register_mcp` — `None` skips MCP registration entirely.
+    pub fn deploy(
+        &self,
+        config: &Config,
+        mcp_json: Option<&serde_json::Value>,
+    ) -> Result<DeploymentResult> {
         deploy::deploy_to_backends(
             &self.resolved.effective,
             &self.active_backends,
-            &self.raw_manifest,
+            mcp_json,
             config,
         )
     }
