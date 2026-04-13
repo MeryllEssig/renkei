@@ -184,9 +184,11 @@ pub fn install_from_lockfile(
     }
 
     let manifest_refs: Vec<&Manifest> = prepared.iter().map(|p| &p.manifest).collect();
-    if !batch::confirm_batch(&manifest_refs, yes, allow_build, false)? {
-        return Ok(());
-    }
+    let effective_allow_build =
+        match batch::confirm_batch(&manifest_refs, yes, allow_build, false)? {
+            batch::BatchDecision::Declined => return Ok(()),
+            batch::BatchDecision::Proceed { allow_build } => allow_build,
+        };
 
     let mut postinstalls: Vec<(String, String)> = Vec::new();
     for prep in &prepared {
@@ -196,7 +198,7 @@ pub fn install_from_lockfile(
             backends,
             requested_scope,
             &prep.source,
-            allow_build,
+            effective_allow_build,
         )?;
         if let Some(msg) = post {
             postinstalls.push((prep.manifest.name.clone(), msg));

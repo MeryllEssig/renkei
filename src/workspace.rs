@@ -76,9 +76,11 @@ pub fn install_workspace(
 
     let manifest_refs: Vec<&Manifest> = manifests.iter().collect();
     let link_mode = options.source_kind == SourceKind::LocalLink;
-    if !batch::confirm_batch(&manifest_refs, yes, allow_build, link_mode)? {
-        return Ok(());
-    }
+    let effective_allow_build =
+        match batch::confirm_batch(&manifest_refs, yes, allow_build, link_mode)? {
+            batch::BatchDecision::Declined => return Ok(()),
+            batch::BatchDecision::Proceed { allow_build } => allow_build,
+        };
 
     let mut postinstalls: Vec<(String, String)> = Vec::new();
     for (member, manifest) in to_install.iter().zip(manifests.iter()) {
@@ -93,7 +95,7 @@ pub fn install_workspace(
             requested_scope,
             &member_options,
             &*resolver,
-            allow_build,
+            effective_allow_build,
         )?;
         if let Some(msg) = post {
             postinstalls.push((manifest.name.clone(), msg));
