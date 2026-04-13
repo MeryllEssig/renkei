@@ -251,13 +251,13 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 9: `rk doctor` checks for local MCPs
 
-- [ ] 9.1 Extend `src/doctor/checks.rs`: new `check_mcp_local` iterating `install_cache.mcp_local`:
+- [x] 9.1 Extend `src/doctor/checks.rs`: new `check_mcp_local` iterating `install_cache.mcp_local`:
   - `exists`: `~/.renkei/mcp/<name>/` present. Error if missing.
   - `integrity`: `rkignore::hash_directory(...)` == stored `source_sha256`. Warning if differs.
   - `entrypoint`: file at `<folder>/<entrypoint>` exists. Error if missing.
   - Entrypoint is read from the owning package's manifest, which is reachable via `package_store` using `owner_package` + `version`.
-- [ ] 9.2 Report integration: add a `McpLocal` variant in `src/doctor/report.rs` / types if needed, or reuse a generic `Check` row.
-- [ ] 9.3 TDD in `src/doctor/tests/`:
+- [x] 9.2 Report integration: add a `McpLocal` variant in `src/doctor/report.rs` / types if needed, or reuse a generic `Check` row.
+- [x] 9.3 TDD in `src/doctor/tests/`:
   - All three checks OK → all green.
   - Folder deleted manually → `exists` error.
   - A source file tampered with → `integrity` warning, others OK.
