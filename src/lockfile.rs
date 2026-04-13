@@ -216,12 +216,20 @@ fn build_source_info(entry: &LockfileEntry) -> install::SourceInfo {
     }
 }
 
+fn resolve_member_root(base: &Path, member: Option<&str>) -> PathBuf {
+    match member {
+        Some(m) => base.join(m),
+        None => base.to_path_buf(),
+    }
+}
+
 fn install_from_source(
     config: &Config,
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     entry: &LockfileEntry,
 ) -> Result<()> {
+    let member = entry.member.as_deref();
     match source::parse_source(&entry.source) {
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
@@ -233,10 +241,7 @@ fn install_from_source(
                 tag: entry.tag.clone(),
                 member: entry.member.clone(),
             };
-            let install_root: PathBuf = match &entry.member {
-                Some(m) => tmp_dir.path().join(m),
-                None => tmp_dir.path().to_path_buf(),
-            };
+            let install_root = resolve_member_root(tmp_dir.path(), member);
             install::install_from_lock_entry(
                 &install_root,
                 config,
@@ -246,11 +251,7 @@ fn install_from_source(
             )
         }
         source::PackageSource::Local(path_str) => {
-            let base = PathBuf::from(&path_str);
-            let install_root = match &entry.member {
-                Some(m) => base.join(m),
-                None => base,
-            };
+            let install_root = resolve_member_root(Path::new(&path_str), member);
             let source = install::SourceInfo {
                 source_kind: install::SourceKind::Local,
                 source_url: path_str,

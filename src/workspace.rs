@@ -8,13 +8,9 @@ use crate::error::{RenkeiError, Result};
 use crate::install::{self, InstallOptions, SourceKind};
 use crate::manifest::RequestedScope;
 
-/// Install all (or a selected subset of) members of a workspace.
-///
-/// `selected = None`: install every member declared in `members`.
-/// `selected = Some(names)`: install only the named members, in the order
-/// requested. Every requested name must exist in `members` (fail-fast → no
-/// install runs if validation fails). Validates that every member-to-install
-/// directory contains a `renkei.json` before installing any of them.
+/// Install workspace members. `selected = Some` installs only the named
+/// members (fail-fast if any is missing); `None` installs all. All target
+/// member manifests are validated before any install runs.
 pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],

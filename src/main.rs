@@ -51,22 +51,19 @@ fn build_config(global: bool) -> error::Result<Config> {
     }
 }
 
-/// Dispatch to workspace or single-package install based on the manifest.
 fn install_or_workspace(
     package_dir: &Path,
     config: &Config,
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     options: &install::InstallOptions,
-    selected_members: &[String],
+    selected_members: Option<&[String]>,
 ) -> error::Result<()> {
-    if let Some(members) = manifest::try_load_workspace(package_dir) {
-        let selected = if selected_members.is_empty() {
-            None
-        } else {
-            Some(selected_members)
-        };
-        workspace::install_workspace(
+    match (
+        manifest::try_load_workspace(package_dir),
+        selected_members,
+    ) {
+        (Some(members), selected) => workspace::install_workspace(
             package_dir,
             &members,
             config,
@@ -74,11 +71,11 @@ fn install_or_workspace(
             requested_scope,
             options,
             selected,
-        )
-    } else if !selected_members.is_empty() {
-        Err(RenkeiError::MemberFlagOnNonWorkspace)
-    } else {
-        install::install_local(package_dir, config, backends, requested_scope, options)
+        ),
+        (None, Some(_)) => Err(RenkeiError::MemberFlagOnNonWorkspace),
+        (None, None) => {
+            install::install_local(package_dir, config, backends, requested_scope, options)
+        }
     }
 }
 
@@ -117,7 +114,7 @@ fn run_install(
     tag: Option<&str>,
     force: bool,
     backend_override: Option<&str>,
-    members: &[String],
+    members: Option<&[String]>,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let requested_scope = if global {
@@ -210,7 +207,11 @@ fn main() {
             tag.as_deref(),
             force,
             backend.as_deref(),
-            &members,
+            if members.is_empty() {
+                None
+            } else {
+                Some(members.as_slice())
+            },
             &registry,
         ),
         Commands::Install {

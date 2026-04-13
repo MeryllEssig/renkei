@@ -144,7 +144,6 @@ mod tests {
         let mut i = 0;
         while i < bytes.len() {
             if bytes[i] == 0x1b {
-                // skip until 'm' (SGR terminator)
                 while i < bytes.len() && bytes[i] != b'm' {
                     i += 1;
                 }

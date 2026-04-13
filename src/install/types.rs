@@ -23,8 +23,6 @@ pub struct InstallOptions {
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
-    /// Workspace member name when installing a single member of a workspace.
-    /// `None` for non-workspace installs.
     pub member: Option<String>,
 }
 

@@ -55,7 +55,7 @@ Validation (fail-fast, before any deploy):
 
 Each selected member is recorded as an independent entry in `rk.lock`, with an additional optional `member` field naming the workspace subdirectory it was installed from. `rk install` (no-arg) replays each lockfile entry independently: for entries with `member` set, the install resolves to `<clone>/<member>` (Git) or `<source>/<member>` (Local) before deploying. Cached archives are member-scoped, so the cache hit path is unchanged.
 
-`--tag` / `--branch` / `--force` / `--backend` apply once per invocation and are propagated uniformly to every selected member.
+`--tag` / `--force` / `--backend` apply once per invocation and are propagated uniformly to every selected member.
 
 ## No-argument installation
 

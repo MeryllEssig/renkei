@@ -130,8 +130,6 @@ fn rk(home: &Path) -> Command {
     c
 }
 
-// ---------- Local source ----------
-
 #[test]
 fn local_install_with_member_deploys_only_named() {
     let home = tempdir().unwrap();
@@ -294,8 +292,6 @@ fn member_flag_with_no_arg_install_fails() {
         .stderr(predicate::str::contains("-m"))
         .stderr(predicate::str::contains("lockfile"));
 }
-
-// ---------- Git source ----------
 
 #[test]
 fn git_install_with_member_deploys_only_named() {
