@@ -58,7 +58,7 @@ fn install_or_workspace(
     requested_scope: RequestedScope,
     options: &install::InstallOptions,
     selected_members: Option<&[String]>,
-    _yes: bool,
+    yes: bool,
 ) -> error::Result<()> {
     match (
         manifest::try_load_workspace(package_dir),
@@ -72,9 +72,18 @@ fn install_or_workspace(
             requested_scope,
             options,
             selected,
+            yes,
         ),
         (None, Some(_)) => Err(RenkeiError::MemberFlagOnNonWorkspace),
         (None, None) => {
+            // Read-and-validate the manifest up-front so the consolidated
+            // preinstall confirmation runs *before* any cleanup/deploy work
+            // (which would otherwise mutate the on-disk install state).
+            let raw = manifest::Manifest::from_path(package_dir)?;
+            raw.validate()?;
+            if !install::batch::confirm_batch(&[&raw], yes)? {
+                return Ok(());
+            }
             install::install_local(package_dir, config, backends, requested_scope, options)
         }
     }
@@ -168,12 +177,12 @@ fn run_install(
 fn run_install_from_lockfile(
     global: bool,
     backend_override: Option<&str>,
-    _yes: bool,
+    yes: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let config = build_config(global)?;
     let backends = resolve_backends(registry, &config, backend_override)?;
-    lockfile::install_from_lockfile(&config, &backends)
+    lockfile::install_from_lockfile(&config, &backends, yes)
 }
 
 fn run_uninstall(package: &str, global: bool) -> error::Result<()> {

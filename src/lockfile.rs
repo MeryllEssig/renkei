@@ -8,9 +8,9 @@ use crate::backend::Backend;
 use crate::cache;
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
-use crate::install;
+use crate::install::{self, batch};
 use crate::install_cache::PackageEntry;
-use crate::manifest::{self, RequestedScope};
+use crate::manifest::{self, Manifest, RequestedScope};
 use crate::source;
 
 const INTEGRITY_PREFIX: &str = "sha256-";
@@ -116,7 +116,11 @@ fn strip_integrity_prefix(integrity: &str) -> &str {
         .unwrap_or(integrity)
 }
 
-pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Result<()> {
+pub fn install_from_lockfile(
+    config: &Config,
+    backends: &[&dyn Backend],
+    yes: bool,
+) -> Result<()> {
     let lockfile_path = config.lockfile_path();
 
     if config.is_project() && !lockfile_path.exists() {
@@ -158,41 +162,132 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Resu
     let mut names: Vec<&String> = lockfile.packages.keys().collect();
     names.sort();
 
-    for name in names {
-        let entry = &lockfile.packages[name];
-        let archive = archive_path_for_entry(config, name, entry)?;
+    // Pre-pass: materialize each entry's source (extract archive or fall back to
+    // remote) and parse its manifest. We hold every TempDir alive in `prepared`
+    // so the install pass can re-enter the directories after the prompt.
+    let mut prepared: Vec<PreparedEntry> = Vec::with_capacity(names.len());
+    for name in &names {
+        let entry = &lockfile.packages[*name];
+        prepared.push(prepare_entry(config, name, entry)?);
+    }
 
-        match cache::compute_sha256(&archive) {
-            Ok(actual_hash) => {
-                let expected_hash = strip_integrity_prefix(&entry.integrity);
-                if actual_hash != expected_hash {
-                    return Err(RenkeiError::IntegrityMismatch {
-                        package: name.clone(),
-                        expected: entry.integrity.clone(),
-                        actual: format!("{INTEGRITY_PREFIX}{actual_hash}"),
-                    });
-                }
+    let manifest_refs: Vec<&Manifest> = prepared.iter().map(|p| &p.manifest).collect();
+    if !batch::confirm_batch(&manifest_refs, yes)? {
+        return Ok(());
+    }
 
-                let tmp = tempfile::tempdir()
-                    .map_err(|e| RenkeiError::CacheError(format!("Cannot create temp dir: {e}")))?;
-                cache::extract_archive_to_dir(&archive, tmp.path())?;
-
-                let source = build_source_info(entry);
-                install::install_from_lock_entry(
-                    tmp.path(),
-                    config,
-                    backends,
-                    requested_scope,
-                    &source,
-                )?;
-            }
-            Err(_) => {
-                let _ = install_from_source(config, backends, requested_scope, entry)?;
-            }
+    let mut postinstalls: Vec<(String, String)> = Vec::new();
+    for prep in &prepared {
+        let post = install::install_from_lock_entry(
+            &prep.install_root,
+            config,
+            backends,
+            requested_scope,
+            &prep.source,
+        )?;
+        if let Some(msg) = post {
+            postinstalls.push((prep.manifest.name.clone(), msg));
         }
     }
 
+    batch::print_postinstall_summary(&postinstalls);
     Ok(())
+}
+
+/// Materialized lockfile entry held across the preinstall prompt and the
+/// actual install. The held temp dirs ensure the install root remains valid
+/// until each `install_from_lock_entry` call completes.
+struct PreparedEntry {
+    install_root: PathBuf,
+    source: install::SourceInfo,
+    manifest: Manifest,
+    /// Extracted archive directory (cached path) — kept alive for the install.
+    _archive_tmp: Option<tempfile::TempDir>,
+    /// Cloned git repo directory (fallback path) — kept alive for the install.
+    _clone_tmp: Option<tempfile::TempDir>,
+}
+
+fn prepare_entry(
+    config: &Config,
+    name: &str,
+    entry: &LockfileEntry,
+) -> Result<PreparedEntry> {
+    let archive = archive_path_for_entry(config, name, entry)?;
+    match cache::compute_sha256(&archive) {
+        Ok(actual_hash) => {
+            let expected_hash = strip_integrity_prefix(&entry.integrity);
+            if actual_hash != expected_hash {
+                return Err(RenkeiError::IntegrityMismatch {
+                    package: name.to_string(),
+                    expected: entry.integrity.clone(),
+                    actual: format!("{INTEGRITY_PREFIX}{actual_hash}"),
+                });
+            }
+
+            let tmp = tempfile::tempdir()
+                .map_err(|e| RenkeiError::CacheError(format!("Cannot create temp dir: {e}")))?;
+            cache::extract_archive_to_dir(&archive, tmp.path())?;
+
+            let install_root = tmp.path().to_path_buf();
+            let manifest = Manifest::from_path(&install_root)?;
+            manifest.validate()?;
+            let source = build_source_info(entry);
+            Ok(PreparedEntry {
+                install_root,
+                source,
+                manifest,
+                _archive_tmp: Some(tmp),
+                _clone_tmp: None,
+            })
+        }
+        Err(_) => prepare_from_source(entry),
+    }
+}
+
+fn prepare_from_source(entry: &LockfileEntry) -> Result<PreparedEntry> {
+    let member = entry.member.as_deref();
+    match source::parse_source(&entry.source) {
+        source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
+            let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
+            let sha = crate::git::resolve_head(tmp_dir.path())?;
+            let install_root = resolve_member_root(tmp_dir.path(), member);
+            let manifest = Manifest::from_path(&install_root)?;
+            manifest.validate()?;
+            let source = install::SourceInfo {
+                source_kind: install::SourceKind::Git,
+                source_url: url,
+                resolved: Some(sha),
+                tag: entry.tag.clone(),
+                member: entry.member.clone(),
+            };
+            Ok(PreparedEntry {
+                install_root,
+                source,
+                manifest,
+                _archive_tmp: None,
+                _clone_tmp: Some(tmp_dir),
+            })
+        }
+        source::PackageSource::Local(path_str) => {
+            let install_root = resolve_member_root(Path::new(&path_str), member);
+            let manifest = Manifest::from_path(&install_root)?;
+            manifest.validate()?;
+            let source = install::SourceInfo {
+                source_kind: install::SourceKind::Local,
+                source_url: path_str,
+                resolved: None,
+                tag: None,
+                member: entry.member.clone(),
+            };
+            Ok(PreparedEntry {
+                install_root,
+                source,
+                manifest,
+                _archive_tmp: None,
+                _clone_tmp: None,
+            })
+        }
+    }
 }
 
 fn build_source_info(entry: &LockfileEntry) -> install::SourceInfo {
@@ -223,52 +318,6 @@ fn resolve_member_root(base: &Path, member: Option<&str>) -> PathBuf {
     }
 }
 
-fn install_from_source(
-    config: &Config,
-    backends: &[&dyn Backend],
-    requested_scope: RequestedScope,
-    entry: &LockfileEntry,
-) -> Result<Option<String>> {
-    let member = entry.member.as_deref();
-    match source::parse_source(&entry.source) {
-        source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
-            let tmp_dir = crate::git::clone_repo(&url, entry.tag.as_deref())?;
-            let sha = crate::git::resolve_head(tmp_dir.path())?;
-            let source = install::SourceInfo {
-                source_kind: install::SourceKind::Git,
-                source_url: url,
-                resolved: Some(sha),
-                tag: entry.tag.clone(),
-                member: entry.member.clone(),
-            };
-            let install_root = resolve_member_root(tmp_dir.path(), member);
-            install::install_from_lock_entry(
-                &install_root,
-                config,
-                backends,
-                requested_scope,
-                &source,
-            )
-        }
-        source::PackageSource::Local(path_str) => {
-            let install_root = resolve_member_root(Path::new(&path_str), member);
-            let source = install::SourceInfo {
-                source_kind: install::SourceKind::Local,
-                source_url: path_str,
-                resolved: None,
-                tag: None,
-                member: entry.member.clone(),
-            };
-            install::install_from_lock_entry(
-                &install_root,
-                config,
-                backends,
-                requested_scope,
-                &source,
-            )
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -663,7 +712,7 @@ mod tests {
         assert!(!skill_path.exists());
 
         // Step 3: install from lockfile
-        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true).unwrap();
 
         // Verify skill is re-deployed
         assert!(skill_path.exists());
@@ -696,7 +745,7 @@ mod tests {
         lockfile.save(&lockfile_path).unwrap();
 
         // Install from lockfile should fail with integrity error
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Integrity check failed"));
@@ -708,7 +757,7 @@ mod tests {
         let home = tempdir().unwrap();
         let config = Config::with_home_dir(home.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -721,7 +770,7 @@ mod tests {
         let project = tempdir().unwrap();
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No lockfile found"));
@@ -742,7 +791,7 @@ mod tests {
 
         let config = Config::for_project(home.path().to_path_buf(), project.path().to_path_buf());
 
-        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]);
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Workspace detected"));
@@ -776,7 +825,7 @@ mod tests {
         fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
 
         // Install from lockfile — should fall back to local source
-        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend]).unwrap();
+        install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true).unwrap();
 
         let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
         assert!(skill_path.exists());

@@ -1,3 +1,4 @@
+pub(crate) mod batch;
 mod cleanup;
 mod deploy;
 pub(crate) mod messages;
@@ -37,6 +38,10 @@ fn prompt_rename(conflict: &Conflict) -> Result<String> {
 }
 
 /// Build the conflict resolver based on --force and TTY detection.
+pub(crate) fn default_conflict_resolver(force: bool) -> Box<ConflictResolver> {
+    default_resolver(force)
+}
+
 fn default_resolver(force: bool) -> Box<ConflictResolver> {
     if force {
         Box::new(|_: &Conflict| Ok(None))

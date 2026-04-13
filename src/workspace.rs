@@ -5,12 +5,19 @@ use owo_colors::OwoColorize;
 use crate::backend::Backend;
 use crate::config::Config;
 use crate::error::{RenkeiError, Result};
-use crate::install::{self, InstallOptions, SourceKind};
-use crate::manifest::RequestedScope;
+use crate::install::{self, batch, InstallOptions, SourceKind};
+use crate::manifest::{Manifest, RequestedScope};
 
 /// Install workspace members. `selected = Some` installs only the named
 /// members (fail-fast if any is missing); `None` installs all. All target
 /// member manifests are validated before any install runs.
+///
+/// The two-phase flow:
+/// 1. Resolve and validate every targeted member's manifest.
+/// 2. Run the consolidated preinstall confirmation (`yes` bypasses).
+/// 3. Deploy each member sequentially, collecting their postinstall messages.
+/// 4. Render every collected postinstall block at the very end, prefixed
+///    with the package name.
 pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],
@@ -19,6 +26,7 @@ pub fn install_workspace(
     requested_scope: RequestedScope,
     options: &InstallOptions,
     selected: Option<&[String]>,
+    yes: bool,
 ) -> Result<()> {
     let to_install: Vec<String> = match selected {
         None => members.to_vec(),
@@ -54,18 +62,40 @@ pub fn install_workspace(
         }
     }
 
-    for member in &to_install {
+    let manifests: Vec<Manifest> = to_install
+        .iter()
+        .map(|m| {
+            let dir = workspace_dir.join(m);
+            let raw = Manifest::from_path(&dir)?;
+            raw.validate()?;
+            Ok(raw)
+        })
+        .collect::<Result<_>>()?;
+
+    let manifest_refs: Vec<&Manifest> = manifests.iter().collect();
+    if !batch::confirm_batch(&manifest_refs, yes)? {
+        return Ok(());
+    }
+
+    let resolver = install::default_conflict_resolver(options.force);
+    let mut postinstalls: Vec<(String, String)> = Vec::new();
+    for (member, manifest) in to_install.iter().zip(manifests.iter()) {
         let member_dir = workspace_dir.join(member);
         let member_options = build_member_options(&member_dir, member, options);
-        install::install_local(
+        let post = install::install_local_with_resolver(
             &member_dir,
             config,
             backends,
             requested_scope,
             &member_options,
+            &*resolver,
         )?;
+        if let Some(msg) = post {
+            postinstalls.push((manifest.name.clone(), msg));
+        }
     }
 
+    batch::print_postinstall_summary(&postinstalls);
     Ok(())
 }
 
@@ -155,6 +185,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             None,
+            true,
         )
         .unwrap();
 
@@ -211,6 +242,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             None,
+            true,
         );
 
         assert!(result.is_err());
@@ -240,6 +272,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             None,
+            true,
         );
 
         assert!(result.is_ok(), "Force flag should bypass backend detection");
@@ -266,6 +299,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             Some(&["member-a".to_string()]),
+            true,
         )
         .unwrap();
 
@@ -304,6 +338,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             Some(&["member-a".to_string(), "bogus".to_string()]),
+            true,
         );
 
         assert!(matches!(
@@ -337,6 +372,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             Some(&["member-a".to_string(), "member-a".to_string()]),
+            true,
         )
         .unwrap();
 
@@ -365,6 +401,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             None,
+            true,
         )
         .unwrap();
 
@@ -400,6 +437,7 @@ mod tests {
             RequestedScope::Global,
             &options,
             None,
+            true,
         )
         .unwrap();
 

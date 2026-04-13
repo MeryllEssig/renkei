@@ -57,17 +57,17 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 
 ## Phase 4: Install pipeline refactor (two-phase)
 
-- [ ] 4.1 Extract a "discover only" entrypoint that loads `Manifest` for a single source (local path or post-clone git dir) without running `cleanup_and_resolve`/`deploy`. Likely `CorePipeline::discover` is already that — verify and reuse.
-- [ ] 4.2 Introduce a coordinator (likely in `src/install/mod.rs` or a new `src/install/batch.rs`) that:
+- [x] 4.1 Extract a "discover only" entrypoint that loads `Manifest` for a single source (local path or post-clone git dir) without running `cleanup_and_resolve`/`deploy`. Likely `CorePipeline::discover` is already that — verify and reuse. _→ Used `Manifest::from_path` + `validate()` for the preflight pass instead of `CorePipeline::discover`. Reasoning: discover also filters backends and discovers artifacts, which we want to defer until after the prompt; manifest read is cheap and re-runs naturally inside the deploy phase. Avoids holding a `CorePipeline<'a>` across the prompt._
+- [x] 4.2 Introduce a coordinator (likely in `src/install/mod.rs` or a new `src/install/batch.rs`) that:
   1. Resolves all sources for the current invocation (single, workspace expansion, lockfile entries) into local paths (cloning git as needed).
-  2. Calls `CorePipeline::discover` for each and collects manifests.
+  2. Calls `CorePipeline::discover` for each and collects manifests. _→ Just reads `Manifest` (see 4.1)._
   3. Calls `confirm_preinstall(notices, yes)`.
   4. On `Ok(true)` → for each pipeline, run `cleanup_and_resolve` + `deploy` + lockfile/store recording (existing logic, factored).
-  5. On `Ok(false)` → exit 0, leave clones in cache.
-- [ ] 4.3 Single-package non-workspace install (`install_local`): wrap in the coordinator with a single-element batch; preserve current behavior when no preinstall is declared.
-- [ ] 4.4 Workspace install (`install_workspace`): batch all selected members; one prompt for the lot.
-- [ ] 4.5 Lockfile replay (no-arg `rk install`): batch all entries; one prompt; non-TTY behaviour same as everything else.
-- [ ] 4.6 TDD: per-path tests asserting collection across multiple manifests, refusal short-circuits before any deploy, `--yes` bypasses prompt across all paths, single package without `messages` keeps current zero-prompt UX.
+  5. On `Ok(false)` → exit 0, leave clones in cache. _→ `confirm_batch` returns `Ok(false)`, callers `return Ok(())` early; tempdirs drop naturally on the way out._
+- [x] 4.3 Single-package non-workspace install (`install_local`): wrap in the coordinator with a single-element batch; preserve current behavior when no preinstall is declared. _→ Done in `main.rs::install_or_workspace`._
+- [x] 4.4 Workspace install (`install_workspace`): batch all selected members; one prompt for the lot.
+- [x] 4.5 Lockfile replay (no-arg `rk install`): batch all entries; one prompt; non-TTY behaviour same as everything else. _→ Two-pass `prepare_entry` materializes archives/clones up-front; tempdirs held in `PreparedEntry` across the prompt._
+- [ ] 4.6 TDD: per-path tests asserting collection across multiple manifests, refusal short-circuits before any deploy, `--yes` bypasses prompt across all paths, single package without `messages` keeps current zero-prompt UX. _→ Existing 437 unit + 124 integration tests still pass; dedicated coverage lands in Phase 7._
 
 ## Phase 5: Postinstall display
 
