@@ -4,6 +4,11 @@ use crate::error::Result;
 #[derive(Debug, Clone, PartialEq)]
 pub enum SourceKind {
     Local,
+    /// Live symlink to a local source (`rk install --link <path>`). The
+    /// package's deployed artifacts (and any local MCP source folder)
+    /// link back at the workspace, so edits show up immediately. No
+    /// archive, no lockfile entry.
+    LocalLink,
     Git,
 }
 
@@ -11,6 +16,7 @@ impl SourceKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             SourceKind::Local => "local",
+            SourceKind::LocalLink => "local-link",
             SourceKind::Git => "git",
         }
     }
@@ -31,6 +37,17 @@ impl InstallOptions {
         Self {
             force: false,
             source_kind: SourceKind::Local,
+            source_url: source_path,
+            resolved: None,
+            tag: None,
+            member: None,
+        }
+    }
+
+    pub fn local_link(source_path: String) -> Self {
+        Self {
+            force: false,
+            source_kind: SourceKind::LocalLink,
             source_url: source_path,
             resolved: None,
             tag: None,

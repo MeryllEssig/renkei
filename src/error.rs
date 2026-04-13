@@ -121,6 +121,16 @@ pub enum RenkeiError {
     McpEntrypointMissing { name: String, entrypoint: String },
 
     #[error(
+        "Cannot link local MCP '{name}': `{target}` is a real directory from a previous copy install. Uninstall it first."
+    )]
+    McpLinkOverReal { name: String, target: String },
+
+    #[error(
+        "`--link` is only supported for local source paths, not git URLs."
+    )]
+    LinkRequiresLocalSource,
+
+    #[error(
         "Lockfile drift for '{package}': local MCP '{mcp_name}' source hash changed (expected {expected}, got {actual}).\nThe published archive no longer matches the locked source content."
     )]
     LockfileDrift {

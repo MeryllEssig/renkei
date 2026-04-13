@@ -94,8 +94,15 @@ pub(crate) fn install_local_with_resolver(
     let mut store = PackageStore::load(config)?;
     let resolved = pipeline.cleanup_and_resolve(&mut store, conflict_resolver, config)?;
 
-    let (archive_path, integrity) =
-        cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?;
+    let link_mode = options.source_kind == SourceKind::LocalLink;
+
+    // Linked installs skip archiving entirely — sources are live, the
+    // workspace owns their lifecycle.
+    let (archive_path, integrity) = if link_mode {
+        (std::path::PathBuf::new(), String::new())
+    } else {
+        cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?
+    };
 
     let scope_label = if config.is_project() { "project" } else { "global" };
     let project_root = config.project_root.as_deref();
@@ -107,7 +114,7 @@ pub(crate) fn install_local_with_resolver(
         scope_label,
         project_root,
         options.force,
-        false, // link_mode — Phase 7
+        link_mode,
         allow_build,
     )?;
 
@@ -125,24 +132,31 @@ pub(crate) fn install_local_with_resolver(
         .collect();
     mcp_local::commit_local_mcps(staged, &mut store)?;
 
-    store.record_install(
-        &resolved.manifest.full_name,
-        PackageEntry {
-            version: resolved.manifest.version.to_string(),
-            source: options.source_kind.as_str().to_string(),
-            source_path: match options.source_kind {
-                SourceKind::Git => options.source_url.clone(),
-                SourceKind::Local => resolved.package_dir.to_string_lossy().to_string(),
-            },
-            integrity,
-            archive_path: archive_path.to_string_lossy().to_string(),
-            deployed: deployment.deployed_map,
-            resolved: options.resolved.clone(),
-            tag: options.tag.clone(),
-            member: options.member.clone(),
-            mcp_local_sources,
+    let entry = PackageEntry {
+        version: resolved.manifest.version.to_string(),
+        source: options.source_kind.as_str().to_string(),
+        source_path: match options.source_kind {
+            SourceKind::Git => options.source_url.clone(),
+            SourceKind::Local | SourceKind::LocalLink => {
+                resolved.package_dir.to_string_lossy().to_string()
+            }
         },
-    );
+        integrity,
+        archive_path: archive_path.to_string_lossy().to_string(),
+        deployed: deployment.deployed_map,
+        resolved: options.resolved.clone(),
+        tag: options.tag.clone(),
+        member: options.member.clone(),
+        mcp_local_sources,
+    };
+    if link_mode {
+        // record only in the install cache; lockfile stays untouched so
+        // a teammate can't `rk install` from a lockfile that points at
+        // a personal workspace path.
+        store.record_install_from_lockfile(&resolved.manifest.full_name, entry);
+    } else {
+        store.record_install(&resolved.manifest.full_name, entry);
+    }
     store.save(config)?;
 
     print_post_deploy(

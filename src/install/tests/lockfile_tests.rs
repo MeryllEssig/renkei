@@ -4,7 +4,7 @@ use tempfile::tempdir;
 
 use crate::backend::{claude::ClaudeBackend, Backend};
 use crate::config::Config;
-use crate::install::{install_local_with_resolver, InstallOptions};
+use crate::install::{install_local_with_resolver, InstallOptions, SourceKind};
 use crate::lockfile::Lockfile;
 use crate::manifest::RequestedScope;
 
@@ -137,4 +137,51 @@ fn test_reinstall_updates_lockfile_entry() {
     let lockfile = Lockfile::load(&config.lockfile_path()).unwrap();
     assert_eq!(lockfile.packages.len(), 1);
     assert_eq!(lockfile.packages["@test/pkg"].version, "1.0.0");
+}
+
+#[test]
+fn test_install_link_skips_lockfile_and_archive() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    let pkg = make_pkg_with_skill("@test/linked", "review");
+    let opts = InstallOptions {
+        force: false,
+        ..InstallOptions {
+            source_kind: SourceKind::LocalLink,
+            source_url: pkg.path().to_string_lossy().to_string(),
+            resolved: None,
+            tag: None,
+            member: None,
+            force: false,
+        }
+    };
+    install_local_with_resolver(
+        pkg.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts,
+        &force_resolver,
+        false,
+    )
+    .unwrap();
+
+    // Skill deployed normally.
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+
+    // Lockfile NOT updated for linked installs.
+    let lockfile = Lockfile::load(&config.lockfile_path()).unwrap();
+    assert!(
+        !lockfile.packages.contains_key("@test/linked"),
+        "linked installs must not appear in the lockfile"
+    );
+
+    // Cache records the install with source = "local-link" and empty archive_path.
+    let cache = crate::install_cache::InstallCache::load(&config).unwrap();
+    let entry = &cache.packages["@test/linked"];
+    assert_eq!(entry.source, "local-link");
+    assert_eq!(entry.archive_path, "");
+    assert_eq!(entry.integrity, "");
 }

@@ -75,7 +75,8 @@ pub fn install_workspace(
         .collect::<Result<_>>()?;
 
     let manifest_refs: Vec<&Manifest> = manifests.iter().collect();
-    if !batch::confirm_batch(&manifest_refs, yes, allow_build)? {
+    let link_mode = options.source_kind == SourceKind::LocalLink;
+    if !batch::confirm_batch(&manifest_refs, yes, allow_build, link_mode)? {
         return Ok(());
     }
 
@@ -109,7 +110,7 @@ fn build_member_options(
     base: &InstallOptions,
 ) -> InstallOptions {
     let mut opts = base.clone();
-    if opts.source_kind == SourceKind::Local {
+    if matches!(opts.source_kind, SourceKind::Local | SourceKind::LocalLink) {
         opts.source_url = member_dir.to_string_lossy().to_string();
     }
     opts.member = Some(member_name.to_string());

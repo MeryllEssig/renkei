@@ -184,7 +184,7 @@ pub fn install_from_lockfile(
     }
 
     let manifest_refs: Vec<&Manifest> = prepared.iter().map(|p| &p.manifest).collect();
-    if !batch::confirm_batch(&manifest_refs, yes, allow_build)? {
+    if !batch::confirm_batch(&manifest_refs, yes, allow_build, false)? {
         return Ok(());
     }
 

@@ -50,6 +50,11 @@ pub enum Commands {
         /// Skip the build confirmation prompt for local MCP servers.
         #[arg(long = "allow-build")]
         allow_build: bool,
+        /// Symlink the source instead of copying it (live dev mode). Local
+        /// MCP folders are linked too; no archive is created and the
+        /// install is not recorded in the lockfile.
+        #[arg(long = "link")]
+        link: bool,
     },
     /// Uninstall a workflow package
     Uninstall {

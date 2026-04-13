@@ -40,13 +40,18 @@ pub(crate) struct StagedMcp {
     pub package_full_name: String,
     pub package_version: String,
     /// `Some(staging_dir)` when the on-disk folder must be swapped at
-    /// commit time, `None` when an existing folder is being reused.
+    /// commit time, `None` when an existing folder is being reused or
+    /// when this is a link install.
     pub pending_swap: Option<PathBuf>,
     pub target_dir: PathBuf,
     /// `true` when a forced overwrite must transfer ownership in the
     /// install cache. The commit step then replaces the entry rather
     /// than letting `add_mcp_local_ref` reject the different owner.
     pub force_transfer: bool,
+    /// `Some(workspace_mcp_dir)` when the install is a `--link` install:
+    /// commit creates a symlink from `target_dir` to this path instead
+    /// of swapping a staged copy.
+    pub link_source: Option<PathBuf>,
 }
 
 /// Plan and materialize every local MCP declared by `raw_manifest`.
@@ -115,47 +120,60 @@ pub(crate) fn stage_local_mcps(
         let outcome = peek_outcome(store, name, &raw_manifest.name, &raw_manifest.version);
 
         let force_transfer = matches!(outcome, Outcome::Conflict { .. }) && force;
-        let pending_swap = match outcome {
-            Outcome::Conflict { current_owner } if !force => {
-                return Err(RenkeiError::McpOwnerConflict {
-                    name: name.clone(),
-                    current_owner,
-                    attempted_by: raw_manifest.name.clone(),
-                });
-            }
-            Outcome::AddedRef => {
-                // Folder already materialized by an earlier install; reuse.
-                if !target_dir.exists() {
-                    // Cache says folder exists but it doesn't — fall back to
-                    // a fresh build so the on-disk state matches.
-                    Some(build_into_staging(
-                        &source_dir,
-                        &global_root,
-                        name,
-                        &patterns,
-                        server,
-                        link_mode,
-                        allow_build,
-                    )?)
-                } else {
-                    None
+        let (pending_swap, link_source) = if link_mode {
+            // --link path: validate the target slot, but defer creating
+            // the symlink to the commit phase so a backend failure can
+            // still leave the live state untouched.
+            check_link_target(&target_dir, &source_dir, name)?;
+            (None, Some(source_dir.clone()))
+        } else {
+            let swap = match outcome {
+                Outcome::Conflict { current_owner } if !force => {
+                    return Err(RenkeiError::McpOwnerConflict {
+                        name: name.clone(),
+                        current_owner,
+                        attempted_by: raw_manifest.name.clone(),
+                    });
                 }
-            }
-            _ => Some(build_into_staging(
-                &source_dir,
-                &global_root,
-                name,
-                &patterns,
-                server,
-                link_mode,
-                allow_build,
-            )?),
+                Outcome::AddedRef => {
+                    if !target_dir.exists() {
+                        Some(build_into_staging(
+                            &source_dir,
+                            &global_root,
+                            name,
+                            &patterns,
+                            server,
+                            link_mode,
+                            allow_build,
+                        )?)
+                    } else {
+                        None
+                    }
+                }
+                _ => Some(build_into_staging(
+                    &source_dir,
+                    &global_root,
+                    name,
+                    &patterns,
+                    server,
+                    link_mode,
+                    allow_build,
+                )?),
+            };
+            (swap, None)
         };
 
-        // Resolve the absolute entrypoint, looking inside the staged dir
-        // when present (so the file we just produced is verified) or the
-        // existing target dir when reusing.
-        let probe_root = pending_swap.as_deref().unwrap_or(target_dir.as_path());
+        // Resolve the absolute entrypoint:
+        // - link mode → probe the live source directly.
+        // - staging  → probe the .new/ folder (verifies what was just produced).
+        // - reuse    → probe the existing target dir.
+        let probe_root: PathBuf = if let Some(ref src) = link_source {
+            src.clone()
+        } else if let Some(ref staging) = pending_swap {
+            staging.clone()
+        } else {
+            target_dir.clone()
+        };
         let abs_entrypoint = probe_root.join(entrypoint);
         if !abs_entrypoint.exists() {
             // Cleanup the staging dir we just created (if any) before
@@ -168,7 +186,8 @@ pub(crate) fn stage_local_mcps(
                 entrypoint: abs_entrypoint.to_string_lossy().to_string(),
             });
         }
-        // After swap, the entrypoint will live under target_dir.
+        // After commit, the entrypoint lives under target_dir (whether
+        // that's a real dir from a swap or a symlink from --link).
         let final_abs = target_dir.join(entrypoint);
 
         effective_mcp.insert(
@@ -186,6 +205,7 @@ pub(crate) fn stage_local_mcps(
             pending_swap,
             target_dir,
             force_transfer,
+            link_source,
         });
     }
 
@@ -206,7 +226,9 @@ pub(crate) fn stage_local_mcps(
 /// previous state so the user is left with a working folder.
 pub(crate) fn commit_local_mcps(staged: Vec<StagedMcp>, store: &mut PackageStore) -> Result<()> {
     for s in staged {
-        if let Some(ref staging) = s.pending_swap {
+        if let Some(ref src) = s.link_source {
+            create_or_reuse_symlink(src, &s.target_dir)?;
+        } else if let Some(ref staging) = s.pending_swap {
             atomic_swap(staging, &s.target_dir)?;
         }
         // Forced ownership transfer: drop the pre-existing entry so
@@ -283,10 +305,10 @@ fn build_into_staging(
     allow_build: bool,
 ) -> Result<PathBuf> {
     if link_mode {
-        // Phase 7 path — implemented when --link lands. Until then, stage
-        // remains the only flow.
+        // Live-link branch never lands in build_into_staging — callers
+        // route to materialize_link instead.
         return Err(RenkeiError::DeploymentFailed(
-            "link mode for local MCPs is not implemented yet".into(),
+            "build_into_staging called in link mode".into(),
         ));
     }
     std::fs::create_dir_all(global_root)?;
@@ -384,6 +406,77 @@ fn copy_dir_filtered(src: &Path, dst: &Path, patterns: &[String]) -> Result<()> 
     Ok(())
 }
 
+/// Pre-flight validation for `--link` deployments: refuse to clobber a
+/// real directory left behind by an earlier copy install, and refuse
+/// to redirect an existing symlink that points elsewhere (treated as a
+/// soft owner conflict so the user notices).
+fn check_link_target(target: &Path, source: &Path, name: &str) -> Result<()> {
+    let meta = match std::fs::symlink_metadata(target) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(RenkeiError::DeploymentFailed(format!(
+                "cannot stat {}: {e}",
+                target.display()
+            )))
+        }
+    };
+    if meta.file_type().is_symlink() {
+        let current = std::fs::read_link(target).map_err(|e| {
+            RenkeiError::DeploymentFailed(format!(
+                "cannot read symlink {}: {e}",
+                target.display()
+            ))
+        })?;
+        if current != source {
+            return Err(RenkeiError::McpOwnerConflict {
+                name: name.to_string(),
+                current_owner: format!("symlink → {}", current.display()),
+                attempted_by: format!("symlink → {}", source.display()),
+            });
+        }
+        Ok(())
+    } else if meta.is_dir() {
+        Err(RenkeiError::McpLinkOverReal {
+            name: name.to_string(),
+            target: target.to_string_lossy().to_string(),
+        })
+    } else {
+        // Unexpected file at the slot — surface as a generic error.
+        Err(RenkeiError::DeploymentFailed(format!(
+            "MCP target {} exists and is not a directory",
+            target.display()
+        )))
+    }
+}
+
+#[cfg(unix)]
+fn create_or_reuse_symlink(source: &Path, target: &Path) -> Result<()> {
+    use std::os::unix::fs::symlink;
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if target.exists() || std::fs::symlink_metadata(target).is_ok() {
+        // check_link_target already verified this is a symlink to the
+        // same source; treat as idempotent.
+        return Ok(());
+    }
+    symlink(source, target).map_err(|e| {
+        RenkeiError::DeploymentFailed(format!(
+            "failed to symlink {} → {}: {e}",
+            target.display(),
+            source.display()
+        ))
+    })
+}
+
+#[cfg(not(unix))]
+fn create_or_reuse_symlink(_source: &Path, _target: &Path) -> Result<()> {
+    Err(RenkeiError::DeploymentFailed(
+        "--link is only supported on Unix platforms".into(),
+    ))
+}
+
 fn atomic_swap(staging: &Path, target: &Path) -> Result<()> {
     let parent = target.parent().ok_or_else(|| {
         RenkeiError::DeploymentFailed(format!(
@@ -456,7 +549,7 @@ fn build_server_json(server: &McpServer, abs_entrypoint: &Path) -> Result<serde_
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::install_cache::{InstallCache, McpLocalEntry, McpLocalRef};
+    use crate::install_cache::{McpLocalEntry, McpLocalRef};
     use crate::manifest::{ManifestScope, McpServer};
     use std::collections::HashMap as StdHashMap;
     use tempfile::tempdir;
@@ -907,6 +1000,167 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, RenkeiError::BuildRequiresConfirmation));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_mode_creates_symlink_and_skips_build() {
+        let m = manifest_with(
+            "@x/p",
+            "1.0.0",
+            vec![(
+                "srv",
+                local_mcp(
+                    Some("dist/index.js"),
+                    Some(vec![vec!["false"]]), // would fail if it ran
+                    vec![("command", serde_json::json!("node"))],
+                ),
+            )],
+        );
+        let pkg = make_pkg_with_mcp("srv", "x");
+        let home = tempdir().unwrap();
+        let cfg = Config::with_home_dir(home.path().into());
+        let mut store = PackageStore::load(&cfg).unwrap();
+
+        let (staged, eff) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store,
+            &cfg,
+            "global",
+            None,
+            false,
+            true, // link_mode
+            false,
+        )
+        .unwrap();
+        assert_eq!(staged.len(), 1);
+        assert!(staged[0].pending_swap.is_none());
+        assert!(staged[0].link_source.is_some());
+
+        commit_local_mcps(staged, &mut store).unwrap();
+
+        let target = cfg.global_mcp_dir().join("srv");
+        let meta = std::fs::symlink_metadata(&target).unwrap();
+        assert!(meta.file_type().is_symlink(), "expected symlink at {target:?}");
+        let link_target = std::fs::read_link(&target).unwrap();
+        assert_eq!(link_target, pkg.path().join("mcp").join("srv"));
+        // backend args still resolve via the (canonical) target path.
+        let srv = eff.unwrap()["srv"].clone();
+        let args = srv["args"].as_array().unwrap();
+        assert!(args[0].as_str().unwrap().ends_with("/srv/dist/index.js"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_mode_over_real_directory_errors() {
+        let m = manifest_with(
+            "@x/p",
+            "1.0.0",
+            vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
+        );
+        let pkg = make_pkg_with_mcp("srv", "x");
+        let home = tempdir().unwrap();
+        let cfg = Config::with_home_dir(home.path().into());
+
+        // Materialize a real folder at the target slot to simulate a
+        // previous copy install.
+        let real_dist = cfg.global_mcp_dir().join("srv").join("dist");
+        std::fs::create_dir_all(&real_dist).unwrap();
+        std::fs::write(real_dist.join("index.js"), "old").unwrap();
+
+        let store = PackageStore::load(&cfg).unwrap();
+        let err = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store,
+            &cfg,
+            "global",
+            None,
+            false,
+            true, // link_mode
+            false,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenkeiError::McpLinkOverReal { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_mode_over_existing_symlink_to_other_source_errors() {
+        use std::os::unix::fs::symlink;
+
+        let m = manifest_with(
+            "@x/p",
+            "1.0.0",
+            vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
+        );
+        let pkg_a = make_pkg_with_mcp("srv", "a");
+        let pkg_b = make_pkg_with_mcp("srv", "b");
+        let home = tempdir().unwrap();
+        let cfg = Config::with_home_dir(home.path().into());
+
+        std::fs::create_dir_all(cfg.global_mcp_dir()).unwrap();
+        symlink(
+            pkg_a.path().join("mcp").join("srv"),
+            cfg.global_mcp_dir().join("srv"),
+        )
+        .unwrap();
+
+        let store = PackageStore::load(&cfg).unwrap();
+        let err = stage_local_mcps(
+            &m,
+            pkg_b.path(),
+            &store,
+            &cfg,
+            "global",
+            None,
+            false,
+            true, // link_mode
+            false,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenkeiError::McpOwnerConflict { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_mode_idempotent_when_symlink_already_points_at_source() {
+        use std::os::unix::fs::symlink;
+
+        let m = manifest_with(
+            "@x/p",
+            "1.0.0",
+            vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
+        );
+        let pkg = make_pkg_with_mcp("srv", "x");
+        let home = tempdir().unwrap();
+        let cfg = Config::with_home_dir(home.path().into());
+
+        std::fs::create_dir_all(cfg.global_mcp_dir()).unwrap();
+        symlink(
+            pkg.path().join("mcp").join("srv"),
+            cfg.global_mcp_dir().join("srv"),
+        )
+        .unwrap();
+
+        let mut store = PackageStore::load(&cfg).unwrap();
+        let (staged, _) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store,
+            &cfg,
+            "global",
+            None,
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        commit_local_mcps(staged, &mut store).unwrap();
+        // Symlink is still there and untouched.
+        let meta = std::fs::symlink_metadata(cfg.global_mcp_dir().join("srv")).unwrap();
+        assert!(meta.file_type().is_symlink());
     }
 
     #[test]

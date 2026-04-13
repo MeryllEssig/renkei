@@ -53,6 +53,7 @@ fn build_config(global: bool) -> error::Result<Config> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn install_or_workspace(
     package_dir: &Path,
     config: &Config,
@@ -82,7 +83,8 @@ fn install_or_workspace(
             // (which would otherwise mutate the on-disk install state).
             let raw = manifest::Manifest::from_path(package_dir)?;
             raw.validate()?;
-            if !install::batch::confirm_batch(&[&raw], yes, allow_build)? {
+            let link_mode = options.source_kind == install::SourceKind::LocalLink;
+            if !install::batch::confirm_batch(&[&raw], yes, allow_build, link_mode)? {
                 return Ok(());
             }
             install::install_local(
@@ -136,6 +138,7 @@ fn run_install(
     members: Option<&[String]>,
     yes: bool,
     allow_build: bool,
+    link: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let requested_scope = if global {
@@ -150,9 +153,14 @@ fn run_install(
     match source::parse_source(source) {
         source::PackageSource::Local(path_str) => {
             let path = PathBuf::from(&path_str);
+            let base = if link {
+                install::InstallOptions::local_link(path_str)
+            } else {
+                install::InstallOptions::local(path_str)
+            };
             let options = install::InstallOptions {
                 force: force || backend_override.is_some(),
-                ..install::InstallOptions::local(path_str)
+                ..base
             };
             install_or_workspace(
                 &path,
@@ -166,6 +174,9 @@ fn run_install(
             )
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
+            if link {
+                return Err(RenkeiError::LinkRequiresLocalSource);
+            }
             let tmp_dir = git::clone_repo(&url, tag)?;
             let sha = git::resolve_head(tmp_dir.path())?;
             let options = install::InstallOptions {
@@ -237,6 +248,7 @@ fn main() {
             members,
             yes,
             allow_build,
+            link,
         } => run_install(
             &source,
             global,
@@ -250,6 +262,7 @@ fn main() {
             },
             yes,
             allow_build,
+            link,
             &registry,
         ),
         Commands::Install {

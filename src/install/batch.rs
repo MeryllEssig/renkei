@@ -29,10 +29,16 @@ pub(crate) fn confirm_batch(
     manifests: &[&Manifest],
     yes: bool,
     allow_build: bool,
+    link_mode: bool,
 ) -> Result<bool> {
     let preinstall = collect_preinstall(manifests);
     if !confirm_preinstall(&preinstall, yes)? {
         return Ok(false);
+    }
+    if link_mode {
+        // Linked installs never run builds — sources are live, the user
+        // owns the build lifecycle in their workspace.
+        return Ok(true);
     }
     let builds = collect_build_notices(manifests);
     confirm_builds(&builds, allow_build)
@@ -73,6 +79,6 @@ mod tests {
             required_env: None,
             messages: None,
         };
-        assert!(confirm_batch(&[&m], false, false).unwrap());
+        assert!(confirm_batch(&[&m], false, false, false).unwrap());
     }
 }
