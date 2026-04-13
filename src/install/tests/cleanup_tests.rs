@@ -41,6 +41,7 @@ fn test_cleanup_noop_on_missing_package() {
     let cache = InstallCache {
         version: 1,
         packages: HashMap::new(),
+        mcp_local: HashMap::new(),
     };
     cleanup::cleanup_previous_installation("@test/nonexistent", &cache, &config);
 }

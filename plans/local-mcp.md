@@ -110,8 +110,8 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 2: Install-cache v3 — `mcp_local` reference counting
 
-- [ ] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
-- [ ] 2.2 Add types:
+- [x] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
+- [x] 2.2 Add types:
   ```rust
   pub struct McpLocalEntry {
       pub owner_package: String,
@@ -126,11 +126,11 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
       pub project_root: Option<String>,  // None for global installs
   }
   ```
-- [ ] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
-- [ ] 2.4 Helpers on `InstallCache`:
+- [x] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
+- [x] 2.4 Helpers on `InstallCache`:
   - `add_mcp_local_ref(name, entry_ctor, new_ref) -> McpLocalOutcome` where the outcome is one of `{ FreshInstall, AddedRef, UpgradeRequired, ConflictDifferentOwner }`.
   - `remove_mcp_local_ref(name, match: McpLocalRef) -> Vec<String>` returning names to GC (empty-refs) for caller-driven cleanup.
-- [ ] 2.5 TDD in `src/install_cache.rs`:
+- [x] 2.5 TDD in `src/install_cache.rs`:
   - v2 cache migrates to v3 with empty `mcp_local`.
   - Fresh install → `FreshInstall`.
   - Second install of same `owner_package`, same version, new project → `AddedRef`, refs length == 2.

@@ -50,6 +50,7 @@ pub fn make_cache_with_artifacts(artifacts: Vec<(ArtifactKind, &str, &str)>) -> 
     InstallCache {
         version: 2,
         packages,
+        mcp_local: HashMap::new(),
     }
 }
 

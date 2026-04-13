@@ -95,6 +95,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages: HashMap::new(),
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert!(conflicts.is_empty());
@@ -111,6 +112,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         // Installing the same package — no conflict
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-a");
@@ -128,6 +130,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert_eq!(conflicts.len(), 1);
@@ -147,6 +150,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert_eq!(conflicts.len(), 1);
@@ -165,6 +169,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert!(conflicts.is_empty());
@@ -181,6 +186,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert!(conflicts.is_empty());
@@ -203,6 +209,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert_eq!(conflicts.len(), 2);
@@ -222,6 +229,7 @@ mod tests {
         let cache = InstallCache {
             version: 2,
             packages,
+            mcp_local: HashMap::new(),
         };
         let conflicts = detect_conflicts(&artifacts, &cache, "@test/pkg-b");
         assert!(conflicts.is_empty());

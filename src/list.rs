@@ -243,6 +243,7 @@ mod tests {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
                 .collect(),
+            mcp_local: HashMap::new(),
         }
     }
 
