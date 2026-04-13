@@ -116,11 +116,7 @@ fn strip_integrity_prefix(integrity: &str) -> &str {
         .unwrap_or(integrity)
 }
 
-pub fn install_from_lockfile(
-    config: &Config,
-    backends: &[&dyn Backend],
-    yes: bool,
-) -> Result<()> {
+pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend], yes: bool) -> Result<()> {
     let lockfile_path = config.lockfile_path();
 
     if config.is_project() && !lockfile_path.exists() {
@@ -207,11 +203,7 @@ struct PreparedEntry {
     _owned_tmp: Option<tempfile::TempDir>,
 }
 
-fn prepare_entry(
-    config: &Config,
-    name: &str,
-    entry: &LockfileEntry,
-) -> Result<PreparedEntry> {
+fn prepare_entry(config: &Config, name: &str, entry: &LockfileEntry) -> Result<PreparedEntry> {
     let archive = archive_path_for_entry(config, name, entry)?;
     match cache::compute_sha256(&archive) {
         Ok(actual_hash) => {
@@ -314,7 +306,6 @@ fn resolve_member_root(base: &Path, member: Option<&str>) -> PathBuf {
         None => base.to_path_buf(),
     }
 }
-
 
 #[cfg(test)]
 mod tests {

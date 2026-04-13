@@ -60,10 +60,7 @@ fn install_or_workspace(
     selected_members: Option<&[String]>,
     yes: bool,
 ) -> error::Result<()> {
-    match (
-        manifest::try_load_workspace(package_dir),
-        selected_members,
-    ) {
+    match (manifest::try_load_workspace(package_dir), selected_members) {
         (Some(members), selected) => workspace::install_workspace(
             package_dir,
             &members,
@@ -118,6 +115,7 @@ fn resolve_backends<'a>(
     Ok(registry.detect(config))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_install(
     source: &str,
     global: bool,

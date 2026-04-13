@@ -18,6 +18,7 @@ use crate::manifest::{Manifest, RequestedScope};
 /// 3. Deploy each member sequentially, collecting their postinstall messages.
 /// 4. Render every collected postinstall block at the very end, prefixed
 ///    with the package name.
+#[allow(clippy::too_many_arguments)]
 pub fn install_workspace(
     workspace_dir: &Path,
     members: &[String],

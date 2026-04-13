@@ -131,7 +131,12 @@ fn single_local_preinstall_with_yes_installs() {
 fn single_local_preinstall_in_non_tty_without_yes_errors_with_hint() {
     let home = tempdir().unwrap();
     setup_claude_home(home.path());
-    let pkg = build_pkg("@test/pre-noyes", "skill2", Some("Read the README first."), None);
+    let pkg = build_pkg(
+        "@test/pre-noyes",
+        "skill2",
+        Some("Read the README first."),
+        None,
+    );
 
     Command::cargo_bin("rk")
         .unwrap()
@@ -343,7 +348,10 @@ fn workspace_postinstall_only_renders_for_members_that_declare_one() {
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     // Only one Postinstall notice block should appear.
     let count = stdout.matches("Postinstall notice:").count();
-    assert_eq!(count, 1, "expected exactly one postinstall block; got\n{stdout}");
+    assert_eq!(
+        count, 1,
+        "expected exactly one postinstall block; got\n{stdout}"
+    );
     assert!(stdout.contains("Only A speaks."));
 }
 

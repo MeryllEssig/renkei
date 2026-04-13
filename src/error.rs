@@ -80,10 +80,14 @@ pub enum RenkeiError {
         available: Vec<String>,
     },
 
-    #[error("`-m`/`--member` requires a workspace package; this manifest has no `workspace` array.")]
+    #[error(
+        "`-m`/`--member` requires a workspace package; this manifest has no `workspace` array."
+    )]
     MemberFlagOnNonWorkspace,
 
-    #[error("`-m`/`--member` cannot be combined with a no-argument `rk install` (lockfile restore).")]
+    #[error(
+        "`-m`/`--member` cannot be combined with a no-argument `rk install` (lockfile restore)."
+    )]
     MemberFlagWithLockfileInstall,
 
     #[error(

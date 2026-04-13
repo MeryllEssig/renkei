@@ -12,10 +12,7 @@ fn setup_claude_home(home: &Path) {
 /// one skill named after the member. Returns the workspace TempDir.
 fn setup_local_workspace(members: &[(&str, &str, &str)]) -> tempfile::TempDir {
     let ws = tempdir().unwrap();
-    let names: Vec<String> = members
-        .iter()
-        .map(|(d, _, _)| format!("\"{d}\""))
-        .collect();
+    let names: Vec<String> = members.iter().map(|(d, _, _)| format!("\"{d}\"")).collect();
     fs::write(
         ws.path().join("renkei.json"),
         format!(r#"{{ "workspace": [{}] }}"#, names.join(", ")),
@@ -34,9 +31,7 @@ fn setup_local_workspace(members: &[(&str, &str, &str)]) -> tempfile::TempDir {
         .unwrap();
         fs::write(
             sdir.join("SKILL.md"),
-            format!(
-                "---\nname: {skill}\ndescription: test\n---\nContent of {skill}",
-            ),
+            format!("---\nname: {skill}\ndescription: test\n---\nContent of {skill}",),
         )
         .unwrap();
     }
@@ -68,10 +63,7 @@ fn setup_bare_workspace_repo(members: &[(&str, &str, &str)]) -> (tempfile::TempD
             .unwrap();
     }
 
-    let names: Vec<String> = members
-        .iter()
-        .map(|(d, _, _)| format!("\"{d}\""))
-        .collect();
+    let names: Vec<String> = members.iter().map(|(d, _, _)| format!("\"{d}\"")).collect();
     fs::write(
         work.path().join("renkei.json"),
         format!(r#"{{ "workspace": [{}] }}"#, names.join(", ")),
@@ -90,9 +82,7 @@ fn setup_bare_workspace_repo(members: &[(&str, &str, &str)]) -> (tempfile::TempD
         .unwrap();
         fs::write(
             sdir.join("SKILL.md"),
-            format!(
-                "---\nname: {skill}\ndescription: test\n---\nContent of {skill}",
-            ),
+            format!("---\nname: {skill}\ndescription: test\n---\nContent of {skill}",),
         )
         .unwrap();
     }
@@ -264,7 +254,11 @@ fn member_flag_on_non_workspace_fails() {
     .unwrap();
     let sdir = pkg.path().join("skills/foo");
     fs::create_dir_all(&sdir).unwrap();
-    fs::write(sdir.join("SKILL.md"), "---\nname: foo\ndescription: t\n---\n").unwrap();
+    fs::write(
+        sdir.join("SKILL.md"),
+        "---\nname: foo\ndescription: t\n---\n",
+    )
+    .unwrap();
 
     rk(home.path())
         .arg("install")

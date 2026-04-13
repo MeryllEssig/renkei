@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # Opt in to Node.js 24 for JavaScript-based actions ahead of GitHub's 2026-06 cutover.
+  # Removes deprecation warnings from actions/* that still ship Node 20 shims.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   check-version:
     runs-on: ubuntu-latest
