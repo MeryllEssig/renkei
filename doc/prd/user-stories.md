@@ -28,6 +28,8 @@
 
 14h. As a developer installing from a workspace repository, I want to install only the members I need via `-m <member>` (repeatable, CSV-aware) so I don't deploy unrelated packages, and I want the chosen member to be persisted in `rk.lock` so `rk install` (no-arg) replays the same subset.
 
+14i. As a package author, I want to declare a `messages.preinstall` notice (prerequisites, breaking changes) that the user must confirm before deployment so prerequisites stop being missed in READMEs, and a `messages.postinstall` notice with follow-up steps shown after a successful install. As a developer, I want one consolidated `[y/N]` prompt covering every package in the batch (single, workspace, or lockfile replay) and a `--yes` flag to accept everything in CI.
+
 ## Conflict management
 
 15. As a developer, I want to be alerted if two packages deploy a skill with the same name to avoid silent overwrites.

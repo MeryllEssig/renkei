@@ -81,3 +81,34 @@ On the first error during installation, immediate stop and rollback of all alrea
 ## Environment variables
 
 Missing required environment variables trigger a **warning** after installation, not a blocker. `rk doctor` re-checks them. The user configures after installation.
+
+## Preinstall confirmation
+
+Packages may declare a `messages.preinstall` string in the manifest. When present, every `rk install` invocation that touches such a package — single, workspace, or lockfile replay — gathers all preinstall notices into a single yellow/bold framed block, lists `@scope/name: <message>` per package, and asks once:
+
+```
+Preinstall notice:
+  @meryll/mr-review: This workflow expects the GitLab MCP server to already be configured.
+  @meryll/auto-test: Set OPENAI_API_KEY before installing.
+Install all? [y/N]
+```
+
+Rules:
+
+- The prompt runs **before** any cleanup or deploy work. Refusal exits with code 0 and leaves no artifacts deployed (cloned git sources stay in the cache for retry).
+- Pass `-y` / `--yes` to bypass the prompt and accept all notices. This is required in non-interactive environments (CI, scripted installs); without it, a non-TTY invocation that needs confirmation errors out with a hint pointing at `--yes`.
+- Notices are re-shown on every install — there is no "remember my answer" state.
+- Workspace and lockfile replay produce **one** prompt covering every package in the batch (no per-member prompt fatigue).
+
+## Postinstall notice
+
+Packages may also declare a `messages.postinstall` string. After a successful install, the message renders in a yellow/bold framed block:
+
+```
+Done. Deployed 2 artifact(s) for @meryll/mr-review
+  → /home/user/.claude/skills/renkei-review/SKILL.md
+Postinstall notice:
+  Run `rk doctor` to verify the install, then restart Claude Code.
+```
+
+Order is always: `Done.` summary → `requiredEnv` warnings → postinstall block. In workspace and lockfile-replay mode, every member's postinstall block appears at the **end of the batch** with a `@scope/name:` prefix, so the user sees a single consolidated list without scrolling back through install logs.

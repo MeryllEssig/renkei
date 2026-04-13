@@ -96,9 +96,9 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 
 ## Phase 8: Documentation
 
-- [ ] 8.1 Update `doc/prd/manifest.md`: document the `messages` object, both fields, the 2000-char cap, and what happens at install time.
-- [ ] 8.2 Update `doc/prd/installation.md`: describe the preinstall confirmation flow, the `--yes` flag, the non-TTY error, and the postinstall display order.
-- [ ] 8.3 Update `doc/prd/commands.md`: add `-y` / `--yes` to the `rk install` flag list.
-- [ ] 8.4 Add a user story under "Installation and deployment" in `doc/prd/user-stories.md` (preinstall consent + postinstall notice).
-- [ ] 8.5 Update `README.md` with a `messages` example in the `renkei.json` snippet and an `--yes` example in the install snippets.
-- [ ] 8.6 Update `PRD.md` index if the new content lives in a new sub-file (it should not — extend existing files).
+- [x] 8.1 Update `doc/prd/manifest.md`: document the `messages` object, both fields, the 2000-char cap, and what happens at install time.
+- [x] 8.2 Update `doc/prd/installation.md`: describe the preinstall confirmation flow, the `--yes` flag, the non-TTY error, and the postinstall display order.
+- [x] 8.3 ~~Update `doc/prd/commands.md`: add `-y` / `--yes` to the `rk install` flag list.~~ _→ Skipped: `commands.md` only covers `rk doctor` and `rk package` today (no install flag list). The `--yes` flag is documented in `README.md` usage table and `doc/prd/installation.md`._
+- [x] 8.4 Add a user story under "Installation and deployment" in `doc/prd/user-stories.md` (preinstall consent + postinstall notice). _→ US 14i._
+- [x] 8.5 Update `README.md` with a `messages` example in the `renkei.json` snippet and an `--yes` example in the install snippets.
+- [x] 8.6 Update `PRD.md` index if the new content lives in a new sub-file (it should not — extend existing files). _→ No new sub-file, index unchanged._

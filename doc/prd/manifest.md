@@ -19,12 +19,16 @@ By default, `rk install` deploys all declared members. Use `-m <member>` (repeat
 ## Manifest `renkei.json`
 
 - Required fields: `name` (scoped `@scope/name`, **required from v1**), `version` (semver), `description`, `author`, `license`, `backends`.
-- Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`.
+- Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`, `messages`.
 - `backends` declares which tools the package supports. Valid values: `"claude"`, `"cursor"`, `"codex"`, `"gemini"`, `"agents"`. At install time, the effective target is `manifest.backends ∩ user configured backends ∩ detected backends`. See [Multi-Backend Configuration](./multi-backend.md) for the full resolution pipeline.
 - **No `artifacts` field**: pure convention. The `skills/`, `hooks/`, `agents/` directories are the source of truth. Any file present in these directories is a deployed artifact.
 - `mcp` declares MCP configurations in the native `command`/`args`/`env` format (standard between Claude and Cursor, no extra abstraction).
 - `requiredEnv` lists environment variables with their descriptions.
 - `scope` controls where the package can be installed: `"any"` (default, both global and project), `"global"` (only with `-g`), or `"project"` (only without `-g`). See [Scope](./scope.md).
+- `messages` declares optional install-time notices for the user:
+  - `messages.preinstall`: shown before any deployment work, gated by a `[y/N]` prompt. Use it to communicate prerequisites (env vars to set, MCP servers to configure separately, breaking changes). Required to be confirmed every time; non-TTY callers must pass `--yes`. See [Installation > Preinstall confirmation](./installation.md#preinstall-confirmation).
+  - `messages.postinstall`: passive notice rendered after a successful install, after the `requiredEnv` warnings. Use it for follow-up steps (run `rk doctor`, restart Claude Code, etc.).
+  - Both are plain strings; `\n` allowed for multi-line. Hard cap of 2000 characters per field, enforced at manifest validation.
 
 ```json
 {
@@ -44,6 +48,10 @@ By default, `rk install` deploys all declared members. Use `-m <member>` (repeat
   },
   "requiredEnv": {
     "GITHUB_TOKEN": "Required for GitHub API access"
+  },
+  "messages": {
+    "preinstall": "This workflow expects the GitLab MCP server to already be configured.",
+    "postinstall": "Run `rk doctor` to verify the install, then restart Claude Code."
   }
 }
 ```

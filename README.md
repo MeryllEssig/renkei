@@ -104,6 +104,7 @@ Share via git or distribute the archive directly.
 | `rk install -g <source>` | Install globally (`~/`) |
 | `rk install --tag v1.0` | Pin to a git tag |
 | `rk install <source> -m <member>` | Install only the named workspace member (repeatable, CSV-aware) |
+| `rk install <source> --yes` | Skip the preinstall confirmation prompt (required in CI / non-TTY) |
 | `rk uninstall @scope/name` | Remove a package |
 | `rk list` | Show installed packages |
 | `rk doctor` | Run health diagnostics |
@@ -144,7 +145,11 @@ The `renkei.json` manifest supports these fields:
   "keywords": [],
   "mcp": { },
   "requiredEnv": { },
-  "workspace": ["packages/a", "packages/b"]
+  "workspace": ["packages/a", "packages/b"],
+  "messages": {
+    "preinstall": "Configure the GitLab MCP server before installing.",
+    "postinstall": "Run `rk doctor` to verify the install."
+  }
 }
 ```
 
@@ -160,6 +165,7 @@ The `renkei.json` manifest supports these fields:
 | `mcp` | No | MCP server configurations |
 | `requiredEnv` | No | Required environment variables |
 | `workspace` | No | Monorepo member paths |
+| `messages` | No | `preinstall` / `postinstall` install-time notices (≤ 2000 chars each) |
 
 ## Artifact Format
 
