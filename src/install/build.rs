@@ -1,8 +1,12 @@
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use owo_colors::OwoColorize;
+
 use crate::error::{RenkeiError, Result};
+use crate::manifest::Manifest;
 
 const PLAIN_WHITELIST: &[&str] = &[
     "PATH", "HOME", "USER", "LOGNAME", "LANG", "TMPDIR", "SHELL", "TERM",
@@ -122,6 +126,99 @@ pub fn run_build(steps: &[BuildStep], cwd: &Path) -> Result<()> {
     Ok(())
 }
 
+/// One local-MCP build declared by a manifest in the current install batch.
+/// Collected upfront so the user sees every build they're about to run in a
+/// single consolidated prompt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuildNotice {
+    pub full_name: String,
+    pub mcp_name: String,
+    pub steps: Vec<Vec<String>>,
+}
+
+/// Walk the batch and collect one `BuildNotice` per `(manifest, mcp_name)`
+/// pair whose manifest declares a non-empty `build` array. MCPs with only an
+/// `entrypoint` (prebuilt) produce no notice because there's nothing to run.
+pub fn collect_build_notices(manifests: &[&Manifest]) -> Vec<BuildNotice> {
+    let mut out = Vec::new();
+    for m in manifests {
+        let Some(ref mcps) = m.mcp else { continue };
+        let mut names: Vec<&String> = mcps.keys().collect();
+        names.sort();
+        for name in names {
+            let server = &mcps[name];
+            if let Some(ref build) = server.build {
+                if !build.is_empty() {
+                    out.push(BuildNotice {
+                        full_name: m.name.clone(),
+                        mcp_name: name.clone(),
+                        steps: build.clone(),
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Render the consolidated build block to a string. Public for
+/// snapshot-style testing; the production path writes straight to stdout.
+pub fn render_build_block(notices: &[BuildNotice]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{}\n",
+        "Build notice: the following commands will execute with a minimal environment:"
+            .yellow()
+            .bold()
+    ));
+    for n in notices {
+        let joined = n
+            .steps
+            .iter()
+            .map(|s| s.join(" "))
+            .collect::<Vec<_>>()
+            .join(" && ");
+        out.push_str(&format!(
+            "  {} → {}: {}\n",
+            n.full_name.bold(),
+            n.mcp_name,
+            joined
+        ));
+    }
+    out.push_str("  (no shell: each step runs via execve with a filtered env)\n");
+    out
+}
+
+/// Prompt (or auto-accept) before running the builds listed in `notices`.
+///
+/// Returns:
+/// - `Ok(true)`  → no notices, OR `allow_build == true`, OR user accepted at the prompt.
+/// - `Ok(false)` → user declined at the prompt (caller should exit 0).
+/// - `Err(BuildRequiresConfirmation)` → there are notices but no TTY and `allow_build == false`.
+pub fn confirm_builds(notices: &[BuildNotice], allow_build: bool) -> Result<bool> {
+    if notices.is_empty() {
+        return Ok(true);
+    }
+    if allow_build {
+        return Ok(true);
+    }
+    if !std::io::stdin().is_terminal() {
+        return Err(RenkeiError::BuildRequiresConfirmation);
+    }
+
+    print!("{}", render_build_block(notices));
+
+    let answer = inquire::Confirm::new("Run all builds?")
+        .with_default(false)
+        .prompt()
+        .map_err(|e| RenkeiError::DeploymentFailed(format!("Build confirmation failed: {e}")))?;
+
+    if !answer {
+        println!("{}", "Installation cancelled.".yellow());
+    }
+    Ok(answer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +227,177 @@ mod tests {
     /// Tests in this module mutate process env; serialize them so they
     /// don't see each other's writes.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    use crate::manifest::{ManifestScope, McpServer};
+
+    fn manifest_with_mcps(name: &str, mcps: Vec<(&str, McpServer)>) -> Manifest {
+        let map: HashMap<String, McpServer> =
+            mcps.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        Manifest {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            description: "x".to_string(),
+            author: "a".to_string(),
+            license: "MIT".to_string(),
+            backends: vec!["claude".to_string()],
+            keywords: vec![],
+            scope: ManifestScope::default(),
+            mcp: if map.is_empty() { None } else { Some(map) },
+            required_env: None,
+            messages: None,
+        }
+    }
+
+    fn local_mcp(build: Option<Vec<Vec<&str>>>, entrypoint: Option<&str>) -> McpServer {
+        McpServer {
+            entrypoint: entrypoint.map(String::from),
+            build: build.map(|b| {
+                b.into_iter()
+                    .map(|s| s.into_iter().map(String::from).collect())
+                    .collect()
+            }),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn collect_build_notices_skips_external_mcps() {
+        let m = manifest_with_mcps(
+            "@x/a",
+            vec![(
+                "external",
+                McpServer {
+                    entrypoint: None,
+                    build: None,
+                    extra: serde_json::Map::new(),
+                },
+            )],
+        );
+        assert!(collect_build_notices(&[&m]).is_empty());
+    }
+
+    #[test]
+    fn collect_build_notices_skips_prebuilt_local_mcps() {
+        // entrypoint set but no build → prebuilt, nothing to run
+        let m = manifest_with_mcps(
+            "@x/a",
+            vec![("prebuilt", local_mcp(None, Some("dist/index.js")))],
+        );
+        assert!(collect_build_notices(&[&m]).is_empty());
+    }
+
+    #[test]
+    fn collect_build_notices_emits_one_per_local_mcp_with_build() {
+        let m = manifest_with_mcps(
+            "@x/a",
+            vec![
+                (
+                    "srv-1",
+                    local_mcp(Some(vec![vec!["bun", "install"]]), Some("dist/index.js")),
+                ),
+                (
+                    "srv-2",
+                    local_mcp(
+                        Some(vec![vec!["cargo", "build", "--release"]]),
+                        Some("target/release/srv2"),
+                    ),
+                ),
+            ],
+        );
+        let notices = collect_build_notices(&[&m]);
+        assert_eq!(notices.len(), 2);
+        // sorted by mcp name
+        assert_eq!(notices[0].mcp_name, "srv-1");
+        assert_eq!(notices[1].mcp_name, "srv-2");
+        assert_eq!(notices[0].full_name, "@x/a");
+        assert_eq!(
+            notices[0].steps,
+            vec![vec!["bun".to_string(), "install".to_string()]]
+        );
+    }
+
+    #[test]
+    fn collect_build_notices_preserves_manifest_order() {
+        let a = manifest_with_mcps(
+            "@x/a",
+            vec![("foo", local_mcp(Some(vec![vec!["true"]]), Some("a.js")))],
+        );
+        let b = manifest_with_mcps(
+            "@x/b",
+            vec![("bar", local_mcp(Some(vec![vec!["true"]]), Some("b.js")))],
+        );
+        let notices = collect_build_notices(&[&a, &b]);
+        assert_eq!(notices[0].full_name, "@x/a");
+        assert_eq!(notices[1].full_name, "@x/b");
+    }
+
+    #[test]
+    fn collect_build_notices_skips_empty_build_array() {
+        let m = manifest_with_mcps(
+            "@x/a",
+            vec![("srv", local_mcp(Some(vec![]), Some("dist/index.js")))],
+        );
+        assert!(collect_build_notices(&[&m]).is_empty());
+    }
+
+    #[test]
+    fn confirm_builds_with_no_notices_returns_true_without_prompt() {
+        assert!(confirm_builds(&[], false).unwrap());
+    }
+
+    #[test]
+    fn confirm_builds_with_allow_flag_returns_true_without_prompt() {
+        let n = vec![BuildNotice {
+            full_name: "@x/a".into(),
+            mcp_name: "srv".into(),
+            steps: vec![vec!["bun".into(), "install".into()]],
+        }];
+        assert!(confirm_builds(&n, true).unwrap());
+    }
+
+    #[test]
+    fn confirm_builds_in_non_tty_without_allow_errors() {
+        // cargo test stdin is not a TTY.
+        let n = vec![BuildNotice {
+            full_name: "@x/a".into(),
+            mcp_name: "srv".into(),
+            steps: vec![vec!["bun".into(), "install".into()]],
+        }];
+        let err = confirm_builds(&n, false).unwrap_err();
+        assert!(matches!(err, RenkeiError::BuildRequiresConfirmation));
+    }
+
+    #[test]
+    fn render_build_block_lists_each_notice() {
+        let n = vec![
+            BuildNotice {
+                full_name: "@x/a".into(),
+                mcp_name: "srv-1".into(),
+                steps: vec![vec!["bun".into(), "install".into()], vec!["bun".into(), "run".into(), "build".into()]],
+            },
+            BuildNotice {
+                full_name: "@x/b".into(),
+                mcp_name: "srv-2".into(),
+                steps: vec![vec!["cargo".into(), "build".into()]],
+            },
+        ];
+        let out = render_build_block(&n);
+        assert!(out.contains("Build notice"));
+        assert!(out.contains("@x/a"));
+        assert!(out.contains("srv-1"));
+        assert!(out.contains("bun install && bun run build"));
+        assert!(out.contains("@x/b"));
+        assert!(out.contains("srv-2"));
+        assert!(out.contains("cargo build"));
+        assert!(out.contains("no shell"));
+    }
+
+    #[test]
+    fn build_requires_confirmation_message_mentions_allow_build() {
+        let msg = RenkeiError::BuildRequiresConfirmation.to_string();
+        assert!(msg.contains("--allow-build"));
+        assert!(msg.contains("non-interactive"));
+    }
 
     #[test]
     fn test_should_keep_plain_whitelist() {

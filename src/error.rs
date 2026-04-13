@@ -95,6 +95,11 @@ pub enum RenkeiError {
     )]
     PreinstallRequiresConfirmation,
 
+    #[error(
+        "Refusing to run build steps in non-interactive mode. Re-run with --allow-build to accept all build commands."
+    )]
+    BuildRequiresConfirmation,
+
     #[error("Build step failed: `{step}` exited with code {exit_code:?}")]
     BuildFailed {
         step: String,

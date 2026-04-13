@@ -16,6 +16,7 @@
 use crate::error::Result;
 use crate::manifest::Manifest;
 
+use super::build::{collect_build_notices, confirm_builds};
 use super::messages::{collect_preinstall, confirm_preinstall};
 use super::print_postinstall_block;
 
@@ -27,10 +28,14 @@ use super::print_postinstall_block;
 pub(crate) fn confirm_batch(
     manifests: &[&Manifest],
     yes: bool,
-    _allow_build: bool,
+    allow_build: bool,
 ) -> Result<bool> {
-    let notices = collect_preinstall(manifests);
-    confirm_preinstall(&notices, yes)
+    let preinstall = collect_preinstall(manifests);
+    if !confirm_preinstall(&preinstall, yes)? {
+        return Ok(false);
+    }
+    let builds = collect_build_notices(manifests);
+    confirm_builds(&builds, allow_build)
 }
 
 /// Print one labelled postinstall block per `(label, message)` pair, in order.
