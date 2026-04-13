@@ -222,7 +222,7 @@ mod tests {
                 vec![make_artifact(
                     ArtifactKind::Skill,
                     "review",
-                    "/home/.claude/skills/renkei-review/SKILL.md",
+                    "/home/.claude/skills/review/SKILL.md",
                 )],
             ),
         );

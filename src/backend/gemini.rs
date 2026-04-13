@@ -27,10 +27,7 @@ impl Backend for GeminiBackend {
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Gemini);
-        let skill_dir = dirs
-            .skills_dir
-            .unwrap()
-            .join(format!("renkei-{}", artifact.name));
+        let skill_dir = dirs.skills_dir.unwrap().join(&artifact.name);
         super::deploy_skill_dir(artifact, skill_dir)
     }
 
@@ -106,7 +103,7 @@ mod tests {
 
         let result = GeminiBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = home.path().join(".gemini/skills/renkei-review");
+        let expected_dir = home.path().join(".gemini/skills/review");
         assert_eq!(result.deployed_path, expected_dir);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected_dir.join("SKILL.md").exists());
@@ -127,7 +124,7 @@ mod tests {
 
         GeminiBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = project.path().join(".gemini/skills/renkei-lint");
+        let expected_dir = project.path().join(".gemini/skills/lint");
         assert!(expected_dir.join("SKILL.md").exists());
     }
 

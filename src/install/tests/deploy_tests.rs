@@ -61,9 +61,9 @@ fn test_rollback_cleans_partial_deploy() {
     assert!(!home.path().join(".claude/agents/deploy.md").exists());
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
-    assert!(!home.path().join(".claude/skills/renkei-lint").exists());
+    assert!(!home.path().join(".claude/skills/lint").exists());
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn test_no_dedup_when_agents_not_in_active_set() {
     assert!(result.is_ok(), "{:?}", result);
     assert!(home
         .path()
-        .join(".claude/skills/renkei-check/SKILL.md")
+        .join(".claude/skills/check/SKILL.md")
         .exists());
 }
 

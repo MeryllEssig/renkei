@@ -22,10 +22,7 @@ impl Backend for ClaudeBackend {
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Claude);
-        let skill_dir = dirs
-            .skills_dir
-            .unwrap()
-            .join(format!("renkei-{}", artifact.name));
+        let skill_dir = dirs.skills_dir.unwrap().join(&artifact.name);
         super::deploy_skill_dir(artifact, skill_dir)
     }
 
@@ -135,7 +132,7 @@ mod tests {
         let backend = ClaudeBackend;
         let result = backend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = home.path().join(".claude/skills/renkei-review");
+        let expected_dir = home.path().join(".claude/skills/review");
         assert_eq!(result.deployed_path, expected_dir);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected_dir.join("SKILL.md").exists());

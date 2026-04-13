@@ -34,8 +34,8 @@ fn test_install_workspace_installs_all_members() {
         .stdout(predicate::str::contains("@test/member-b"));
 
     // Verify both skills deployed
-    let review = home.path().join(".claude/skills/renkei-review/SKILL.md");
-    let lint = home.path().join(".claude/skills/renkei-lint/SKILL.md");
+    let review = home.path().join(".claude/skills/review/SKILL.md");
+    let lint = home.path().join(".claude/skills/lint/SKILL.md");
     assert!(review.exists(), "review skill should be deployed");
     assert!(lint.exists(), "lint skill should be deployed");
 
@@ -156,7 +156,7 @@ fn test_install_workspace_missing_member_manifest() {
     assert!(
         !home
             .path()
-            .join(".claude/skills/renkei-foo/SKILL.md")
+            .join(".claude/skills/foo/SKILL.md")
             .exists(),
         "No member should be installed on failure"
     );
@@ -181,7 +181,7 @@ fn test_workspace_lockfile_roundtrip() {
     fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Step 3: Restore from lockfile
@@ -197,10 +197,10 @@ fn test_workspace_lockfile_roundtrip() {
     // Step 4: Verify both skills are re-deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }

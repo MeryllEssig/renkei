@@ -38,7 +38,7 @@ fn test_uninstall_global_after_install() {
         .success();
 
     // Verify skill exists
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 
     // Uninstall
@@ -81,7 +81,7 @@ fn test_uninstall_project_after_install() {
 
     // On macOS tempdir resolves through /private, canonicalize to match
     let canonical_project = project.path().canonicalize().unwrap();
-    let skill_path = canonical_project.join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = canonical_project.join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 
     // Uninstall
@@ -164,11 +164,11 @@ fn test_uninstall_leaves_other_packages() {
     // Verify both skills exist
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-check/SKILL.md")
+        .join(".claude/skills/check/SKILL.md")
         .exists());
 
     // Uninstall only the first one
@@ -191,11 +191,11 @@ fn test_uninstall_leaves_other_packages() {
 
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-check/SKILL.md")
+        .join(".claude/skills/check/SKILL.md")
         .exists());
 }
 
@@ -232,8 +232,8 @@ fn test_uninstall_removes_from_all_backends() {
         .success();
 
     // Verify both backends have the skill
-    let claude_skill = home.path().join(".claude/skills/renkei-review/SKILL.md");
-    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
+    let claude_skill = home.path().join(".claude/skills/review/SKILL.md");
+    let agents_skill = home.path().join(".agents/skills/review/SKILL.md");
     assert!(claude_skill.exists());
     assert!(agents_skill.exists());
 

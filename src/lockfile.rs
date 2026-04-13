@@ -694,7 +694,7 @@ mod tests {
         assert!(lockfile_path.exists());
 
         // Step 2: delete deployed skill (simulate clean state)
-        let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        let skill_path = home.path().join(".claude/skills/review/SKILL.md");
         assert!(skill_path.exists());
         fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
         assert!(!skill_path.exists());
@@ -815,7 +815,7 @@ mod tests {
         // Install from lockfile — should fall back to local source
         install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true).unwrap();
 
-        let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+        let skill_path = home.path().join(".claude/skills/review/SKILL.md");
         assert!(skill_path.exists());
     }
 

@@ -121,7 +121,7 @@ fn test_deploy_creates_files() {
     assert!(deployment.deployed_map.contains_key("claude"));
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 }
 
@@ -151,7 +151,7 @@ fn test_full_pipeline_discover_resolve_deploy() {
     assert!(!deployment.all_deployed.is_empty());
 
     // Verify
-    let skill_path = home.path().join(".claude/skills/renkei-lint/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/lint/SKILL.md");
     assert!(skill_path.exists());
 }
 
@@ -187,7 +187,7 @@ fn test_pipeline_cleanup_removes_previous_install() {
     );
     store.save(&config).unwrap();
 
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 
     // Re-install: cleanup should remove old files before deploying new
@@ -229,7 +229,7 @@ fn test_install_from_lock_entry_deploys_skill() {
     )
     .unwrap();
 
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 }
 
@@ -302,6 +302,6 @@ fn test_install_from_lock_entry_force_overwrites_conflicts() {
     )
     .unwrap();
 
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 }

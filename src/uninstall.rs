@@ -87,7 +87,7 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create the deployed skill file
-        let skill_dir = home.path().join(".claude/skills/renkei-review");
+        let skill_dir = home.path().join(".claude/skills/review");
         std::fs::create_dir_all(&skill_dir).unwrap();
         let skill_path = skill_dir.join("SKILL.md");
         std::fs::write(&skill_path, "# Review skill").unwrap();
@@ -270,12 +270,12 @@ mod tests {
         let config = make_config_global(home.path());
 
         // Create skill files for both packages
-        let skill_a_dir = home.path().join(".claude/skills/renkei-a");
+        let skill_a_dir = home.path().join(".claude/skills/a");
         std::fs::create_dir_all(&skill_a_dir).unwrap();
         let skill_a = skill_a_dir.join("SKILL.md");
         std::fs::write(&skill_a, "# Skill A").unwrap();
 
-        let skill_b_dir = home.path().join(".claude/skills/renkei-b");
+        let skill_b_dir = home.path().join(".claude/skills/b");
         std::fs::create_dir_all(&skill_b_dir).unwrap();
         let skill_b = skill_b_dir.join("SKILL.md");
         std::fs::write(&skill_b, "# Skill B").unwrap();

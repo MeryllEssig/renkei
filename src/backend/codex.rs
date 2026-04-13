@@ -34,7 +34,7 @@ impl Backend for CodexBackend {
             .backend(BackendId::Agents)
             .skills_dir
             .unwrap()
-            .join(format!("renkei-{}", artifact.name));
+            .join(&artifact.name);
         super::deploy_skill_dir(artifact, skill_dir)
     }
 
@@ -237,7 +237,7 @@ mod tests {
 
         let result = CodexBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = home.path().join(".agents/skills/renkei-review");
+        let expected_dir = home.path().join(".agents/skills/review");
         assert_eq!(result.deployed_path, expected_dir);
         assert!(expected_dir.join("SKILL.md").exists());
         assert_eq!(

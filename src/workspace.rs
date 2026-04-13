@@ -192,11 +192,11 @@ mod tests {
 
         assert!(home
             .path()
-            .join(".claude/skills/renkei-review/SKILL.md")
+            .join(".claude/skills/review/SKILL.md")
             .exists());
         assert!(home
             .path()
-            .join(".claude/skills/renkei-lint/SKILL.md")
+            .join(".claude/skills/lint/SKILL.md")
             .exists());
 
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
@@ -252,7 +252,7 @@ mod tests {
 
         assert!(!home
             .path()
-            .join(".claude/skills/renkei-foo/SKILL.md")
+            .join(".claude/skills/foo/SKILL.md")
             .exists());
     }
 
@@ -306,11 +306,11 @@ mod tests {
 
         assert!(home
             .path()
-            .join(".claude/skills/renkei-review/SKILL.md")
+            .join(".claude/skills/review/SKILL.md")
             .exists());
         assert!(!home
             .path()
-            .join(".claude/skills/renkei-lint/SKILL.md")
+            .join(".claude/skills/lint/SKILL.md")
             .exists());
 
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
@@ -352,7 +352,7 @@ mod tests {
         assert!(msg.contains("member-b"));
         assert!(!home
             .path()
-            .join(".claude/skills/renkei-review/SKILL.md")
+            .join(".claude/skills/review/SKILL.md")
             .exists());
     }
 

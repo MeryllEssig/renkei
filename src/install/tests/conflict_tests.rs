@@ -40,7 +40,7 @@ fn test_conflict_force_overwrites() {
     )
     .unwrap();
 
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
     let content = fs::read_to_string(&skill_path).unwrap();
     assert!(content.contains("Content of review"));
@@ -125,10 +125,10 @@ fn test_conflict_rename_deploys_under_new_name() {
     )
     .unwrap();
 
-    let a_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let a_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(a_path.exists());
 
-    let b_path = home.path().join(".claude/skills/renkei-review-v2/SKILL.md");
+    let b_path = home.path().join(".claude/skills/review-v2/SKILL.md");
     assert!(b_path.exists());
 
     let content = fs::read_to_string(&b_path).unwrap();
@@ -235,10 +235,10 @@ fn test_no_conflict_different_skill_names() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }

@@ -123,7 +123,7 @@ fn single_local_preinstall_with_yes_installs() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-skill1/SKILL.md")
+        .join(".claude/skills/skill1/SKILL.md")
         .exists());
 }
 
@@ -151,7 +151,7 @@ fn single_local_preinstall_in_non_tty_without_yes_errors_with_hint() {
     // Nothing should have been deployed.
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-skill2/SKILL.md")
+        .join(".claude/skills/skill2/SKILL.md")
         .exists());
     // No lockfile entry either.
     assert!(!home.path().join(".renkei/rk.lock").exists());
@@ -175,7 +175,7 @@ fn single_local_no_messages_does_not_prompt_in_non_tty() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-skill3/SKILL.md")
+        .join(".claude/skills/skill3/SKILL.md")
         .exists());
 }
 
@@ -269,11 +269,11 @@ fn workspace_two_members_with_preinstall_show_single_block_and_one_yes_bypasses(
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-ska/SKILL.md")
+        .join(".claude/skills/ska/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-skb/SKILL.md")
+        .join(".claude/skills/skb/SKILL.md")
         .exists());
 }
 
@@ -298,11 +298,11 @@ fn workspace_preinstall_in_non_tty_without_yes_errors_and_installs_nothing() {
     // Neither member should have been deployed (refusal short-circuits the batch).
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-skna/SKILL.md")
+        .join(".claude/skills/skna/SKILL.md")
         .exists());
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-sknb/SKILL.md")
+        .join(".claude/skills/sknb/SKILL.md")
         .exists());
 }
 
@@ -399,7 +399,7 @@ fn lockfile_replay_with_preinstall_requires_yes_in_non_tty() {
         .success();
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lfsk/SKILL.md")
+        .join(".claude/skills/lfsk/SKILL.md")
         .exists());
 }
 
@@ -425,6 +425,6 @@ fn manifest_with_oversized_preinstall_fails_validation_pre_install() {
     // Nothing deployed.
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-bigsk/SKILL.md")
+        .join(".claude/skills/bigsk/SKILL.md")
         .exists());
 }

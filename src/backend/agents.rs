@@ -22,10 +22,7 @@ impl Backend for AgentsBackend {
 
     fn deploy_skill(&self, artifact: &Artifact, config: &Config) -> Result<DeployedArtifact> {
         let dirs = config.backend(BackendId::Agents);
-        let skill_dir = dirs
-            .skills_dir
-            .unwrap()
-            .join(format!("renkei-{}", artifact.name));
+        let skill_dir = dirs.skills_dir.unwrap().join(&artifact.name);
         super::deploy_skill_dir(artifact, skill_dir)
     }
 
@@ -90,7 +87,7 @@ mod tests {
 
         let result = AgentsBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = home.path().join(".agents/skills/renkei-review");
+        let expected_dir = home.path().join(".agents/skills/review");
         assert_eq!(result.deployed_path, expected_dir);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected_dir.join("SKILL.md").exists());
@@ -119,7 +116,7 @@ mod tests {
 
         let result = AgentsBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_dir = project.path().join(".agents/skills/renkei-lint");
+        let expected_dir = project.path().join(".agents/skills/lint");
         assert_eq!(result.deployed_path, expected_dir);
         assert!(expected_dir.join("SKILL.md").exists());
     }

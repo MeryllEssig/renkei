@@ -104,7 +104,7 @@ fn test_lockfile_roundtrip_global() {
         .success();
 
     // Verify skill is deployed
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
 
     // Step 2: delete deployed files (but keep archive and lockfile)

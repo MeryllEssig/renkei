@@ -36,7 +36,7 @@ impl Backend for CursorBackend {
         let frontmatter = "---\ndescription: \"\"\nalwaysApply: false\n---\n";
         let content = format!("{frontmatter}{source_content}");
 
-        let dest = dest_dir.join(format!("renkei-{}.mdc", artifact.name));
+        let dest = dest_dir.join(format!("{}.mdc", artifact.name));
         fs::write(&dest, content).map_err(|e| {
             RenkeiError::DeploymentFailed(format!("Failed to write {}: {}", dest.display(), e))
         })?;
@@ -113,7 +113,7 @@ mod tests {
 
         let result = CursorBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected_path = home.path().join(".cursor/rules/renkei-review.mdc");
+        let expected_path = home.path().join(".cursor/rules/review.mdc");
         assert_eq!(result.deployed_path, expected_path);
         assert_eq!(result.artifact_kind, ArtifactKind::Skill);
         assert!(expected_path.exists());
@@ -134,7 +134,7 @@ mod tests {
 
         CursorBackend.deploy_skill(&artifact, &config).unwrap();
 
-        let expected = project.path().join(".cursor/rules/renkei-lint.mdc");
+        let expected = project.path().join(".cursor/rules/lint.mdc");
         assert!(expected.exists());
     }
 

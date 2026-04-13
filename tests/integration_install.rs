@@ -33,7 +33,7 @@ fn test_install_valid_local_package() {
         .stdout(predicate::str::contains("Done."));
 
     // Verify skill deployed
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(
         skill_path.exists(),
         "SKILL.md should exist at {:?}",
@@ -88,11 +88,11 @@ fn test_install_multi_skill_package() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }
 
@@ -210,14 +210,14 @@ fn test_install_mixed_package() {
     // Verify skills deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
-    // Verify agent deployed (no renkei- prefix, no subdirectory)
+    // Verify agent deployed (flat file, no subdirectory)
     assert!(home.path().join(".claude/agents/deploy.md").exists());
 
     // Verify install-cache.json
@@ -290,11 +290,11 @@ fn test_reinstall_replaces_artifacts() {
     // Verify all files still exist after reinstall
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
     assert!(home.path().join(".claude/agents/deploy.md").exists());
 }
@@ -457,7 +457,7 @@ fn test_install_mixed_with_hooks() {
     // Verify skill and agent deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home.path().join(".claude/agents/deploy.md").exists());
 
@@ -579,7 +579,7 @@ fn test_install_mcp_package() {
     // Verify skill deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-api/SKILL.md")
+        .join(".claude/skills/api/SKILL.md")
         .exists());
 
     // Verify ~/.claude.json has MCP config
@@ -786,7 +786,7 @@ fn test_install_env_only_no_mcp() {
     // But skill is deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-check/SKILL.md")
+        .join(".claude/skills/check/SKILL.md")
         .exists());
 }
 
@@ -827,7 +827,7 @@ fn test_install_project_scope_deploys_to_project_root() {
         .stdout(predicate::str::contains("Done."));
 
     // Skills deployed to project/.claude/skills/
-    let skill_path = project.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = project.path().join(".claude/skills/review/SKILL.md");
     assert!(
         skill_path.exists(),
         "Skill should be at project root: {:?}",
@@ -837,7 +837,7 @@ fn test_install_project_scope_deploys_to_project_root() {
     // NOT in global ~/.claude/skills/
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Install-cache is per-project
@@ -874,7 +874,7 @@ fn test_install_project_scope_hooks_deploy_globally() {
     // Skill at project root
     assert!(project
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Agent at project root
@@ -907,7 +907,7 @@ fn test_install_project_scope_mcp_deploys_globally() {
     // Skill at project root
     assert!(project
         .path()
-        .join(".claude/skills/renkei-api/SKILL.md")
+        .join(".claude/skills/api/SKILL.md")
         .exists());
 
     // MCP deployed globally
@@ -935,7 +935,7 @@ fn test_install_global_flag_deploys_to_home() {
     // Skills at global ~/.claude/
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Global install-cache
@@ -993,7 +993,7 @@ fn test_install_scope_global_only_with_flag_succeeds() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-admin/SKILL.md")
+        .join(".claude/skills/admin/SKILL.md")
         .exists());
 }
 
@@ -1031,7 +1031,7 @@ fn test_install_scope_project_only_without_flag_succeeds() {
 
     assert!(project
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }
 
@@ -1054,7 +1054,7 @@ fn test_reinstall_project_scope_cleans_up_old_artifacts() {
 
     assert!(project
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Second install (reinstall)
@@ -1071,7 +1071,7 @@ fn test_reinstall_project_scope_cleans_up_old_artifacts() {
     // Skill still exists (redeployed)
     assert!(project
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Only 1 entry in project install-cache
@@ -1235,7 +1235,7 @@ fn test_install_git_from_bare_repo() {
     // Verify skill deployed
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Verify cache has git source
@@ -1355,7 +1355,7 @@ fn test_conflict_force_overwrites() {
         .success();
 
     // Verify A's skill is deployed
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
     let content_a = fs::read_to_string(&skill_path).unwrap();
     assert!(content_a.contains("package A"));
@@ -1446,11 +1446,11 @@ fn test_no_conflict_different_skill_names_integration() {
     // Both skills exist
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-check/SKILL.md")
+        .join(".claude/skills/check/SKILL.md")
         .exists());
 }
 
@@ -1489,11 +1489,11 @@ fn test_force_preserves_other_artifacts() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
     // Install conflict-pkg-b (skill "review" only) with --force
@@ -1510,12 +1510,12 @@ fn test_force_preserves_other_artifacts() {
     // conflict-multi-a should still have "lint"
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
     // "review" should now be from conflict-pkg-b
     let review =
-        fs::read_to_string(home.path().join(".claude/skills/renkei-review/SKILL.md")).unwrap();
+        fs::read_to_string(home.path().join(".claude/skills/review/SKILL.md")).unwrap();
     assert!(review.contains("package B"));
 
     // Check cache: conflict-multi-a should still have "lint" but NOT "review"
@@ -1548,11 +1548,11 @@ fn test_install_multi_backend_claude_and_agents() {
         .stdout(predicate::str::contains("Done."));
 
     // Skill deployed to claude
-    let claude_skill = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let claude_skill = home.path().join(".claude/skills/review/SKILL.md");
     assert!(claude_skill.exists(), "Skill should exist in .claude/");
 
     // Skill deployed to agents
-    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
+    let agents_skill = home.path().join(".agents/skills/review/SKILL.md");
     assert!(agents_skill.exists(), "Skill should exist in .agents/");
 
     // Cache has both backends
@@ -1584,14 +1584,14 @@ fn test_install_claude_only_still_works() {
     // Claude skill exists
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
 
     // Agents skill should NOT exist (manifest only lists "claude")
     assert!(
         !home
             .path()
-            .join(".agents/skills/renkei-review/SKILL.md")
+            .join(".agents/skills/review/SKILL.md")
             .exists(),
         "Agents backend should not deploy when not in manifest"
     );
@@ -1618,7 +1618,7 @@ fn test_install_with_backend_override_cursor() {
         .stdout(predicate::str::contains("Done."));
 
     // Cursor skill exists
-    let cursor_skill = home.path().join(".cursor/rules/renkei-review.mdc");
+    let cursor_skill = home.path().join(".cursor/rules/review.mdc");
     assert!(
         cursor_skill.exists(),
         "Cursor rule should exist: {:?}",
@@ -1636,7 +1636,7 @@ fn test_install_with_backend_override_cursor() {
     assert!(
         !home
             .path()
-            .join(".claude/skills/renkei-review/SKILL.md")
+            .join(".claude/skills/review/SKILL.md")
             .exists(),
         "Claude skill should not be deployed when --backend cursor is used"
     );
@@ -1659,7 +1659,7 @@ fn test_install_dedup_agents_codex() {
         .stdout(predicate::str::contains("Done."));
 
     // Skill in .agents/skills/ (deployed by agents backend)
-    let agents_skill = home.path().join(".agents/skills/renkei-review/SKILL.md");
+    let agents_skill = home.path().join(".agents/skills/review/SKILL.md");
     assert!(agents_skill.exists(), "Skill should be in .agents/skills/");
 
     // Codex did NOT deploy a duplicate to its own path (it reads from .agents/)
@@ -1692,7 +1692,7 @@ fn test_install_dedup_agents_gemini() {
     // Skill in .agents/skills/ (deployed by agents backend)
     assert!(
         home.path()
-            .join(".agents/skills/renkei-review/SKILL.md")
+            .join(".agents/skills/review/SKILL.md")
             .exists(),
         "Skill should be in .agents/skills/"
     );
@@ -1701,7 +1701,7 @@ fn test_install_dedup_agents_gemini() {
     assert!(
         !home
             .path()
-            .join(".gemini/skills/renkei-review/SKILL.md")
+            .join(".gemini/skills/review/SKILL.md")
             .exists(),
         "Gemini should not duplicate skill when agents backend is active"
     );

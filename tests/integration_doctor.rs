@@ -110,7 +110,7 @@ fn test_doctor_deleted_skill_file() {
         .success();
 
     // Delete the deployed skill file
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     assert!(skill_path.exists());
     fs::remove_file(&skill_path).unwrap();
 
@@ -143,7 +143,7 @@ fn test_doctor_modified_skill() {
         .success();
 
     // Modify the deployed skill file
-    let skill_path = home.path().join(".claude/skills/renkei-review/SKILL.md");
+    let skill_path = home.path().join(".claude/skills/review/SKILL.md");
     fs::write(&skill_path, "# Modified content by user").unwrap();
 
     // Doctor should flag modification

@@ -142,11 +142,11 @@ fn local_install_with_member_deploys_only_named() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
     let lockfile = fs::read_to_string(home.path().join(".renkei/rk.lock")).unwrap();
@@ -178,11 +178,11 @@ fn local_install_csv_and_repeated_member_flags_are_equivalent() {
         .success();
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
     // Wipe and try repeated form
@@ -202,11 +202,11 @@ fn local_install_csv_and_repeated_member_flags_are_equivalent() {
         .success();
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }
 
@@ -233,11 +233,11 @@ fn install_with_unknown_member_fails_and_lists_available() {
 
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }
 
@@ -307,11 +307,11 @@ fn git_install_with_member_deploys_only_named() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(!home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 
     let lockfile = fs::read_to_string(home.path().join(".renkei/rk.lock")).unwrap();
@@ -370,11 +370,11 @@ fn git_lockfile_reinstall_honors_member() {
 
     assert!(home
         .path()
-        .join(".claude/skills/renkei-review/SKILL.md")
+        .join(".claude/skills/review/SKILL.md")
         .exists());
     assert!(home
         .path()
-        .join(".claude/skills/renkei-lint/SKILL.md")
+        .join(".claude/skills/lint/SKILL.md")
         .exists());
 }
 
