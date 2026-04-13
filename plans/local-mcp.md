@@ -110,8 +110,8 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 2: Install-cache v3 — `mcp_local` reference counting
 
-- [ ] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
-- [ ] 2.2 Add types:
+- [x] 2.1 Bump `CURRENT_VERSION` to 3 in `src/install_cache.rs`. Add `V2Cache` struct for the v2→v3 migration (trivial: no `mcp_local` yet, empty map).
+- [x] 2.2 Add types:
   ```rust
   pub struct McpLocalEntry {
       pub owner_package: String,
@@ -126,11 +126,11 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
       pub project_root: Option<String>,  // None for global installs
   }
   ```
-- [ ] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
-- [ ] 2.4 Helpers on `InstallCache`:
+- [x] 2.3 Extend `InstallCache` with `pub mcp_local: HashMap<String, McpLocalEntry>` (`#[serde(default)]`).
+- [x] 2.4 Helpers on `InstallCache`:
   - `add_mcp_local_ref(name, entry_ctor, new_ref) -> McpLocalOutcome` where the outcome is one of `{ FreshInstall, AddedRef, UpgradeRequired, ConflictDifferentOwner }`.
   - `remove_mcp_local_ref(name, match: McpLocalRef) -> Vec<String>` returning names to GC (empty-refs) for caller-driven cleanup.
-- [ ] 2.5 TDD in `src/install_cache.rs`:
+- [x] 2.5 TDD in `src/install_cache.rs`:
   - v2 cache migrates to v3 with empty `mcp_local`.
   - Fresh install → `FreshInstall`.
   - Second install of same `owner_package`, same version, new project → `AddedRef`, refs length == 2.
@@ -170,19 +170,19 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 5: CLI flag, build prompt, deploy orchestration
 
-- [ ] 5.1 Add `#[arg(long = "allow-build")] allow_build: bool` to `Commands::Install` in `src/cli.rs`. Plumb through `run_install` / `install_or_workspace` / batch coordinator alongside `yes`/`force`.
-- [ ] 5.2 New type and collector in `src/install/build.rs` (or `messages.rs`):
+- [x] 5.1 Add `#[arg(long = "allow-build")] allow_build: bool` to `Commands::Install` in `src/cli.rs`. Plumb through `run_install` / `install_or_workspace` / batch coordinator alongside `yes`/`force`.
+- [x] 5.2 New type and collector in `src/install/build.rs` (or `messages.rs`):
   ```rust
   pub struct BuildNotice { pub full_name: String, pub mcp_name: String, pub steps: Vec<Vec<String>> }
   pub fn collect_build_notices(manifests: &[(&Manifest, &Path)]) -> Vec<BuildNotice>
   pub fn confirm_builds(notices: &[BuildNotice], allow_build: bool) -> Result<bool>
   ```
   `confirm_builds` returns `Ok(true)` to proceed, `Err(RenkeiError::BuildRequiresConfirmation)` in non-TTY without `--allow-build`, never prompts if the notices list is empty.
-- [ ] 5.3 Rendering: yellow/bold framed block titled `Build notice: the following commands will execute with a minimal environment:`. Per line: `  @scope/name → <mcp-name>: bun install && bun run build` (steps joined with ` && ` visually, clarifying it's still argv, not a shell).
-- [ ] 5.4 Integrate into the batch coordinator (`src/install/batch.rs`):
+- [x] 5.3 Rendering: yellow/bold framed block titled `Build notice: the following commands will execute with a minimal environment:`. Per line: `  @scope/name → <mcp-name>: bun install && bun run build` (steps joined with ` && ` visually, clarifying it's still argv, not a shell).
+- [x] 5.4 Integrate into the batch coordinator (`src/install/batch.rs`):
   - After `confirm_preinstall`, call `collect_build_notices` + `confirm_builds`.
   - Build notice collection is cheap (reads the manifest already loaded) and must run before any artifact copy.
-- [ ] 5.5 Deploy pipeline `src/install/deploy.rs` (per package):
+- [x] 5.5 Deploy pipeline `src/install/deploy.rs` (per package):
   1. Compute `source_sha256` over `mcp/<name>/` using `rkignore::hash_directory`.
   2. Consult `install_cache.add_mcp_local_ref(...)` → branch on outcome:
      - `FreshInstall` → continue to staging+build.
@@ -194,7 +194,7 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
      - If anything fails between steps, best-effort rollback: if `.old` exists and `<name>` missing, rename `.old` back.
   4. On build failure: `rm -rf ~/.renkei/mcp/<name>.new/`, leave the previous version intact, propagate error up → batch rollback runs as today.
   5. Resolve `entrypoint` to absolute path: `~/.renkei/mcp/<name>/<entrypoint>`. Merge into backend MCP config using the existing `merge_mcp_into_config` with a rewritten `args` array (prepend the absolute path, or replace the slot — see 5.6).
-- [ ] 5.6 `args` resolution rule to document and test explicitly: renkei builds the final backend `args` as `[abs_entrypoint, ...manifest_args]`. The manifest's `args` carry pass-through flags only; the entrypoint always comes from `entrypoint`. Example manifest:
+- [x] 5.6 `args` resolution rule to document and test explicitly: renkei builds the final backend `args` as `[abs_entrypoint, ...manifest_args]`. The manifest's `args` carry pass-through flags only; the entrypoint always comes from `entrypoint`. Example manifest:
   ```json
   "my-server": {
       "command": "node",
@@ -204,8 +204,8 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
   }
   ```
   → `.claude.json`: `{"command":"node","args":["/home/u/.renkei/mcp/my-server/dist/index.js","--verbose"]}`.
-- [ ] 5.7 Batch coordinator records the `McpLocalRef` in `install_cache` only **after** successful swap + successful backend merge.
-- [ ] 5.8 TDD — mix of unit and integration:
+- [x] 5.7 Batch coordinator records the `McpLocalRef` in `install_cache` only **after** successful swap + successful backend merge.
+- [x] 5.8 TDD — mix of unit and integration:
   - Happy path: fresh install with a trivial MCP (build = `["true"]`, entrypoint = a pre-existing stub file). Assert folder exists, `install_cache.json` entry present, backend config has absolute path.
   - Build failure: staging dir is removed, previous folder (if any) intact, no install_cache entry, no backend config entry, install returns non-zero.
   - Same-owner re-install on another project → `AddedRef`, no rebuild, `referenced_by.len() == 2`.
@@ -216,11 +216,11 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 6: Workspace, lockfile, scope interactions
 
-- [ ] 6.1 Workspace install: each selected member's local MCPs participate in the global batch prompt (one `Build notice:` block for the invocation, lines from all members listed). Already naturally covered if Phase 5 operates on the flat list of `(manifest, member_root)` pairs.
-- [ ] 6.2 Lockfile (`src/lockfile.rs`): add optional `mcp_local_sources: HashMap<String, String>` (MCP name → `source_sha256`) per package entry. Written alongside `integrity` at install time.
-- [ ] 6.3 Lockfile replay (no-arg `rk install`): re-materialize sources, recompute hash, compare with lockfile — if mismatch, fail with a clear message ("lockfile drift: `@scope/name` MCP `my-server` source hash changed"). On match, proceed with normal install (including build prompt + `--allow-build`).
-- [ ] 6.4 Scope behaviour: `deploy` always writes MCP sources to `~/.renkei/mcp/` irrespective of `RequestedScope`. `McpLocalRef.scope` and `McpLocalRef.project_root` record where the owning package was installed, purely for reference accounting (so uninstall in project scope X only decrements X's ref).
-- [ ] 6.5 TDD:
+- [x] 6.1 Workspace install: each selected member's local MCPs participate in the global batch prompt (one `Build notice:` block for the invocation, lines from all members listed). Already naturally covered if Phase 5 operates on the flat list of `(manifest, member_root)` pairs.
+- [x] 6.2 Lockfile (`src/lockfile.rs`): add optional `mcp_local_sources: HashMap<String, String>` (MCP name → `source_sha256`) per package entry. Written alongside `integrity` at install time.
+- [x] 6.3 Lockfile replay (no-arg `rk install`): re-materialize sources, recompute hash, compare with lockfile — if mismatch, fail with a clear message ("lockfile drift: `@scope/name` MCP `my-server` source hash changed"). On match, proceed with normal install (including build prompt + `--allow-build`).
+- [x] 6.4 Scope behaviour: `deploy` always writes MCP sources to `~/.renkei/mcp/` irrespective of `RequestedScope`. `McpLocalRef.scope` and `McpLocalRef.project_root` record where the owning package was installed, purely for reference accounting (so uninstall in project scope X only decrements X's ref).
+- [x] 6.5 TDD:
   - Workspace with two members each declaring a local MCP → one prompt, both build, both refs recorded.
   - Workspace collision (same MCP name in two members) fails at validation (covered in Phase 1, double-check integration).
   - Lockfile replay after source modification in source-of-truth → drift error.
@@ -228,16 +228,16 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 7: `--link` mode
 
-- [ ] 7.1 In `src/install/deploy.rs`, branch on the source kind (already tracked — `Source::LocalLink` vs `Source::LocalCopy`/Git):
+- [x] 7.1 In `src/install/mcp_local.rs`, branch on the new `SourceKind::LocalLink` (added to `src/install/types.rs`; phase had to introduce the variant — the original plan wording said it was "already tracked" but it wasn't):
   - For linked installs: skip staging+build entirely.
-  - `symlink(<workspace>/mcp/<name>, ~/.renkei/mcp/<name>)` if target absent. If target exists and is a symlink pointing elsewhere → `ConflictDifferentOwner` semantics. If target exists and is a real directory → error ("cannot link: `~/.renkei/mcp/<name>` is a real directory from a previous copy install; uninstall it first").
+  - `symlink(<workspace>/mcp/<name>, ~/.renkei/mcp/<name>)` if target absent. If target exists and is a symlink pointing elsewhere → `ConflictDifferentOwner` semantics. If target exists and is a real directory → `McpLinkOverReal` error ("cannot link: `~/.renkei/mcp/<name>` is a real directory from a previous copy install; uninstall it first").
   - Compute `source_sha256` at link time (snapshot) for lockfile/doctor parity. Accept that the hash is only a snapshot — the user modifying the source will drift immediately. Doctor's integrity check is a warning anyway.
   - Still merge into backend config with absolute `entrypoint` resolved through the symlink.
-- [ ] 7.2 Uninstall: if `~/.renkei/mcp/<name>/` is a symlink → `remove_file` (never `remove_dir_all`). Test both branches.
-- [ ] 7.3 TDD:
+- [ ] 7.2 Uninstall: if `~/.renkei/mcp/<name>/` is a symlink → `remove_file` (never `remove_dir_all`). Test both branches. **Deferred to phase 8** (uninstall GC) — current uninstall path is unchanged for now.
+- [x] 7.3 TDD:
   - `rk install --link <workspace>` on a package with local MCP → symlink created, no build executed, backend config registered.
   - Build commands declared but never run in `--link` mode — no `--allow-build` prompt triggered for links.
-  - Uninstall removes symlink only; workspace source intact.
+  - ~~Uninstall removes symlink only; workspace source intact.~~ Deferred to phase 8.
   - Re-link same MCP from different workspace → conflict error.
 
 ## Phase 8: Uninstall GC
