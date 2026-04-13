@@ -66,7 +66,7 @@ fn should_keep(name: &str) -> bool {
 }
 
 /// Build the minimal env that local-MCP build commands run with. Whitelist
-/// + tooling prefixes minus secret-shaped names. Reads the current process
+/// plus tooling prefixes minus secret-shaped names. Reads the current process
 /// env once.
 pub fn build_env() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| should_keep(k)).collect()

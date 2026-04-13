@@ -211,8 +211,7 @@ impl Manifest {
                 )));
             }
 
-            if server.entrypoint.is_some() && server.build.is_none() {
-                let ep = server.entrypoint.as_ref().unwrap();
+            if let (Some(ep), None) = (server.entrypoint.as_ref(), server.build.as_ref()) {
                 let abs = mcp_root.join(name).join(ep);
                 if !abs.is_file() {
                     return Err(RenkeiError::InvalidManifest(format!(

@@ -53,7 +53,6 @@ fn build_config(global: bool) -> error::Result<Config> {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn install_or_workspace(
     package_dir: &Path,
     config: &Config,
