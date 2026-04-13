@@ -1,5 +1,6 @@
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::error::{RenkeiError, Result};
@@ -33,6 +34,26 @@ pub fn validate_scope(manifest_scope: &ManifestScope, requested: RequestedScope)
     }
 }
 
+/// Typed representation of a single `mcp.<name>` entry. Local-MCP fields
+/// (`entrypoint`, `build`) are first-class; backend-native fields
+/// (`command`, `args`, `env`, ...) are preserved verbatim via `extra`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpServer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entrypoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<Vec<Vec<String>>>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl McpServer {
+    #[allow(dead_code)]
+    pub fn is_local(&self) -> bool {
+        self.entrypoint.is_some() || self.build.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Messages {
     #[serde(default)]
@@ -55,7 +76,7 @@ pub struct Manifest {
     #[serde(default)]
     pub scope: ManifestScope,
     #[serde(default)]
-    pub mcp: Option<serde_json::Value>,
+    pub mcp: Option<HashMap<String, McpServer>>,
     #[serde(rename = "requiredEnv", default)]
     pub required_env: Option<serde_json::Value>,
     #[serde(default)]
@@ -136,6 +157,114 @@ impl Manifest {
             backends: self.backends.clone(),
         })
     }
+
+    /// Validate local-MCP conventions against the package on disk.
+    ///
+    /// Pure manifest checks live in `validate()`; this method requires a
+    /// `package_root` because its rules cross-reference declared `mcp.<name>`
+    /// entries with directories under `<package_root>/mcp/<name>/` and the
+    /// presence of an `entrypoint` file when no `build` is declared.
+    #[allow(dead_code)]
+    pub fn validate_local_mcp(&self, package_root: &Path) -> Result<()> {
+        let mcp_root = package_root.join("mcp");
+        let declared: HashMap<String, &McpServer> = self
+            .mcp
+            .as_ref()
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v)).collect())
+            .unwrap_or_default();
+
+        for (name, server) in &declared {
+            if let Some(build) = &server.build {
+                if build.is_empty() {
+                    return Err(RenkeiError::InvalidManifest(format!(
+                        "mcp.{name}.build must be a non-empty array"
+                    )));
+                }
+                for (idx, step) in build.iter().enumerate() {
+                    if step.is_empty() {
+                        return Err(RenkeiError::InvalidManifest(format!(
+                            "mcp.{name}.build[{idx}] must be a non-empty argv array"
+                        )));
+                    }
+                    for (tok_idx, tok) in step.iter().enumerate() {
+                        if tok.is_empty() {
+                            return Err(RenkeiError::InvalidManifest(format!(
+                                "mcp.{name}.build[{idx}][{tok_idx}] must be a non-empty string"
+                            )));
+                        }
+                    }
+                }
+            }
+
+            if server.is_local() {
+                let dir = mcp_root.join(name);
+                if !dir.is_dir() {
+                    return Err(RenkeiError::InvalidManifest(format!(
+                        "mcp.{name} declares local MCP fields but `mcp/{name}/` directory is missing"
+                    )));
+                }
+            }
+
+            if server.build.is_some() && server.entrypoint.is_none() {
+                return Err(RenkeiError::InvalidManifest(format!(
+                    "mcp.{name} declares `build` but is missing required `entrypoint`"
+                )));
+            }
+
+            if server.entrypoint.is_some() && server.build.is_none() {
+                let ep = server.entrypoint.as_ref().unwrap();
+                let abs = mcp_root.join(name).join(ep);
+                if !abs.is_file() {
+                    return Err(RenkeiError::InvalidManifest(format!(
+                        "mcp.{name}.entrypoint points to '{ep}' but file is missing and no `build` is declared"
+                    )));
+                }
+            }
+        }
+
+        if mcp_root.is_dir() {
+            for entry in std::fs::read_dir(&mcp_root)? {
+                let entry = entry?;
+                if !entry.file_type()?.is_dir() {
+                    continue;
+                }
+                let dir_name = entry.file_name();
+                let dir_name = dir_name.to_string_lossy().to_string();
+                if !declared.contains_key(&dir_name) {
+                    return Err(RenkeiError::InvalidManifest(format!(
+                        "`mcp/{dir_name}/` exists on disk but mcp.{dir_name} is not declared in the manifest"
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Detect collisions across workspace members: two members declaring the same
+/// local MCP `<name>` are forbidden because all local MCPs deploy under a
+/// single global path `~/.renkei/mcp/<name>/`.
+#[allow(dead_code)]
+pub fn validate_workspace_mcp_collisions(members: &[(String, &Manifest)]) -> Result<()> {
+    let mut seen: HashMap<String, String> = HashMap::new();
+    let mut collected: HashSet<&str> = HashSet::new();
+    for (member_name, manifest) in members {
+        if let Some(mcp) = &manifest.mcp {
+            for name in mcp.keys() {
+                if let Some(prev) = seen.get(name) {
+                    if prev != member_name {
+                        return Err(RenkeiError::InvalidManifest(format!(
+                            "workspace members share MCP name '{name}' in '{prev}' and '{member_name}'"
+                        )));
+                    }
+                }
+                seen.insert(name.clone(), member_name.clone());
+                collected.insert(name.as_str());
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -454,5 +583,208 @@ mod tests {
     fn test_try_load_workspace_returns_none_for_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         assert!(try_load_workspace(dir.path()).is_none());
+    }
+
+    fn manifest_with_mcp(mcp_json: &str) -> Manifest {
+        let json = format!(
+            r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"mcp":{mcp_json}}}"#
+        );
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn test_external_only_mcp_parses_and_roundtrips() {
+        let m = manifest_with_mcp(
+            r#"{"weather":{"command":"node","args":["server.js"],"env":{"K":"v"}}}"#,
+        );
+        let server = m.mcp.as_ref().unwrap().get("weather").unwrap();
+        assert!(!server.is_local());
+        assert!(server.entrypoint.is_none());
+        assert!(server.build.is_none());
+        let v = serde_json::to_value(&m.mcp).unwrap();
+        assert_eq!(v["weather"]["command"], "node");
+        assert_eq!(v["weather"]["args"][0], "server.js");
+        assert_eq!(v["weather"]["env"]["K"], "v");
+    }
+
+    #[test]
+    fn test_local_mcp_with_build_and_entrypoint_parses() {
+        let m = manifest_with_mcp(
+            r#"{"srv":{"command":"node","entrypoint":"dist/index.js","build":[["bun","install"],["bun","run","build"]]}}"#,
+        );
+        let s = m.mcp.as_ref().unwrap().get("srv").unwrap();
+        assert!(s.is_local());
+        assert_eq!(s.entrypoint.as_deref(), Some("dist/index.js"));
+        assert_eq!(s.build.as_ref().unwrap().len(), 2);
+    }
+
+    fn write_manifest_dir(dir: &Path, mcp: &str, sub_files: &[(&str, &str)]) {
+        std::fs::write(
+            dir.join("renkei.json"),
+            format!(
+                r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"mcp":{mcp}}}"#
+            ),
+        )
+        .unwrap();
+        for (rel, content) in sub_files {
+            let p = dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, content).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_validate_local_mcp_entrypoint_only_with_vendored_file_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"command":"node","entrypoint":"index.js"}}"#,
+            &[("mcp/srv/index.js", "console.log(1)")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        m.validate_local_mcp(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn test_validate_local_mcp_entrypoint_only_missing_file_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"command":"node","entrypoint":"dist/index.js"}}"#,
+            &[("mcp/srv/.keep", "")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("entrypoint"));
+        assert!(err.to_string().contains("dist/index.js"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_build_without_entrypoint_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"command":"node","build":[["bun","install"]]}}"#,
+            &[("mcp/srv/.keep", "")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("entrypoint"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_dir_present_but_undeclared_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(dir.path(), r#"{}"#, &[("mcp/foo/.keep", "")]);
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("mcp/foo"));
+        assert!(err.to_string().contains("not declared"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_declared_local_without_dir_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"entrypoint":"x.js","build":[["bun","install"]]}}"#,
+            &[],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("mcp/srv"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_empty_build_array_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"entrypoint":"x.js","build":[]}}"#,
+            &[("mcp/srv/.keep", "")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_empty_inner_argv_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"entrypoint":"x.js","build":[[]]}}"#,
+            &[("mcp/srv/.keep", "")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        let err = m.validate_local_mcp(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    fn test_validate_local_mcp_single_token_argv_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"entrypoint":"x.js","build":[["bun"]]}}"#,
+            &[("mcp/srv/.keep", "")],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        m.validate_local_mcp(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn test_validate_local_mcp_external_only_no_filesystem_check() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest_dir(
+            dir.path(),
+            r#"{"srv":{"command":"npx","args":["-y","@thing/mcp"]}}"#,
+            &[],
+        );
+        let m = Manifest::from_path(dir.path()).unwrap();
+        m.validate_local_mcp(dir.path()).unwrap();
+    }
+
+    fn make_member_manifest(mcp: &str) -> Manifest {
+        let json = format!(
+            r#"{{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude"],"mcp":{mcp}}}"#
+        );
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn test_workspace_mcp_collision_detected() {
+        let a = make_member_manifest(r#"{"shared":{"command":"node"}}"#);
+        let b = make_member_manifest(r#"{"shared":{"command":"node"}}"#);
+        let err = validate_workspace_mcp_collisions(&[
+            ("member-a".into(), &a),
+            ("member-b".into(), &b),
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("shared"));
+        assert!(err.to_string().contains("member-a"));
+        assert!(err.to_string().contains("member-b"));
+    }
+
+    #[test]
+    fn test_workspace_mcp_no_collision_ok() {
+        let a = make_member_manifest(r#"{"first":{"command":"node"}}"#);
+        let b = make_member_manifest(r#"{"second":{"command":"node"}}"#);
+        validate_workspace_mcp_collisions(&[
+            ("member-a".into(), &a),
+            ("member-b".into(), &b),
+        ])
+        .unwrap();
+    }
+
+    #[test]
+    fn test_workspace_mcp_collision_ignores_member_with_no_mcp() {
+        let a = make_member_manifest(r#"{"foo":{"command":"node"}}"#);
+        let b: Manifest = serde_json::from_str(valid_json()).unwrap();
+        validate_workspace_mcp_collisions(&[
+            ("member-a".into(), &a),
+            ("member-b".into(), &b),
+        ])
+        .unwrap();
     }
 }

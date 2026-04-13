@@ -72,7 +72,8 @@ pub(crate) fn deploy_to_backends(
         }
 
         let mcp_servers = if let Some(ref mcp) = raw_manifest.mcp {
-            match backend.register_mcp(mcp, config) {
+            let mcp_json = serde_json::to_value(mcp)?;
+            match backend.register_mcp(&mcp_json, config) {
                 Ok(entries) => entries.into_iter().map(|e| e.server_name).collect(),
                 Err(_) if is_mcp_unsupported(backend.name()) => vec![],
                 Err(e) => {
