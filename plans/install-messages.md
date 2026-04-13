@@ -39,9 +39,9 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 
 ## Phase 2: CLI flag
 
-- [ ] 2.1 Add `#[arg(short = 'y', long = "yes")] yes: bool` to `Commands::Install` in `src/cli.rs`.
-- [ ] 2.2 Plumb `yes` from `run_install` down to the install dispatch (alongside `force`, `members`, etc.).
-- [ ] 2.3 TDD: clap parsing test — `rk install ./pkg --yes` and `-y` both set the flag; default is `false`.
+- [x] 2.1 Add `#[arg(short = 'y', long = "yes")] yes: bool` to `Commands::Install` in `src/cli.rs`.
+- [x] 2.2 Plumb `yes` from `run_install` down to the install dispatch (alongside `force`, `members`, etc.). _→ Plumbed through `run_install`, `run_install_from_lockfile`, and `install_or_workspace`; consumed by Phase 4 coordinator (currently parked as `_yes`)._
+- [x] 2.3 TDD: clap parsing test — `rk install ./pkg --yes` and `-y` both set the flag; default is `false`.
 
 ## Phase 3: Confirmation prompt module
 

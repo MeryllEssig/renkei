@@ -58,6 +58,7 @@ fn install_or_workspace(
     requested_scope: RequestedScope,
     options: &install::InstallOptions,
     selected_members: Option<&[String]>,
+    _yes: bool,
 ) -> error::Result<()> {
     match (
         manifest::try_load_workspace(package_dir),
@@ -115,6 +116,7 @@ fn run_install(
     force: bool,
     backend_override: Option<&str>,
     members: Option<&[String]>,
+    yes: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let requested_scope = if global {
@@ -133,7 +135,15 @@ fn run_install(
                 force: force || backend_override.is_some(),
                 ..install::InstallOptions::local(path_str)
             };
-            install_or_workspace(&path, &config, &backends, requested_scope, &options, members)
+            install_or_workspace(
+                &path,
+                &config,
+                &backends,
+                requested_scope,
+                &options,
+                members,
+                yes,
+            )
         }
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {
             let tmp_dir = git::clone_repo(&url, tag)?;
@@ -149,6 +159,7 @@ fn run_install(
                 requested_scope,
                 &options,
                 members,
+                yes,
             )
         }
     }
@@ -157,6 +168,7 @@ fn run_install(
 fn run_install_from_lockfile(
     global: bool,
     backend_override: Option<&str>,
+    _yes: bool,
     registry: &BackendRegistry,
 ) -> error::Result<()> {
     let config = build_config(global)?;
@@ -201,6 +213,7 @@ fn main() {
             force,
             backend,
             members,
+            yes,
         } => run_install(
             &source,
             global,
@@ -212,6 +225,7 @@ fn main() {
             } else {
                 Some(members.as_slice())
             },
+            yes,
             &registry,
         ),
         Commands::Install {
@@ -223,8 +237,9 @@ fn main() {
             source: None,
             global,
             backend,
+            yes,
             ..
-        } => run_install_from_lockfile(global, backend.as_deref(), &registry),
+        } => run_install_from_lockfile(global, backend.as_deref(), yes, &registry),
         Commands::List { global } => run_list(global),
         Commands::Doctor { global } => run_doctor(global, &registry),
         Commands::Uninstall { package, global } => run_uninstall(&package, global),

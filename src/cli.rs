@@ -44,6 +44,9 @@ pub enum Commands {
             action = clap::ArgAction::Append
         )]
         members: Vec<String>,
+        /// Skip the preinstall confirmation prompt and accept all messages.
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
     /// Uninstall a workflow package
     Uninstall {
@@ -150,5 +153,28 @@ mod tests {
     fn install_member_long_flag_works() {
         let members = install_members(&["rk", "install", "./pkg", "--member", "mr-review"]);
         assert_eq!(members, vec!["mr-review".to_string()]);
+    }
+
+    fn install_yes(args: &[&str]) -> bool {
+        let cli = Cli::try_parse_from(args).expect("parse should succeed");
+        match cli.command {
+            Commands::Install { yes, .. } => yes,
+            other => panic!("expected Install, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn install_yes_defaults_false() {
+        assert!(!install_yes(&["rk", "install", "./pkg"]));
+    }
+
+    #[test]
+    fn install_short_yes_flag_sets_true() {
+        assert!(install_yes(&["rk", "install", "./pkg", "-y"]));
+    }
+
+    #[test]
+    fn install_long_yes_flag_sets_true() {
+        assert!(install_yes(&["rk", "install", "./pkg", "--yes"]));
     }
 }
