@@ -233,18 +233,18 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
   - `symlink(<workspace>/mcp/<name>, ~/.renkei/mcp/<name>)` if target absent. If target exists and is a symlink pointing elsewhere → `ConflictDifferentOwner` semantics. If target exists and is a real directory → `McpLinkOverReal` error ("cannot link: `~/.renkei/mcp/<name>` is a real directory from a previous copy install; uninstall it first").
   - Compute `source_sha256` at link time (snapshot) for lockfile/doctor parity. Accept that the hash is only a snapshot — the user modifying the source will drift immediately. Doctor's integrity check is a warning anyway.
   - Still merge into backend config with absolute `entrypoint` resolved through the symlink.
-- [ ] 7.2 Uninstall: if `~/.renkei/mcp/<name>/` is a symlink → `remove_file` (never `remove_dir_all`). Test both branches. **Deferred to phase 8** (uninstall GC) — current uninstall path is unchanged for now.
+- [x] 7.2 Uninstall: if `~/.renkei/mcp/<name>/` is a symlink → `remove_file` (never `remove_dir_all`). Test both branches. **Done in phase 8** via `cleanup_local_mcp_refs`.
 - [x] 7.3 TDD:
   - `rk install --link <workspace>` on a package with local MCP → symlink created, no build executed, backend config registered.
   - Build commands declared but never run in `--link` mode — no `--allow-build` prompt triggered for links.
-  - ~~Uninstall removes symlink only; workspace source intact.~~ Deferred to phase 8.
+  - Uninstall removes symlink only; workspace source intact. (Covered in phase 8 tests.)
   - Re-link same MCP from different workspace → conflict error.
 
 ## Phase 8: Uninstall GC
 
-- [ ] 8.1 In `src/uninstall.rs`: after removing artifacts, for each local MCP referenced by the uninstalled package, call `install_cache.remove_mcp_local_ref(...)`.
-- [ ] 8.2 For each returned name (empty refs): `rm -rf ~/.renkei/mcp/<name>/` (or `remove_file` if symlink) + remove the server from the backend MCP config via `remove_mcp_from_config`.
-- [ ] 8.3 TDD:
+- [x] 8.1 In `src/uninstall.rs`: after removing artifacts, for each local MCP referenced by the uninstalled package, call `install_cache.remove_mcp_local_ref(...)`.
+- [x] 8.2 For each returned name (empty refs): `rm -rf ~/.renkei/mcp/<name>/` (or `remove_file` if symlink) + remove the server from the backend MCP config via `remove_mcp_from_config`.
+- [x] 8.3 TDD:
   - Install on 2 projects → uninstall from 1 → folder + backend config unchanged, cache shows 1 ref.
   - Uninstall the last ref → folder removed, backend config entry gone, `mcp_local.<name>` removed from cache.
   - Uninstall a linked install → symlink removed, no error, no `remove_dir_all`.
