@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
@@ -44,11 +46,13 @@ pub fn load_rkignore(root: &Path) -> Vec<String> {
 ///
 /// Walk order is alphabetical; each included file contributes its
 /// relative path (`/`-normalized), unix mode bits (or 0 on non-unix), and
-/// raw bytes, separated by NUL so that distinct boundaries cannot collide.
-/// Reused by packaging and install-time integrity tracking.
+/// streamed contents, separated by NUL so that distinct boundaries cannot
+/// collide. Honors `<root>/.rkignore` automatically; `extra_patterns` is
+/// appended for callers that need ad-hoc additions. Reused by packaging
+/// and install-time integrity tracking.
 #[allow(dead_code)]
 pub fn hash_directory(root: &Path, extra_patterns: &[String]) -> Result<String> {
-    let mut all_patterns: Vec<String> = DEFAULT_IGNORES.iter().map(|s| s.to_string()).collect();
+    let mut all_patterns = load_rkignore(root);
     all_patterns.extend(extra_patterns.iter().cloned());
 
     let mut overrides = ignore::overrides::OverrideBuilder::new(root);
@@ -91,8 +95,8 @@ pub fn hash_directory(root: &Path, extra_patterns: &[String]) -> Result<String> 
         hasher.update([0u8]);
         hasher.update(mode.to_le_bytes());
         hasher.update([0u8]);
-        let bytes = std::fs::read(path)?;
-        hasher.update(&bytes);
+        let mut reader = BufReader::new(File::open(path)?);
+        std::io::copy(&mut reader, &mut hasher)?;
         hasher.update([0u8]);
     }
 
@@ -206,6 +210,24 @@ mod tests {
         write(a.path(), ".env.example", b"KEY=value");
         write(b.path(), ".env.example", b"KEY=other");
         assert_ne!(
+            hash_directory(a.path(), &[]).unwrap(),
+            hash_directory(b.path(), &[]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_hash_directory_honors_rkignore_file() {
+        let a = tempdir().unwrap();
+        let b = tempdir().unwrap();
+
+        std::fs::write(a.path().join(".rkignore"), "generated/\n").unwrap();
+        write(a.path(), "src/main.rs", b"fn main() {}");
+        write(a.path(), "generated/x.rs", b"auto");
+
+        std::fs::write(b.path().join(".rkignore"), "generated/\n").unwrap();
+        write(b.path(), "src/main.rs", b"fn main() {}");
+
+        assert_eq!(
             hash_directory(a.path(), &[]).unwrap(),
             hash_directory(b.path(), &[]).unwrap()
         );
