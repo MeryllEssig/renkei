@@ -108,7 +108,7 @@ impl DoctorReport {
             .count();
         let healthy = total - with_issues;
         out.push('\n');
-        if with_issues == 0 && self.backend_ok && self.is_healthy() {
+        if self.is_healthy() {
             out.push_str(&format!(
                 "{}",
                 format!("All healthy: {total} package(s).\n").green()
@@ -129,7 +129,8 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
         let status_label = if issues.iter().all(|i| {
             matches!(
                 i,
-                DiagnosticKind::SkillModified { .. } | DiagnosticKind::McpLocalIntegrityDrift { .. }
+                DiagnosticKind::SkillModified { .. }
+                    | DiagnosticKind::McpLocalIntegrityDrift { .. }
             )
         }) {
             format!("{}", "WARN".yellow().bold())

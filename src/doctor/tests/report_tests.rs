@@ -87,8 +87,7 @@ fn test_build_report_runs_all_checks() {
     };
 
     let packages = vec![("@test/pkg", &entry)];
-    let report =
-        DoctorReport::build(&packages, &settings, &claude_config, true, &cache, &config);
+    let report = DoctorReport::build(&packages, &settings, &claude_config, true, &cache, &config);
 
     assert_eq!(report.package_diagnostics.len(), 1);
     // Should at least have FileMissing and ArchiveMissing

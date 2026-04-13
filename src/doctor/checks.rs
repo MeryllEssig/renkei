@@ -81,18 +81,10 @@ pub fn check_skill_modifications(entry: &PackageEntry) -> Vec<DiagnosticKind> {
 }
 
 pub fn check_env_vars(entry: &PackageEntry) -> Vec<DiagnosticKind> {
-    let archive_path = Path::new(&entry.archive_path);
-
-    let manifest_bytes = match cache::extract_file_from_archive(archive_path, "renkei.json") {
-        Ok(bytes) => bytes,
-        Err(_) => return vec![],
+    let manifest = match load_manifest_from_archive(Path::new(&entry.archive_path)) {
+        Some(v) => v,
+        None => return vec![],
     };
-
-    let manifest: serde_json::Value = match serde_json::from_slice(&manifest_bytes) {
-        Ok(v) => v,
-        Err(_) => return vec![],
-    };
-
     let required_env = match manifest.get("requiredEnv") {
         Some(v) => v,
         None => return vec![],
@@ -180,19 +172,36 @@ pub fn check_mcp_local(cache: &InstallCache, config: &Config) -> Vec<DiagnosticK
     let mut names: Vec<&String> = cache.mcp_local.keys().collect();
     names.sort();
 
+    // Memoize manifest lookups: a single owner may declare several MCPs, and
+    // each archive read decompresses the whole tarball.
+    let mut owner_manifests: std::collections::HashMap<&str, Option<serde_json::Value>> =
+        std::collections::HashMap::new();
+
     for name in names {
         let entry = &cache.mcp_local[name];
         let folder = config.global_mcp_dir().join(name);
 
-        let meta = std::fs::symlink_metadata(&folder).ok();
-        if meta.is_none() {
+        let Some(meta) = std::fs::symlink_metadata(&folder).ok() else {
             issues.push(DiagnosticKind::McpLocalMissing { name: name.clone() });
             continue;
-        }
+        };
 
-        if let Some(entrypoint) = resolve_entrypoint(&entry.owner_package, name, cache) {
-            let ep_path = folder.join(&entrypoint);
-            if !ep_path.exists() {
+        let manifest = owner_manifests
+            .entry(entry.owner_package.as_str())
+            .or_insert_with(|| {
+                cache
+                    .packages
+                    .get(&entry.owner_package)
+                    .and_then(|pkg| load_manifest_from_archive(Path::new(&pkg.archive_path)))
+            });
+        if let Some(entrypoint) = manifest.as_ref().and_then(|m| {
+            m.get("mcp")?
+                .get(name)?
+                .get("entrypoint")?
+                .as_str()
+                .map(String::from)
+        }) {
+            if !folder.join(&entrypoint).exists() {
                 issues.push(DiagnosticKind::McpLocalEntrypointMissing {
                     name: name.clone(),
                     entrypoint,
@@ -204,11 +213,7 @@ pub fn check_mcp_local(cache: &InstallCache, config: &Config) -> Vec<DiagnosticK
         // linked) with the same MCP-scoped rkignore patterns used at install
         // time. Any I/O failure silently skips this check; presence/entrypoint
         // errors above are the authoritative failure signals.
-        let hash_root = if meta
-            .as_ref()
-            .map(|m| m.file_type().is_symlink())
-            .unwrap_or(false)
-        {
+        let hash_root = if meta.file_type().is_symlink() {
             std::fs::read_link(&folder).ok()
         } else {
             Some(folder.clone())
@@ -225,15 +230,7 @@ pub fn check_mcp_local(cache: &InstallCache, config: &Config) -> Vec<DiagnosticK
     issues
 }
 
-fn resolve_entrypoint(owner: &str, mcp_name: &str, cache: &InstallCache) -> Option<String> {
-    let pkg = cache.packages.get(owner)?;
-    let archive_path = Path::new(&pkg.archive_path);
-    let manifest_bytes = cache::extract_file_from_archive(archive_path, "renkei.json").ok()?;
-    let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).ok()?;
-    manifest
-        .get("mcp")?
-        .get(mcp_name)?
-        .get("entrypoint")?
-        .as_str()
-        .map(|s| s.to_string())
+fn load_manifest_from_archive(archive_path: &Path) -> Option<serde_json::Value> {
+    let bytes = cache::extract_file_from_archive(archive_path, "renkei.json").ok()?;
+    serde_json::from_slice(&bytes).ok()
 }

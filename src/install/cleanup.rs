@@ -71,11 +71,7 @@ pub(crate) fn cleanup_previous_installation(
 /// Decrement local-MCP refs owned by `full_name` at the current install scope.
 /// When a ref count reaches zero, the on-disk folder (or symlink) is removed
 /// and the server entry is stripped from the backend config.
-pub(crate) fn cleanup_local_mcp_refs(
-    full_name: &str,
-    cache: &mut InstallCache,
-    config: &Config,
-) {
+pub(crate) fn cleanup_local_mcp_refs(full_name: &str, cache: &mut InstallCache, config: &Config) {
     let scope = config.scope_label().to_string();
     let project_root = config
         .project_root
@@ -94,7 +90,6 @@ pub(crate) fn cleanup_local_mcp_refs(
         .collect();
 
     for name in candidate_names {
-        // same_install() matches on (package, scope, project_root); version is ignored.
         let match_ref = McpLocalRef {
             package: full_name.to_string(),
             version: String::new(),

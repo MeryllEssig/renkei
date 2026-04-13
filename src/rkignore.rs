@@ -119,8 +119,8 @@ pub fn hash_with_patterns(root: &Path, all_patterns: &[String]) -> Result<String
 
     let mut hasher = Sha256::new();
     for entry in walker {
-        let entry = entry
-            .map_err(|e| crate::error::RenkeiError::CacheError(format!("walk error: {e}")))?;
+        let entry =
+            entry.map_err(|e| crate::error::RenkeiError::CacheError(format!("walk error: {e}")))?;
         let path = entry.path();
         let file_type = match entry.file_type() {
             Some(ft) => ft,

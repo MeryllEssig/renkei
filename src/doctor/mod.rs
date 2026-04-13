@@ -12,9 +12,9 @@ use crate::config::{BackendId, Config};
 use crate::error::Result;
 use crate::package_store::PackageStore;
 
-pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> Result<bool> {
+pub fn run_doctor(config: &Config, registry: &BackendRegistry) -> Result<bool> {
     let store = PackageStore::load(config)?;
-    let scope_label = if global { "global" } else { "project" };
+    let scope_label = config.scope_label();
 
     if store.packages().is_empty() {
         println!("No packages installed ({scope_label}).");

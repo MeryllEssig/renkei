@@ -255,7 +255,6 @@ impl InstallCache {
     /// Drop a single install reference for a local-MCP `<name>`. If the
     /// reference list becomes empty, the entry is removed from the cache and
     /// the name is returned so the caller can GC the on-disk folder.
-    #[allow(dead_code)]
     pub(crate) fn remove_mcp_local_ref(
         &mut self,
         name: &str,
@@ -758,7 +757,9 @@ mod tests {
 
         let mut cache = InstallCache::load(&config).unwrap();
         let mut entry = local_entry("@acme/srv", "1.0.0", "sha256-abc");
-        entry.referenced_by.push(local_ref("@acme/srv", "1.0.0", "global", None));
+        entry
+            .referenced_by
+            .push(local_ref("@acme/srv", "1.0.0", "global", None));
         cache.mcp_local.insert("my-srv".to_string(), entry);
         cache.save(&config).unwrap();
 
@@ -918,11 +919,7 @@ mod tests {
             || local_entry("@acme/srv", "1.0.0", "sha-1"),
             r1.clone(),
         );
-        cache.add_mcp_local_ref(
-            "my-srv",
-            || panic!("ctor must not run"),
-            r2,
-        );
+        cache.add_mcp_local_ref("my-srv", || panic!("ctor must not run"), r2);
         let gc = cache.remove_mcp_local_ref("my-srv", &r1);
         assert!(gc.is_none());
         assert_eq!(cache.mcp_local["my-srv"].referenced_by.len(), 1);

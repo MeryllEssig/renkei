@@ -22,22 +22,9 @@ const CERT_VARS: &[&str] = &[
     "REQUESTS_CA_BUNDLE",
 ];
 
-const TOOL_PREFIXES: &[&str] = &[
-    "npm_config_",
-    "PIP_",
-    "BUN_",
-    "CARGO_",
-    "UV_",
-    "POETRY_",
-];
+const TOOL_PREFIXES: &[&str] = &["npm_config_", "PIP_", "BUN_", "CARGO_", "UV_", "POETRY_"];
 
-const EXCLUDE_PREFIXES: &[&str] = &[
-    "AWS_",
-    "GITHUB_",
-    "GITLAB_",
-    "ANTHROPIC_",
-    "OPENAI_",
-];
+const EXCLUDE_PREFIXES: &[&str] = &["AWS_", "GITHUB_", "GITLAB_", "ANTHROPIC_", "OPENAI_"];
 
 /// Decide whether a given env var name should be exposed to package build
 /// scripts. Exclusion rules win over inclusion rules: a `_TOKEN` named
@@ -357,7 +344,10 @@ mod tests {
             BuildNotice {
                 full_name: "@x/a".into(),
                 mcp_name: "srv-1".into(),
-                steps: vec![vec!["bun".into(), "install".into()], vec!["bun".into(), "run".into(), "build".into()]],
+                steps: vec![
+                    vec!["bun".into(), "install".into()],
+                    vec!["bun".into(), "run".into(), "build".into()],
+                ],
             },
             BuildNotice {
                 full_name: "@x/b".into(),
@@ -449,8 +439,14 @@ mod tests {
 
         assert!(!env.contains_key("AWS_SECRET_ACCESS_KEY"));
         assert!(!env.contains_key("FOO_TOKEN"));
-        assert_eq!(env.get("npm_config_registry").map(String::as_str), Some("https://example.com"));
-        assert_eq!(env.get("NODE_EXTRA_CA_CERTS").map(String::as_str), Some("/tmp/cert.pem"));
+        assert_eq!(
+            env.get("npm_config_registry").map(String::as_str),
+            Some("https://example.com")
+        );
+        assert_eq!(
+            env.get("NODE_EXTRA_CA_CERTS").map(String::as_str),
+            Some("/tmp/cert.pem")
+        );
 
         std::env::remove_var("AWS_SECRET_ACCESS_KEY");
         std::env::remove_var("FOO_TOKEN");
@@ -529,7 +525,9 @@ mod tests {
             // Some platforms canonicalise /tmp via /private; compare suffix.
             let dir_str = dir.path().to_string_lossy().to_string();
             assert!(
-                pwd_out.trim().ends_with(dir_str.trim_start_matches("/private")),
+                pwd_out
+                    .trim()
+                    .ends_with(dir_str.trim_start_matches("/private")),
                 "pwd={pwd_out:?} dir={dir_str:?}"
             );
         }
@@ -543,7 +541,8 @@ mod tests {
                 argv: vec![
                     "sh".into(),
                     "-c".into(),
-                    "printenv AWS_SECRET_ACCESS_KEY > leak.txt; printenv PATH > path.txt; true".into(),
+                    "printenv AWS_SECRET_ACCESS_KEY > leak.txt; printenv PATH > path.txt; true"
+                        .into(),
                 ],
             }];
             run_build(&steps, dir.path()).unwrap();

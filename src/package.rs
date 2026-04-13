@@ -5,14 +5,11 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use owo_colors::OwoColorize;
 
-use crate::cache::{append_filtered_dir, compute_sha256};
+use crate::cache::{append_package_tree, compute_sha256};
 use crate::cli::BumpLevel;
 use crate::error::{RenkeiError, Result};
 use crate::json_file;
 use crate::manifest::{Manifest, ValidatedManifest};
-use crate::rkignore;
-
-const PACKAGE_DIRS: &[&str] = &["skills", "hooks", "agents", "scripts"];
 
 pub fn run_package(bump: Option<BumpLevel>) -> Result<()> {
     let cwd = std::env::current_dir()?;
@@ -97,30 +94,7 @@ fn create_package_archive(
     tar_builder.append_path_with_name(cwd.join("renkei.json"), "renkei.json")?;
     entries.push("renkei.json".to_string());
 
-    let pkg_patterns = rkignore::load_rkignore(cwd);
-    for dir_name in PACKAGE_DIRS {
-        let dir = cwd.join(dir_name);
-        if dir.is_dir() {
-            let added = append_filtered_dir(&mut tar_builder, &dir, dir_name, &pkg_patterns)?;
-            entries.extend(added);
-        }
-    }
-
-    let mcp_root = cwd.join("mcp");
-    if mcp_root.is_dir() {
-        let mcp_patterns = rkignore::load_mcp_ignores(cwd);
-        let mut subdirs: Vec<_> = fs::read_dir(&mcp_root)?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-            .collect();
-        subdirs.sort_by_key(|e| e.file_name());
-        for entry in subdirs {
-            let dir = entry.path();
-            let prefix = format!("mcp/{}", entry.file_name().to_string_lossy());
-            let added = append_filtered_dir(&mut tar_builder, &dir, &prefix, &mcp_patterns)?;
-            entries.extend(added);
-        }
-    }
+    entries.extend(append_package_tree(&mut tar_builder, cwd)?);
 
     tar_builder.into_inner()?.finish()?;
 
@@ -369,7 +343,9 @@ mod tests {
     fn test_archive_honors_root_rkignore() {
         let dir = tempdir().unwrap();
         setup_full_package(dir.path());
-        fs::write(dir.path().join(".rkignore"), "agents/deploy.md\n").unwrap();
+        // Walkers are rooted at each top-level dir, so the pattern must match
+        // by dir-relative name. `deploy.md` matches `agents/deploy.md`.
+        fs::write(dir.path().join(".rkignore"), "deploy.md\n").unwrap();
 
         let manifest = Manifest::from_path(dir.path()).unwrap().validate().unwrap();
         let (_, entries) = create_package_archive(dir.path(), &manifest).unwrap();

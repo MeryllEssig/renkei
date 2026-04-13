@@ -135,9 +135,9 @@ fn test_source_tampered_reports_integrity_drift_warning() {
 
     let issues = checks::check_mcp_local(&cache, &config);
     assert!(
-        issues
-            .iter()
-            .any(|i| matches!(i, DiagnosticKind::McpLocalIntegrityDrift { name } if name == "my-srv")),
+        issues.iter().any(
+            |i| matches!(i, DiagnosticKind::McpLocalIntegrityDrift { name } if name == "my-srv")
+        ),
         "expected drift warning, got: {:?}",
         issues
     );
@@ -148,13 +148,7 @@ fn test_entrypoint_missing_reports_entrypoint_error() {
     let home = tempdir().unwrap();
     let (config, cache) =
         setup_folder_and_cache(home.path(), "@acme/pkg", "my-srv", "dist/index.js");
-    fs::remove_file(
-        config
-            .global_mcp_dir()
-            .join("my-srv")
-            .join("dist/index.js"),
-    )
-    .unwrap();
+    fs::remove_file(config.global_mcp_dir().join("my-srv").join("dist/index.js")).unwrap();
 
     let issues = checks::check_mcp_local(&cache, &config);
     assert!(

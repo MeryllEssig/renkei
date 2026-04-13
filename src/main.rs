@@ -221,7 +221,7 @@ fn run_list(global: bool) -> error::Result<()> {
 
 fn run_doctor(global: bool, registry: &BackendRegistry) -> error::Result<()> {
     let config = build_config(global)?;
-    let healthy = doctor::run_doctor(&config, global, registry)?;
+    let healthy = doctor::run_doctor(&config, registry)?;
     if !healthy {
         process::exit(1);
     }

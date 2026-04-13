@@ -402,8 +402,6 @@ mod tests {
         run_uninstall("@test/pkg", &config).unwrap();
     }
 
-    // ---- Local MCP GC tests (phase 8) ----
-
     use crate::install_cache::{McpLocalEntry, McpLocalRef};
 
     fn setup_local_mcp_cache(
@@ -413,10 +411,7 @@ mod tests {
         refs: Vec<McpLocalRef>,
     ) {
         let mut cache = InstallCache::load(config).unwrap();
-        cache.upsert_package(
-            package,
-            make_v2_package(vec![], vec![mcp_name.to_string()]),
-        );
+        cache.upsert_package(package, make_v2_package(vec![], vec![mcp_name.to_string()]));
         cache.mcp_local.insert(
             mcp_name.to_string(),
             McpLocalEntry {
@@ -440,7 +435,11 @@ mod tests {
                 server_name: { "command": "node", "args": ["/foo.js"] }
             }
         });
-        std::fs::write(&config_path, serde_json::to_string_pretty(&claude_json).unwrap()).unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&claude_json).unwrap(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -489,7 +488,10 @@ mod tests {
         let loaded = InstallCache::load(&config).unwrap();
         let entry = loaded.mcp_local.get("my-srv").expect("entry kept");
         assert_eq!(entry.referenced_by.len(), 1);
-        assert_eq!(entry.referenced_by[0].project_root.as_deref(), Some("/other/project"));
+        assert_eq!(
+            entry.referenced_by[0].project_root.as_deref(),
+            Some("/other/project")
+        );
     }
 
     #[test]

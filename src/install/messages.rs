@@ -91,9 +91,7 @@ pub(crate) fn confirm_block(
     let answer = inquire::Confirm::new(prompt)
         .with_default(false)
         .prompt()
-        .map_err(|e| {
-            RenkeiError::DeploymentFailed(format!("{prompt} confirmation failed: {e}"))
-        })?;
+        .map_err(|e| RenkeiError::DeploymentFailed(format!("{prompt} confirmation failed: {e}")))?;
     if !answer {
         println!("{}", "Installation cancelled.".yellow());
     }

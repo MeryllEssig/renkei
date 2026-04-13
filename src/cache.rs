@@ -46,18 +46,38 @@ pub fn create_archive(
     let mut tar_builder = tar::Builder::new(enc);
 
     tar_builder.append_path_with_name(package_dir.join("renkei.json"), "renkei.json")?;
+    append_package_tree(&mut tar_builder, package_dir)?;
 
-    let pkg_patterns = rkignore::load_rkignore(package_dir);
-    for dir_name in &["skills", "hooks", "agents", "scripts"] {
-        let dir = package_dir.join(dir_name);
+    tar_builder.into_inner()?.finish()?;
+
+    let hash = compute_sha256(&path)?;
+    Ok((path, hash))
+}
+
+/// Top-level package directories archived alongside `renkei.json` and the
+/// `mcp/` subtree. Shared with `rk package` so both ship identical layouts.
+pub(crate) const PACKAGE_DIRS: &[&str] = &["skills", "hooks", "agents", "scripts"];
+
+/// Append every Renkei-conventional directory under `package_root` into `tar`,
+/// applying rkignore at the package root and the trimmed MCP rules under each
+/// `mcp/<name>/` subtree. Returns the archive-relative paths added (callers
+/// that don't need the summary may discard).
+pub(crate) fn append_package_tree<W: Write>(
+    tar: &mut tar::Builder<W>,
+    package_root: &Path,
+) -> Result<Vec<String>> {
+    let mut added = Vec::new();
+    let pkg_patterns = rkignore::load_rkignore(package_root);
+    for dir_name in PACKAGE_DIRS {
+        let dir = package_root.join(dir_name);
         if dir.is_dir() {
-            append_filtered_dir(&mut tar_builder, &dir, dir_name, &pkg_patterns)?;
+            added.extend(append_filtered_dir(tar, &dir, dir_name, &pkg_patterns)?);
         }
     }
 
-    let mcp_root = package_dir.join("mcp");
+    let mcp_root = package_root.join("mcp");
     if mcp_root.is_dir() {
-        let mcp_patterns = rkignore::load_mcp_ignores(package_dir);
+        let mcp_patterns = rkignore::load_mcp_ignores(package_root);
         let mut subdirs: Vec<_> = fs::read_dir(&mcp_root)?
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
@@ -66,20 +86,13 @@ pub fn create_archive(
         for entry in subdirs {
             let dir = entry.path();
             let prefix = format!("mcp/{}", entry.file_name().to_string_lossy());
-            append_filtered_dir(&mut tar_builder, &dir, &prefix, &mcp_patterns)?;
+            added.extend(append_filtered_dir(tar, &dir, &prefix, &mcp_patterns)?);
         }
     }
-
-    tar_builder.into_inner()?.finish()?;
-
-    let hash = compute_sha256(&path)?;
-    Ok((path, hash))
+    Ok(added)
 }
 
-/// Walk `root` with the rkignore-driven filter and append each surviving file
-/// under `archive_prefix/<relative-path>` into `tar`. Returns the list of
-/// archive-relative paths added (used by callers that report a file summary).
-pub(crate) fn append_filtered_dir<W: Write>(
+fn append_filtered_dir<W: Write>(
     tar: &mut tar::Builder<W>,
     root: &Path,
     archive_prefix: &str,
@@ -88,8 +101,7 @@ pub(crate) fn append_filtered_dir<W: Write>(
     let walk = rkignore::build_walker(root, patterns)?;
     let mut added = Vec::new();
     for entry in walk {
-        let entry =
-            entry.map_err(|e| RenkeiError::CacheError(format!("rkignore walk: {e}")))?;
+        let entry = entry.map_err(|e| RenkeiError::CacheError(format!("rkignore walk: {e}")))?;
         let path = entry.path();
         let rel = match path.strip_prefix(root) {
             Ok(p) if !p.as_os_str().is_empty() => p,
@@ -355,7 +367,9 @@ mod tests {
         let home = tempdir().unwrap();
         let pkg = tempdir().unwrap();
         setup_package(pkg.path());
-        fs::write(pkg.path().join(".rkignore"), "skills/review/extra.md\n").unwrap();
+        // Patterns are matched per-walker (rooted at each top-level dir), so
+        // they must be relative to that dir. `extra.md` matches at any depth.
+        fs::write(pkg.path().join(".rkignore"), "extra.md\n").unwrap();
         fs::write(pkg.path().join("skills/review/extra.md"), "ignored").unwrap();
 
         let config = Config::with_home_dir(home.path().to_path_buf());

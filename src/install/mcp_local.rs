@@ -96,14 +96,17 @@ pub(crate) fn stage_local_mcps(
         }
 
         let entrypoint = server.entrypoint.as_ref().ok_or_else(|| {
-            RenkeiError::InvalidManifest(format!(
-                "local MCP `{name}` requires `entrypoint`"
-            ))
+            RenkeiError::InvalidManifest(format!("local MCP `{name}` requires `entrypoint`"))
         })?;
         let source_dir = package_dir.join("mcp").join(name);
         let target_dir = global_root.join(name);
 
-        let outcome = peek_outcome(current_local, name, &raw_manifest.name, &raw_manifest.version);
+        let outcome = peek_outcome(
+            current_local,
+            name,
+            &raw_manifest.name,
+            &raw_manifest.version,
+        );
         let reuse_existing =
             matches!(outcome, Outcome::AddedRef) && target_dir.exists() && !link_mode;
 
@@ -168,10 +171,7 @@ pub(crate) fn stage_local_mcps(
         }
         let final_abs = target_dir.join(entrypoint);
 
-        effective_mcp.insert(
-            name.clone(),
-            build_server_json(server, &final_abs)?,
-        );
+        effective_mcp.insert(name.clone(), build_server_json(server, &final_abs)?);
 
         staged.push(StagedMcp {
             name: name.clone(),
@@ -316,8 +316,7 @@ fn copy_dir_filtered(src: &Path, dst: &Path, patterns: &[String]) -> Result<()> 
     std::fs::create_dir_all(dst)?;
 
     for entry in walker {
-        let entry = entry
-            .map_err(|e| RenkeiError::CacheError(format!("walk error: {e}")))?;
+        let entry = entry.map_err(|e| RenkeiError::CacheError(format!("walk error: {e}")))?;
         let path = entry.path();
         let rel = match path.strip_prefix(src) {
             Ok(r) => r,
@@ -372,10 +371,7 @@ fn check_link_target(target: &Path, source: &Path, name: &str) -> Result<()> {
     };
     if meta.file_type().is_symlink() {
         let current = std::fs::read_link(target).map_err(|e| {
-            RenkeiError::DeploymentFailed(format!(
-                "cannot read symlink {}: {e}",
-                target.display()
-            ))
+            RenkeiError::DeploymentFailed(format!("cannot read symlink {}: {e}", target.display()))
         })?;
         if current != source {
             return Err(RenkeiError::McpOwnerConflict {
@@ -569,9 +565,16 @@ mod tests {
         let cfg = Config::with_home_dir(home.path().into());
         let store = PackageStore::load(&cfg).unwrap();
 
-        let (staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
-                .unwrap();
+        let (staged, eff) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store.cache().mcp_local,
+            &cfg,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
         assert!(staged.is_empty());
         // External entry is preserved verbatim.
         let eff = eff.unwrap();
@@ -597,15 +600,29 @@ mod tests {
         let cfg = Config::with_home_dir(home.path().into());
         let mut store = PackageStore::load(&cfg).unwrap();
 
-        let (staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
-                .unwrap();
+        let (staged, eff) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store.cache().mcp_local,
+            &cfg,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(staged.len(), 1);
-        assert!(staged[0].pending_swap.is_some(), "fresh install should stage");
+        assert!(
+            staged[0].pending_swap.is_some(),
+            "fresh install should stage"
+        );
 
         commit_local_mcps(staged, &mut store).unwrap();
 
-        let target = cfg.global_mcp_dir().join("srv").join("dist").join("index.js");
+        let target = cfg
+            .global_mcp_dir()
+            .join("srv")
+            .join("dist")
+            .join("index.js");
         assert!(target.exists(), "entrypoint must exist after commit");
         let cache = store.cache();
         let entry = cache.mcp_local.get("srv").unwrap();
@@ -641,9 +658,16 @@ mod tests {
         let cfg = Config::with_home_dir(home.path().into());
         let store = PackageStore::load(&cfg).unwrap();
 
-        let (_staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
-                .unwrap();
+        let (_staged, eff) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store.cache().mcp_local,
+            &cfg,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
         let srv = eff.unwrap()["srv"].clone();
         let args = srv["args"].as_array().unwrap();
         assert_eq!(args.len(), 2);
@@ -783,15 +807,21 @@ mod tests {
             vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
         );
 
-        let (staged1, _) =
-            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
-                .unwrap();
+        let (staged1, _) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store.cache().mcp_local,
+            &cfg,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
         commit_local_mcps(staged1, &mut store).unwrap();
 
         // Second install — project-scoped config simulates a second project.
         let project_root = tempdir().unwrap();
-        let cfg_project =
-            Config::for_project(home.path().into(), project_root.path().into());
+        let cfg_project = Config::for_project(home.path().into(), project_root.path().into());
         let (staged2, _) = stage_local_mcps(
             &m,
             pkg.path(),
@@ -845,7 +875,12 @@ mod tests {
         .unwrap();
         commit_local_mcps(staged, &mut store).unwrap();
 
-        assert!(cfg.global_mcp_dir().join("srv").join("dist").join("index.js").exists());
+        assert!(cfg
+            .global_mcp_dir()
+            .join("srv")
+            .join("dist")
+            .join("index.js")
+            .exists());
     }
 
     #[cfg(unix)]
@@ -898,7 +933,12 @@ mod tests {
         assert!(matches!(err, RenkeiError::BuildFailed { .. }));
 
         // Previous version still present.
-        assert!(cfg.global_mcp_dir().join("srv").join("dist").join("index.js").exists());
+        assert!(cfg
+            .global_mcp_dir()
+            .join("srv")
+            .join("dist")
+            .join("index.js")
+            .exists());
         // No leftover staging dir.
         assert!(!cfg.global_mcp_dir().join("srv.new").exists());
         // Cache still records v1.
@@ -912,11 +952,7 @@ mod tests {
             "1.0.0",
             vec![(
                 "srv",
-                local_mcp(
-                    Some("dist/index.js"),
-                    Some(vec![vec!["true"]]),
-                    vec![],
-                ),
+                local_mcp(Some("dist/index.js"), Some(vec![vec!["true"]]), vec![]),
             )],
         );
         let pkg = make_pkg_with_mcp("srv", "x");
@@ -975,7 +1011,10 @@ mod tests {
 
         let target = cfg.global_mcp_dir().join("srv");
         let meta = std::fs::symlink_metadata(&target).unwrap();
-        assert!(meta.file_type().is_symlink(), "expected symlink at {target:?}");
+        assert!(
+            meta.file_type().is_symlink(),
+            "expected symlink at {target:?}"
+        );
         let link_target = std::fs::read_link(&target).unwrap();
         assert_eq!(link_target, pkg.path().join("mcp").join("srv"));
         // backend args still resolve via the (canonical) target path.
@@ -1101,13 +1140,19 @@ mod tests {
             "1.0.0",
             vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
         );
-        let (staged, _) =
-            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
-                .unwrap();
+        let (staged, _) = stage_local_mcps(
+            &m,
+            pkg.path(),
+            &store.cache().mcp_local,
+            &cfg,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
         let staging = staged[0].pending_swap.clone().unwrap();
         assert!(staging.exists());
         rollback_staging(&staged);
         assert!(!staging.exists());
     }
-
 }

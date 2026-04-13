@@ -756,11 +756,9 @@ mod tests {
     fn test_workspace_mcp_collision_detected() {
         let a = make_member_manifest(r#"{"shared":{"command":"node"}}"#);
         let b = make_member_manifest(r#"{"shared":{"command":"node"}}"#);
-        let err = validate_workspace_mcp_collisions(&[
-            ("member-a".into(), &a),
-            ("member-b".into(), &b),
-        ])
-        .unwrap_err();
+        let err =
+            validate_workspace_mcp_collisions(&[("member-a".into(), &a), ("member-b".into(), &b)])
+                .unwrap_err();
         assert!(err.to_string().contains("shared"));
         assert!(err.to_string().contains("member-a"));
         assert!(err.to_string().contains("member-b"));
@@ -770,21 +768,15 @@ mod tests {
     fn test_workspace_mcp_no_collision_ok() {
         let a = make_member_manifest(r#"{"first":{"command":"node"}}"#);
         let b = make_member_manifest(r#"{"second":{"command":"node"}}"#);
-        validate_workspace_mcp_collisions(&[
-            ("member-a".into(), &a),
-            ("member-b".into(), &b),
-        ])
-        .unwrap();
+        validate_workspace_mcp_collisions(&[("member-a".into(), &a), ("member-b".into(), &b)])
+            .unwrap();
     }
 
     #[test]
     fn test_workspace_mcp_collision_ignores_member_with_no_mcp() {
         let a = make_member_manifest(r#"{"foo":{"command":"node"}}"#);
         let b: Manifest = serde_json::from_str(valid_json()).unwrap();
-        validate_workspace_mcp_collisions(&[
-            ("member-a".into(), &a),
-            ("member-b".into(), &b),
-        ])
-        .unwrap();
+        validate_workspace_mcp_collisions(&[("member-a".into(), &a), ("member-b".into(), &b)])
+            .unwrap();
     }
 }

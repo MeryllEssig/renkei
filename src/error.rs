@@ -115,9 +115,7 @@ pub enum RenkeiError {
         attempted_by: String,
     },
 
-    #[error(
-        "Local MCP '{name}': cannot resolve entrypoint at {entrypoint}. Did the build run?"
-    )]
+    #[error("Local MCP '{name}': cannot resolve entrypoint at {entrypoint}. Did the build run?")]
     McpEntrypointMissing { name: String, entrypoint: String },
 
     #[error(
@@ -125,9 +123,7 @@ pub enum RenkeiError {
     )]
     McpLinkOverReal { name: String, target: String },
 
-    #[error(
-        "`--link` is only supported for local source paths, not git URLs."
-    )]
+    #[error("`--link` is only supported for local source paths, not git URLs.")]
     LinkRequiresLocalSource,
 
     #[error(

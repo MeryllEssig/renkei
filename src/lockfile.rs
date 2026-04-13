@@ -804,12 +804,7 @@ mod tests {
         );
         lockfile.save(&lockfile_path).unwrap();
 
-        let result = install_from_lockfile(
-            &config,
-            &[&ClaudeBackend as &dyn Backend],
-            true,
-            false,
-        );
+        let result = install_from_lockfile(&config, &[&ClaudeBackend as &dyn Backend], true, false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         match err {
