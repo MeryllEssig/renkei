@@ -1,5 +1,6 @@
 mod cleanup;
 mod deploy;
+pub(crate) mod messages;
 pub(crate) mod pipeline;
 mod resolve;
 mod types;

@@ -86,6 +86,11 @@ pub enum RenkeiError {
     #[error("`-m`/`--member` cannot be combined with a no-argument `rk install` (lockfile restore).")]
     MemberFlagWithLockfileInstall,
 
+    #[error(
+        "Refusing to prompt in non-interactive mode. Re-run with --yes to accept all preinstall notices."
+    )]
+    PreinstallRequiresConfirmation,
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

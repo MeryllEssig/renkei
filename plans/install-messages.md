@@ -45,15 +45,15 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 
 ## Phase 3: Confirmation prompt module
 
-- [ ] 3.1 New module `src/install/messages.rs` (or extend `install/mod.rs`) exposing:
+- [x] 3.1 New module `src/install/messages.rs` (or extend `install/mod.rs`) exposing:
   - `struct PreinstallNotice { full_name: String, message: String }`
   - `fn collect_preinstall(manifests: &[&Manifest]) -> Vec<PreinstallNotice>`
   - `fn confirm_preinstall(notices: &[PreinstallNotice], yes: bool) -> Result<bool>` — returns `Ok(true)` to proceed, `Ok(false)` if the user declined, `Err` on non-TTY without `--yes`.
-- [ ] 3.2 Rendering: yellow/bold framed block via `owo_colors`. Title `"Preinstall notice:"`, then one line per package: `  @scope/name: <message>` (multi-line messages indented).
-- [ ] 3.3 Prompt via `inquire::Confirm` (already a dep — see `install/mod.rs::prompt_rename`); default `false`; final question `Install all? [y/N]`.
-- [ ] 3.4 Non-TTY detection via `std::io::stdin().is_terminal()` (same pattern as `default_resolver`). Error message: `"Refusing to prompt in non-interactive mode. Re-run with --yes to accept all preinstall notices."`
-- [ ] 3.5 Refusal path: print `"Installation cancelled."` and return `Ok(false)`. Caller exits 0.
-- [ ] 3.6 TDD: empty notices → no prompt, returns `Ok(true)`. With `yes = true` → no prompt, `Ok(true)`. Non-TTY + `yes = false` → `Err`. Render snapshot test for the framed block (string assertion).
+- [x] 3.2 Rendering: yellow/bold framed block via `owo_colors`. Title `"Preinstall notice:"`, then one line per package: `  @scope/name: <message>` (multi-line messages indented).
+- [x] 3.3 Prompt via `inquire::Confirm` (already a dep — see `install/mod.rs::prompt_rename`); default `false`; final question `Install all? [y/N]`.
+- [x] 3.4 Non-TTY detection via `std::io::stdin().is_terminal()` (same pattern as `default_resolver`). Error message: `"Refusing to prompt in non-interactive mode. Re-run with --yes to accept all preinstall notices."`
+- [x] 3.5 Refusal path: print `"Installation cancelled."` and return `Ok(false)`. Caller exits 0.
+- [x] 3.6 TDD: empty notices → no prompt, returns `Ok(true)`. With `yes = true` → no prompt, `Ok(true)`. Non-TTY + `yes = false` → `Err`. Render snapshot test for the framed block (string assertion). _→ 9 tests, all green._
 
 ## Phase 4: Install pipeline refactor (two-phase)
 
@@ -79,7 +79,7 @@ Without this, authors stuff prerequisites in README files that nobody reads befo
 ## Phase 6: Error variant and exit codes
 
 - [ ] 6.1 Add `RenkeiError::PreinstallDeclined` (or reuse a generic cancellation path) — but per design, refusal is `exit 0`, not an error. So this is just a control-flow `bool`/early-return, not an error variant.
-- [ ] 6.2 Add `RenkeiError::PreinstallRequiresConfirmation` for the non-TTY case, with the suggested `--yes` message.
+- [x] 6.2 Add `RenkeiError::PreinstallRequiresConfirmation` for the non-TTY case, with the suggested `--yes` message. _→ Landed alongside Phase 3 because `confirm_preinstall`'s signature depends on it._
 - [ ] 6.3 Wire the early-return through `main.rs` so refusal does not produce an error stack trace.
 
 ## Phase 7: Integration tests
