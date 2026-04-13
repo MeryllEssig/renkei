@@ -26,6 +26,8 @@
 14f. As a developer, I want `rk install` outside a git repository (without `-g`) to fail with a clear error so I don't accidentally deploy to the wrong location.
 14g. As a developer, I want `rk uninstall` to mirror `rk install` scoping so that project packages are removed from the project and global packages from the global scope, with no cross-scope fallback.
 
+14h. As a developer installing from a workspace repository, I want to install only the members I need via `-m <member>` (repeatable, CSV-aware) so I don't deploy unrelated packages, and I want the chosen member to be persisted in `rk.lock` so `rk install` (no-arg) replays the same subset.
+
 ## Conflict management
 
 15. As a developer, I want to be alerted if two packages deploy a skill with the same name to avoid silent overwrites.

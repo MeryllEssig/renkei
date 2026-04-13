@@ -103,6 +103,7 @@ Share via git or distribute the archive directly.
 | `rk install` | Restore from `rk.lock` |
 | `rk install -g <source>` | Install globally (`~/`) |
 | `rk install --tag v1.0` | Pin to a git tag |
+| `rk install <source> -m <member>` | Install only the named workspace member (repeatable, CSV-aware) |
 | `rk uninstall @scope/name` | Remove a package |
 | `rk list` | Show installed packages |
 | `rk doctor` | Run health diagnostics |

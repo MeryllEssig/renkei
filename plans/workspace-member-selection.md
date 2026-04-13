@@ -75,7 +75,7 @@ Today, `rk install <giturl>` on a workspace repo always installs **all** declare
 
 ## Phase 8: Documentation
 
-- [ ] 8.1 Update `doc/prd/installation.md` with the `-m` flag, validation rules, and lockfile `member` field.
-- [ ] 8.2 Update `doc/prd/manifest.md` workspace section: mention selective install via `-m`.
-- [ ] 8.3 Add a user story under "Installation and deployment" in `doc/prd/user-stories.md` (e.g. US 14h: selective workspace member install).
-- [ ] 8.4 Update `README.md` install examples with a `-m` example.
+- [x] 8.1 Update `doc/prd/installation.md` with the `-m` flag, validation rules, and lockfile `member` field.
+- [x] 8.2 Update `doc/prd/manifest.md` workspace section: mention selective install via `-m`.
+- [x] 8.3 Add a user story under "Installation and deployment" in `doc/prd/user-stories.md` (e.g. US 14h: selective workspace member install).
+- [x] 8.4 Update `README.md` install examples with a `-m` example.

@@ -14,6 +14,8 @@ Each subfolder contains its own complete `renkei.json` and its conventional dire
 
 For a repo without a workspace (single package), the conventional directories (`skills/`, `hooks/`, `agents/`) are directly at the root.
 
+By default, `rk install` deploys all declared members. Use `-m <member>` (repeatable, CSV-aware) to install a subset — e.g. `rk install <giturl> -m mr-review`. The selected member name is persisted in the lockfile so `rk install` (no-arg) replays the same subset. See [Installation](./installation.md#selective-workspace-install--m--member) for the full validation rules.
+
 ## Manifest `renkei.json`
 
 - Required fields: `name` (scoped `@scope/name`, **required from v1**), `version` (semver), `description`, `author`, `license`, `backends`.

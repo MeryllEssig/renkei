@@ -37,6 +37,26 @@ Without `--tag` or `--branch`, HEAD of the default branch is used. The commit SH
 - `rk install ./my-workflow/` creates a **copy** (snapshot archive in `~/.renkei/archives/`), same as Git, respecting the active scope.
 - `rk install --link ./my-workflow/` creates **symlinks** for development (`npm link` / `pip install -e` model), respecting the active scope. Changes in source files are immediately reflected.
 
+## Selective workspace install (`-m` / `--member`)
+
+When the source is a workspace package (manifest declares `workspace`), `rk install` deploys **all** members by default. Pass `-m <member>` (repeatable, also CSV) to install only the named members:
+
+```bash
+rk install git@github.com:team/our-workflows -m mr-review
+rk install ./monorepo -m mr-review -m auto-test
+rk install ./monorepo -m mr-review,auto-test       # equivalent
+```
+
+Validation (fail-fast, before any deploy):
+
+- `-m foo` where `foo` is not in the manifest's `workspace` array → error listing the available members.
+- `-m` on a non-workspace source (no `workspace` field) → error.
+- `-m` combined with no-argument `rk install` (lockfile restore) → error.
+
+Each selected member is recorded as an independent entry in `rk.lock`, with an additional optional `member` field naming the workspace subdirectory it was installed from. `rk install` (no-arg) replays each lockfile entry independently: for entries with `member` set, the install resolves to `<clone>/<member>` (Git) or `<source>/<member>` (Local) before deploying. Cached archives are member-scoped, so the cache hit path is unchanged.
+
+`--tag` / `--branch` / `--force` / `--backend` apply once per invocation and are propagated uniformly to every selected member.
+
 ## No-argument installation
 
 - `rk install` → if `rk.lock` exists in the project root → installs the exact versions from the lockfile in project scope.
