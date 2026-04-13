@@ -119,10 +119,7 @@ fn test_deploy_creates_files() {
 
     assert_eq!(deployment.all_deployed.len(), 1);
     assert!(deployment.deployed_map.contains_key("claude"));
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
 }
 
 // --- Full pipeline roundtrip ---

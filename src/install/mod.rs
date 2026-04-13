@@ -9,7 +9,6 @@ mod types;
 pub(crate) use cleanup::cleanup_previous_installation;
 pub use types::{ConflictResolver, InstallOptions, SourceInfo, SourceKind};
 
-use std::io::IsTerminal;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
@@ -19,38 +18,23 @@ use crate::cache;
 use crate::config::Config;
 use crate::conflict::Conflict;
 use crate::env_check;
-use crate::error::{RenkeiError, Result};
+use crate::error::Result;
 use crate::install_cache::PackageEntry;
-use crate::manifest::{self, RequestedScope};
+use crate::manifest::{self, Manifest, RequestedScope};
 use crate::package_store::PackageStore;
 
 use pipeline::CorePipeline;
 
-fn prompt_rename(conflict: &Conflict) -> Result<String> {
-    let prompt = format!(
-        "{} '{}' conflicts with package '{}'. Enter a new name:",
-        conflict.artifact_kind, conflict.artifact_name, conflict.owner_package,
-    );
-    inquire::Text::new(&prompt)
-        .with_help_message("The artifact will be deployed under this name")
-        .prompt()
-        .map_err(|e| RenkeiError::DeploymentFailed(format!("Prompt failed: {e}")))
-}
-
-/// Build the conflict resolver based on --force and TTY detection.
-pub(crate) fn default_resolver(force: bool) -> Box<ConflictResolver> {
+/// Build the conflict resolver. When `force` is set, conflicts are overwritten.
+/// Otherwise, colliding artifacts are automatically renamed to `{scope}-{name}`
+/// where `scope` is the incoming package's scope. Residual conflicts on the
+/// renamed target are caught later by `resolve_conflicts_and_rename`.
+pub(crate) fn default_resolver(force: bool, scope: &str) -> Box<ConflictResolver> {
     if force {
         Box::new(|_: &Conflict| Ok(None))
-    } else if std::io::stdin().is_terminal() {
-        Box::new(|c: &Conflict| prompt_rename(c).map(Some))
     } else {
-        Box::new(|c: &Conflict| {
-            Err(RenkeiError::ArtifactConflict {
-                kind: c.artifact_kind.clone(),
-                name: c.artifact_name.clone(),
-                owner: c.owner_package.clone(),
-            })
-        })
+        let scope = scope.to_string();
+        Box::new(move |c: &Conflict| Ok(Some(format!("{scope}-{}", c.artifact_name))))
     }
 }
 
@@ -61,7 +45,9 @@ pub fn install_local(
     requested_scope: RequestedScope,
     options: &InstallOptions,
 ) -> Result<()> {
-    let resolver = default_resolver(options.force);
+    let raw_manifest = Manifest::from_path(package_dir)?;
+    let validated = raw_manifest.validate()?;
+    let resolver = default_resolver(options.force, &validated.scope);
     let postinstall = install_local_with_resolver(
         package_dir,
         config,

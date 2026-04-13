@@ -162,14 +162,8 @@ fn test_uninstall_leaves_other_packages() {
         .success();
 
     // Verify both skills exist
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/check/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/check/SKILL.md").exists());
 
     // Uninstall only the first one
     Command::cargo_bin("rk")
@@ -189,14 +183,8 @@ fn test_uninstall_leaves_other_packages() {
         .stdout(predicate::str::contains("@test/env-only"))
         .stdout(predicate::str::contains("@test/sample-workflow").not());
 
-    assert!(!home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/check/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/check/SKILL.md").exists());
 }
 
 #[test]

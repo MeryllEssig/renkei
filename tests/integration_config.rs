@@ -122,18 +122,13 @@ fn test_install_uses_config_backends() {
 
     // Agents skill exists
     assert!(
-        home.path()
-            .join(".agents/skills/review/SKILL.md")
-            .exists(),
+        home.path().join(".agents/skills/review/SKILL.md").exists(),
         "Agents skill should be deployed"
     );
 
     // Claude skill should NOT exist (not in config backends)
     assert!(
-        !home
-            .path()
-            .join(".claude/skills/review/SKILL.md")
-            .exists(),
+        !home.path().join(".claude/skills/review/SKILL.md").exists(),
         "Claude skill should not be deployed when config only has agents"
     );
 }
@@ -156,16 +151,12 @@ fn test_install_falls_back_to_autodetect_without_config() {
 
     // Claude installed (detected)
     assert!(
-        home.path()
-            .join(".claude/skills/review/SKILL.md")
-            .exists(),
+        home.path().join(".claude/skills/review/SKILL.md").exists(),
         "Claude skill should be deployed via auto-detect"
     );
     // Agents also installed (always detected)
     assert!(
-        home.path()
-            .join(".agents/skills/review/SKILL.md")
-            .exists(),
+        home.path().join(".agents/skills/review/SKILL.md").exists(),
         "Agents skill should be deployed (always detected)"
     );
 }

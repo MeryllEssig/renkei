@@ -154,10 +154,7 @@ fn test_install_workspace_missing_member_manifest() {
 
     // Verify no members were partially installed
     assert!(
-        !home
-            .path()
-            .join(".claude/skills/foo/SKILL.md")
-            .exists(),
+        !home.path().join(".claude/skills/foo/SKILL.md").exists(),
         "No member should be installed on failure"
     );
 }
@@ -179,10 +176,7 @@ fn test_workspace_lockfile_roundtrip() {
 
     // Step 2: Delete deployed skills (keep archives + lockfile)
     fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
-    assert!(!home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/review/SKILL.md").exists());
 
     // Step 3: Restore from lockfile
     Command::cargo_bin("rk")
@@ -195,12 +189,6 @@ fn test_workspace_lockfile_roundtrip() {
         .stdout(predicate::str::contains("Restoring"));
 
     // Step 4: Verify both skills are re-deployed
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
 }

@@ -41,6 +41,20 @@ pub(crate) fn resolve_conflicts_and_rename(
                 }
             }
             Some(new_name) => {
+                for (owner_pkg, owner_entry) in &install_cache.packages {
+                    if owner_pkg == manifest_name {
+                        continue;
+                    }
+                    for deployed in owner_entry.all_artifacts() {
+                        if deployed.artifact_type == c.artifact_kind && deployed.name == new_name {
+                            return Err(RenkeiError::ArtifactConflict {
+                                kind: c.artifact_kind.clone(),
+                                name: new_name.clone(),
+                                owner: owner_pkg.clone(),
+                            });
+                        }
+                    }
+                }
                 renames.insert((c.artifact_kind.clone(), c.artifact_name.clone()), new_name);
             }
         }

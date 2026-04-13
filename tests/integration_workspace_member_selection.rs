@@ -140,14 +140,8 @@ fn local_install_with_member_deploys_only_named() {
         .stdout(predicate::str::contains("@t/member-a"))
         .stdout(predicate::str::contains("@t/member-b").not());
 
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(!home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(!home.path().join(".claude/skills/lint/SKILL.md").exists());
 
     let lockfile = fs::read_to_string(home.path().join(".renkei/rk.lock")).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&lockfile).unwrap();
@@ -176,14 +170,8 @@ fn local_install_csv_and_repeated_member_flags_are_equivalent() {
         .arg("member-a,member-b")
         .assert()
         .success();
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
 
     // Wipe and try repeated form
     fs::remove_dir_all(home.path().join(".claude/skills")).unwrap();
@@ -200,14 +188,8 @@ fn local_install_csv_and_repeated_member_flags_are_equivalent() {
         .arg("member-b")
         .assert()
         .success();
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
 }
 
 #[test]
@@ -231,14 +213,8 @@ fn install_with_unknown_member_fails_and_lists_available() {
         .stderr(predicate::str::contains("member-a"))
         .stderr(predicate::str::contains("member-b"));
 
-    assert!(!home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(!home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(!home.path().join(".claude/skills/lint/SKILL.md").exists());
 }
 
 #[test]
@@ -305,14 +281,8 @@ fn git_install_with_member_deploys_only_named() {
         .assert()
         .success();
 
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(!home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(!home.path().join(".claude/skills/lint/SKILL.md").exists());
 
     let lockfile = fs::read_to_string(home.path().join(".renkei/rk.lock")).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&lockfile).unwrap();
@@ -368,14 +338,8 @@ fn git_lockfile_reinstall_honors_member() {
         .success()
         .stdout(predicate::str::contains("Restoring"));
 
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
 }
 
 #[test]

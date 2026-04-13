@@ -121,10 +121,7 @@ fn single_local_preinstall_with_yes_installs() {
         .success()
         .stdout(predicate::str::contains("@test/pre-yes"));
 
-    assert!(home
-        .path()
-        .join(".claude/skills/skill1/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/skill1/SKILL.md").exists());
 }
 
 #[test]
@@ -149,10 +146,7 @@ fn single_local_preinstall_in_non_tty_without_yes_errors_with_hint() {
         .stderr(predicate::str::contains("non-interactive"));
 
     // Nothing should have been deployed.
-    assert!(!home
-        .path()
-        .join(".claude/skills/skill2/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/skill2/SKILL.md").exists());
     // No lockfile entry either.
     assert!(!home.path().join(".renkei/rk.lock").exists());
 }
@@ -173,10 +167,7 @@ fn single_local_no_messages_does_not_prompt_in_non_tty() {
         .assert()
         .success();
 
-    assert!(home
-        .path()
-        .join(".claude/skills/skill3/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/skill3/SKILL.md").exists());
 }
 
 // --- Single-package postinstall ---
@@ -267,14 +258,8 @@ fn workspace_two_members_with_preinstall_show_single_block_and_one_yes_bypasses(
         .stdout(predicate::str::contains("@test/ws-a"))
         .stdout(predicate::str::contains("@test/ws-b"));
 
-    assert!(home
-        .path()
-        .join(".claude/skills/ska/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/skb/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/ska/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/skb/SKILL.md").exists());
 }
 
 #[test]
@@ -296,14 +281,8 @@ fn workspace_preinstall_in_non_tty_without_yes_errors_and_installs_nothing() {
         .stderr(predicate::str::contains("--yes"));
 
     // Neither member should have been deployed (refusal short-circuits the batch).
-    assert!(!home
-        .path()
-        .join(".claude/skills/skna/SKILL.md")
-        .exists());
-    assert!(!home
-        .path()
-        .join(".claude/skills/sknb/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/skna/SKILL.md").exists());
+    assert!(!home.path().join(".claude/skills/sknb/SKILL.md").exists());
 }
 
 #[test]
@@ -397,10 +376,7 @@ fn lockfile_replay_with_preinstall_requires_yes_in_non_tty() {
         .args(["install", "-g", "--yes"])
         .assert()
         .success();
-    assert!(home
-        .path()
-        .join(".claude/skills/lfsk/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/lfsk/SKILL.md").exists());
 }
 
 // --- Validation ---
@@ -423,8 +399,5 @@ fn manifest_with_oversized_preinstall_fails_validation_pre_install() {
         .stderr(predicate::str::contains("2000"));
 
     // Nothing deployed.
-    assert!(!home
-        .path()
-        .join(".claude/skills/bigsk/SKILL.md")
-        .exists());
+    assert!(!home.path().join(".claude/skills/bigsk/SKILL.md").exists());
 }

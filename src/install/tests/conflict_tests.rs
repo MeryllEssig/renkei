@@ -4,7 +4,7 @@ use tempfile::tempdir;
 
 use crate::backend::{claude::ClaudeBackend, Backend};
 use crate::config::Config;
-use crate::install::{install_local_with_resolver, InstallOptions};
+use crate::install::{default_resolver, install_local_with_resolver, InstallOptions};
 use crate::install_cache::InstallCache;
 use crate::manifest::RequestedScope;
 
@@ -233,12 +233,107 @@ fn test_no_conflict_different_skill_names() {
     )
     .unwrap();
 
-    assert!(home
-        .path()
-        .join(".claude/skills/review/SKILL.md")
-        .exists());
-    assert!(home
-        .path()
-        .join(".claude/skills/lint/SKILL.md")
-        .exists());
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
+}
+
+#[test]
+fn test_default_resolver_auto_renames_with_scope() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    // Package "@acme/pkg-a" installs skill "review" first.
+    let pkg_a = make_pkg_with_skill("@acme/pkg-a", "review");
+    let opts_a = InstallOptions::local("/tmp/a".to_string());
+    install_local_with_resolver(
+        pkg_a.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts_a,
+        &force_resolver,
+    )
+    .unwrap();
+
+    // Second package from a DIFFERENT scope also ships "review".
+    // With the default (non-force) resolver, it must auto-rename to
+    // "{incoming_scope}-{name}" — here "widgetco-review".
+    let pkg_b = make_pkg_with_skill("@widgetco/pkg-b", "review");
+    let opts_b = InstallOptions::local("/tmp/b".to_string());
+    let resolver = default_resolver(false, "widgetco");
+    install_local_with_resolver(
+        pkg_b.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts_b,
+        &*resolver,
+    )
+    .unwrap();
+
+    assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+    let renamed = home.path().join(".claude/skills/widgetco-review/SKILL.md");
+    assert!(renamed.exists());
+    let content = fs::read_to_string(&renamed).unwrap();
+    assert!(content.contains("name: widgetco-review"));
+
+    let cache = InstallCache::load(&config).unwrap();
+    let b_entry = &cache.packages["@widgetco/pkg-b"];
+    let b_arts: Vec<_> = b_entry.all_artifacts().collect();
+    assert_eq!(b_arts[0].name, "widgetco-review");
+    assert_eq!(b_arts[0].original_name.as_deref(), Some("review"));
+}
+
+#[test]
+fn test_residual_conflict_on_renamed_target_errors() {
+    let home = tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let config = Config::with_home_dir(home.path().to_path_buf());
+
+    // A package already ships an artifact literally named "widgetco-review"
+    // (this is the target name the scope-rename would pick for the next install).
+    let squatter = make_pkg_with_skill("@other/squatter", "widgetco-review");
+    let opts = InstallOptions::local("/tmp/s".to_string());
+    install_local_with_resolver(
+        squatter.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts,
+        &force_resolver,
+    )
+    .unwrap();
+
+    // Another package holds the "review" name, so the new install will
+    // collide on "review" and the default resolver will propose "widgetco-review"
+    // — which is already taken by @other/squatter. Expect an explicit error.
+    let holder = make_pkg_with_skill("@holder/pkg", "review");
+    let opts_h = InstallOptions::local("/tmp/h".to_string());
+    install_local_with_resolver(
+        holder.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts_h,
+        &force_resolver,
+    )
+    .unwrap();
+
+    let pkg_b = make_pkg_with_skill("@widgetco/pkg-b", "review");
+    let opts_b = InstallOptions::local("/tmp/b".to_string());
+    let resolver = default_resolver(false, "widgetco");
+    let result = install_local_with_resolver(
+        pkg_b.path(),
+        &config,
+        &[&ClaudeBackend as &dyn Backend],
+        RequestedScope::Global,
+        &opts_b,
+        &*resolver,
+    );
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("widgetco-review"));
+    assert!(err.contains("@other/squatter"));
 }

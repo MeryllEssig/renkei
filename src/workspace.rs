@@ -78,11 +78,12 @@ pub fn install_workspace(
         return Ok(());
     }
 
-    let resolver = install::default_resolver(options.force);
     let mut postinstalls: Vec<(String, String)> = Vec::new();
     for (member, manifest) in to_install.iter().zip(manifests.iter()) {
         let member_dir = workspace_dir.join(member);
         let member_options = build_member_options(&member_dir, member, options);
+        let validated = manifest.validate()?;
+        let resolver = install::default_resolver(options.force, &validated.scope);
         let post = install::install_local_with_resolver(
             &member_dir,
             config,
@@ -190,14 +191,8 @@ mod tests {
         )
         .unwrap();
 
-        assert!(home
-            .path()
-            .join(".claude/skills/review/SKILL.md")
-            .exists());
-        assert!(home
-            .path()
-            .join(".claude/skills/lint/SKILL.md")
-            .exists());
+        assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+        assert!(home.path().join(".claude/skills/lint/SKILL.md").exists());
 
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
         assert!(cache.packages.contains_key("@test/member-a"));
@@ -250,10 +245,7 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Manifest not found"));
 
-        assert!(!home
-            .path()
-            .join(".claude/skills/foo/SKILL.md")
-            .exists());
+        assert!(!home.path().join(".claude/skills/foo/SKILL.md").exists());
     }
 
     #[test]
@@ -304,14 +296,8 @@ mod tests {
         )
         .unwrap();
 
-        assert!(home
-            .path()
-            .join(".claude/skills/review/SKILL.md")
-            .exists());
-        assert!(!home
-            .path()
-            .join(".claude/skills/lint/SKILL.md")
-            .exists());
+        assert!(home.path().join(".claude/skills/review/SKILL.md").exists());
+        assert!(!home.path().join(".claude/skills/lint/SKILL.md").exists());
 
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
         assert!(cache.packages.contains_key("@test/member-a"));
@@ -350,10 +336,7 @@ mod tests {
         assert!(msg.contains("bogus"));
         assert!(msg.contains("member-a"));
         assert!(msg.contains("member-b"));
-        assert!(!home
-            .path()
-            .join(".claude/skills/review/SKILL.md")
-            .exists());
+        assert!(!home.path().join(".claude/skills/review/SKILL.md").exists());
     }
 
     #[test]
