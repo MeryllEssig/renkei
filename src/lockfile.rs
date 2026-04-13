@@ -187,7 +187,7 @@ pub fn install_from_lockfile(config: &Config, backends: &[&dyn Backend]) -> Resu
                 )?;
             }
             Err(_) => {
-                install_from_source(config, backends, requested_scope, entry)?;
+                let _ = install_from_source(config, backends, requested_scope, entry)?;
             }
         }
     }
@@ -228,7 +228,7 @@ fn install_from_source(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     entry: &LockfileEntry,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let member = entry.member.as_deref();
     match source::parse_source(&entry.source) {
         source::PackageSource::GitSsh(url) | source::PackageSource::GitUrl(url) => {

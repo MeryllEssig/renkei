@@ -61,17 +61,26 @@ pub fn install_local(
     options: &InstallOptions,
 ) -> Result<()> {
     let resolver = default_resolver(options.force);
-    install_local_with_resolver(
+    let postinstall = install_local_with_resolver(
         package_dir,
         config,
         backends,
         requested_scope,
         options,
         &*resolver,
-    )
+    )?;
+    if let Some(msg) = postinstall {
+        print_postinstall_block(&msg, None);
+    }
+    Ok(())
 }
 
 /// Testable core of `install_local` with an injectable conflict resolver.
+///
+/// Returns the package's optional `messages.postinstall` string so callers
+/// (single-package wrapper, workspace coordinator, lockfile coordinator)
+/// can decide *when* to render the notice — inline for single packages,
+/// at the end of the batch for workspace/lockfile.
 pub(crate) fn install_local_with_resolver(
     package_dir: &Path,
     config: &Config,
@@ -79,7 +88,7 @@ pub(crate) fn install_local_with_resolver(
     requested_scope: RequestedScope,
     options: &InstallOptions,
     conflict_resolver: &ConflictResolver,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let pipeline = CorePipeline::discover(package_dir, backends, options.force)?;
     manifest::validate_scope(&pipeline.manifest.install_scope, requested_scope)?;
 
@@ -121,16 +130,14 @@ pub(crate) fn install_local_with_resolver(
         &resolved.manifest.full_name,
         &deployment.all_deployed,
         &resolved.raw_manifest,
-        None,
     );
-    Ok(())
+    Ok(extract_postinstall(&resolved.raw_manifest))
 }
 
 pub(crate) fn print_post_deploy(
     full_name: &str,
     deployed: &[crate::backend::DeployedArtifact],
     raw_manifest: &crate::manifest::Manifest,
-    package_label: Option<&str>,
 ) {
     println!(
         "{} Deployed {} artifact(s) for {}",
@@ -148,18 +155,21 @@ pub(crate) fn print_post_deploy(
             env_check::print_env_warnings(&missing);
         }
     }
-
-    if let Some(msg) = raw_manifest
-        .messages
-        .as_ref()
-        .and_then(|m| m.postinstall.as_deref())
-    {
-        if !msg.is_empty() {
-            print_postinstall_block(msg, package_label);
-        }
-    }
 }
 
+/// Pull the optional `messages.postinstall` string out of a manifest, returning
+/// `None` for missing or empty entries so callers can `if let Some(..)` cleanly.
+pub(crate) fn extract_postinstall(raw_manifest: &crate::manifest::Manifest) -> Option<String> {
+    raw_manifest
+        .messages
+        .as_ref()
+        .and_then(|m| m.postinstall.as_ref())
+        .filter(|s| !s.is_empty())
+        .cloned()
+}
+
+/// Render a single postinstall block, optionally prefixed with a package label
+/// (used by the workspace/batch coordinator to attribute each block to a member).
 pub(crate) fn print_postinstall_block(message: &str, package_label: Option<&str>) {
     println!("{}", "Postinstall notice:".yellow().bold());
     let prefix = package_label.map(|p| format!("{p}: ")).unwrap_or_default();
@@ -188,7 +198,7 @@ pub fn install_from_lock_entry(
     backends: &[&dyn Backend],
     requested_scope: RequestedScope,
     source: &SourceInfo,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let force_resolver: Box<ConflictResolver> = Box::new(|_: &Conflict| Ok(None));
 
     let pipeline = CorePipeline::discover(package_dir, backends, false)?;
@@ -235,9 +245,8 @@ pub fn install_from_lock_entry(
         &resolved.manifest.full_name,
         &deployment.all_deployed,
         &resolved.raw_manifest,
-        None,
     );
-    Ok(())
+    Ok(extract_postinstall(&resolved.raw_manifest))
 }
 
 #[cfg(test)]
