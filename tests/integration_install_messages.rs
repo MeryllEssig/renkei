@@ -217,6 +217,48 @@ fn single_local_postinstall_renders_after_done_line() {
         .stdout(predicate::str::contains("Run `rk doctor`"));
 }
 
+#[test]
+fn single_local_postinstall_renders_after_required_env_warnings() {
+    // Spec: render order is `Done.` → requiredEnv warnings → postinstall.
+    // This guards against future refactors that interleave the two.
+    let home = tempdir().unwrap();
+    setup_claude_home(home.path());
+    let pkg = tempdir().unwrap();
+    fs::write(
+        pkg.path().join("renkei.json"),
+        r#"{"name":"@test/order","version":"1.0.0","description":"t","author":"t","license":"MIT","backends":["claude"],"requiredEnv":{"RK_TEST_NEVER_SET":"Sentinel env var that should always be missing"},"messages":{"postinstall":"After-env post-step sentinel."}}"#,
+    )
+    .unwrap();
+    let sdir = pkg.path().join("skills/orderskill");
+    fs::create_dir_all(&sdir).unwrap();
+    fs::write(
+        sdir.join("SKILL.md"),
+        "---\nname: orderskill\ndescription: t\n---\nbody",
+    )
+    .unwrap();
+
+    let assert = Command::cargo_bin("rk")
+        .unwrap()
+        .env("HOME", home.path())
+        .env_remove("RK_TEST_NEVER_SET")
+        .args(["install", "-g"])
+        .arg(pkg.path())
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let env_pos = stdout
+        .find("RK_TEST_NEVER_SET")
+        .expect("env warning should appear in stdout");
+    let post_pos = stdout
+        .find("Postinstall notice:")
+        .expect("postinstall block should appear in stdout");
+    assert!(
+        env_pos < post_pos,
+        "env warning ({env_pos}) must precede postinstall block ({post_pos})\n---\n{stdout}\n---"
+    );
+}
+
 // --- Workspace ---
 
 #[test]
