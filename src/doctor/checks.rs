@@ -2,8 +2,10 @@ use std::path::Path;
 
 use crate::artifact::{ArtifactKind, SKILL_FILENAME};
 use crate::cache;
+use crate::config::Config;
 use crate::env_check;
-use crate::install_cache::PackageEntry;
+use crate::install_cache::{InstallCache, PackageEntry};
+use crate::rkignore;
 
 use super::types::{ArchiveState, DiagnosticKind};
 
@@ -168,4 +170,70 @@ pub fn check_mcp(entry: &PackageEntry, claude_config: &serde_json::Value) -> Vec
         }
     }
     issues
+}
+
+/// Audit the `~/.renkei/mcp/<name>/` folders tracked in `install_cache.mcp_local`:
+/// presence of the folder, presence of the declared entrypoint inside it, and
+/// integrity of the source content vs. the recorded `source_sha256`.
+pub fn check_mcp_local(cache: &InstallCache, config: &Config) -> Vec<DiagnosticKind> {
+    let mut issues = Vec::new();
+    let mut names: Vec<&String> = cache.mcp_local.keys().collect();
+    names.sort();
+
+    for name in names {
+        let entry = &cache.mcp_local[name];
+        let folder = config.global_mcp_dir().join(name);
+
+        let meta = std::fs::symlink_metadata(&folder).ok();
+        if meta.is_none() {
+            issues.push(DiagnosticKind::McpLocalMissing { name: name.clone() });
+            continue;
+        }
+
+        if let Some(entrypoint) = resolve_entrypoint(&entry.owner_package, name, cache) {
+            let ep_path = folder.join(&entrypoint);
+            if !ep_path.exists() {
+                issues.push(DiagnosticKind::McpLocalEntrypointMissing {
+                    name: name.clone(),
+                    entrypoint,
+                });
+            }
+        }
+
+        // Integrity — hash the deployed folder (or the symlink target when
+        // linked) with the same MCP-scoped rkignore patterns used at install
+        // time. Any I/O failure silently skips this check; presence/entrypoint
+        // errors above are the authoritative failure signals.
+        let hash_root = if meta
+            .as_ref()
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            std::fs::read_link(&folder).ok()
+        } else {
+            Some(folder.clone())
+        };
+        if let Some(root) = hash_root {
+            let patterns = rkignore::load_mcp_ignores(&root);
+            if let Ok(current) = rkignore::hash_with_patterns(&root, &patterns) {
+                if current != entry.source_sha256 {
+                    issues.push(DiagnosticKind::McpLocalIntegrityDrift { name: name.clone() });
+                }
+            }
+        }
+    }
+    issues
+}
+
+fn resolve_entrypoint(owner: &str, mcp_name: &str, cache: &InstallCache) -> Option<String> {
+    let pkg = cache.packages.get(owner)?;
+    let archive_path = Path::new(&pkg.archive_path);
+    let manifest_bytes = cache::extract_file_from_archive(archive_path, "renkei.json").ok()?;
+    let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).ok()?;
+    manifest
+        .get("mcp")?
+        .get(mcp_name)?
+        .get("entrypoint")?
+        .as_str()
+        .map(|s| s.to_string())
 }

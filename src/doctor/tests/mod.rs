@@ -1,6 +1,7 @@
 mod check_deployed_tests;
 mod check_env_tests;
 mod check_hooks_tests;
+mod check_mcp_local_tests;
 mod check_mcp_tests;
 mod check_skill_tests;
 mod format_tests;

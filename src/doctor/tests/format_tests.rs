@@ -17,6 +17,7 @@ fn test_format_healthy_report() {
             version: "1.0.0".to_string(),
             issues: vec![],
         }],
+        local_mcp_issues: vec![],
     };
     let output = report.format("global", &default_statuses());
     assert!(output.contains("rk doctor (global)"));
@@ -32,6 +33,7 @@ fn test_format_backend_missing() {
     let report = DoctorReport {
         backend_ok: false,
         package_diagnostics: vec![],
+        local_mcp_issues: vec![],
     };
     let output = report.format("global", &no_backend_statuses());
     assert!(output.contains("not found"));
@@ -54,6 +56,7 @@ fn test_format_with_issues() {
                 },
             ],
         }],
+        local_mcp_issues: vec![],
     };
     let output = report.format("project", &default_statuses());
     assert!(output.contains("rk doctor (project)"));
@@ -75,6 +78,7 @@ fn test_format_skill_modified_shows_warn() {
                 artifact_name: "review".to_string(),
             }],
         }],
+        local_mcp_issues: vec![],
     };
     let output = report.format("global", &default_statuses());
     assert!(output.contains("WARN"));
@@ -86,6 +90,7 @@ fn test_format_empty_packages() {
     let report = DoctorReport {
         backend_ok: true,
         package_diagnostics: vec![],
+        local_mcp_issues: vec![],
     };
     let output = report.format("global", &default_statuses());
     assert!(output.contains("rk doctor (global)"));
@@ -102,10 +107,37 @@ fn test_format_per_backend_lines() {
     let report = DoctorReport {
         backend_ok: true,
         package_diagnostics: vec![],
+        local_mcp_issues: vec![],
     };
     let output = report.format("global", &statuses);
     assert!(output.contains("Backend: claude"));
     assert!(output.contains("Backend: agents"));
     assert!(output.contains("Backend: cursor"));
     assert!(output.contains("not found"));
+}
+
+#[test]
+fn test_format_local_mcp_section_renders_issues() {
+    let report = DoctorReport {
+        backend_ok: true,
+        package_diagnostics: vec![],
+        local_mcp_issues: vec![
+            DiagnosticKind::McpLocalMissing {
+                name: "srv-a".to_string(),
+            },
+            DiagnosticKind::McpLocalIntegrityDrift {
+                name: "srv-b".to_string(),
+            },
+            DiagnosticKind::McpLocalEntrypointMissing {
+                name: "srv-c".to_string(),
+                entrypoint: "dist/index.js".to_string(),
+            },
+        ],
+    };
+    let output = report.format("global", &default_statuses());
+    assert!(output.contains("Local MCPs"));
+    assert!(output.contains("srv-a"));
+    assert!(output.contains("srv-b"));
+    assert!(output.contains("source content changed"));
+    assert!(output.contains("dist/index.js"));
 }

@@ -36,7 +36,14 @@ pub fn run_doctor(config: &Config, global: bool, registry: &BackendRegistry) -> 
         .collect();
     packages.sort_by_key(|(name, _)| *name);
 
-    let report = DoctorReport::build(&packages, &settings, &claude_config, backend_ok);
+    let report = DoctorReport::build(
+        &packages,
+        &settings,
+        &claude_config,
+        backend_ok,
+        store.cache(),
+        config,
+    );
     let output = report.format(scope_label, &backend_statuses);
     print!("{}", output);
 

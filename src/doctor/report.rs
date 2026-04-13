@@ -1,6 +1,7 @@
 use owo_colors::OwoColorize;
 
-use crate::install_cache::PackageEntry;
+use crate::config::Config;
+use crate::install_cache::{InstallCache, PackageEntry};
 
 use super::checks;
 use super::types::{ArchiveState, DiagnosticKind, DoctorReport, PackageDiagnostic};
@@ -12,6 +13,8 @@ impl DoctorReport {
         settings: &serde_json::Value,
         claude_config: &serde_json::Value,
         backend_ok: bool,
+        install_cache: &InstallCache,
+        config: &Config,
     ) -> Self {
         let mut package_diagnostics = Vec::new();
 
@@ -36,9 +39,12 @@ impl DoctorReport {
             });
         }
 
+        let local_mcp_issues = checks::check_mcp_local(install_cache, config);
+
         DoctorReport {
             backend_ok,
             package_diagnostics,
+            local_mcp_issues,
         }
     }
 
@@ -71,6 +77,11 @@ impl DoctorReport {
                     DiagnosticKind::EnvVarMissing { .. } => envs.push(issue),
                     DiagnosticKind::HookMissing { .. } => hooks.push(issue),
                     DiagnosticKind::McpMissing { .. } => mcps.push(issue),
+                    DiagnosticKind::McpLocalMissing { .. }
+                    | DiagnosticKind::McpLocalIntegrityDrift { .. }
+                    | DiagnosticKind::McpLocalEntrypointMissing { .. } => {
+                        // Local MCP issues are reported in their own global section.
+                    }
                 }
             }
 
@@ -79,6 +90,13 @@ impl DoctorReport {
             format_check_section(&mut out, "Environment variables", &envs);
             format_check_section(&mut out, "Hooks", &hooks);
             format_check_section(&mut out, "MCP servers", &mcps);
+        }
+
+        if !self.local_mcp_issues.is_empty() {
+            out.push('\n');
+            out.push_str(&format!("{}\n", "Local MCPs".bold()));
+            let refs: Vec<&DiagnosticKind> = self.local_mcp_issues.iter().collect();
+            format_check_section(&mut out, "Integrity", &refs);
         }
 
         // Summary
@@ -90,7 +108,7 @@ impl DoctorReport {
             .count();
         let healthy = total - with_issues;
         out.push('\n');
-        if with_issues == 0 && self.backend_ok {
+        if with_issues == 0 && self.backend_ok && self.is_healthy() {
             out.push_str(&format!(
                 "{}",
                 format!("All healthy: {total} package(s).\n").green()
@@ -108,10 +126,12 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
     if issues.is_empty() {
         out.push_str(&format!("  {label} {dots} {}\n", "ok".green()));
     } else {
-        let status_label = if issues
-            .iter()
-            .all(|i| matches!(i, DiagnosticKind::SkillModified { .. }))
-        {
+        let status_label = if issues.iter().all(|i| {
+            matches!(
+                i,
+                DiagnosticKind::SkillModified { .. } | DiagnosticKind::McpLocalIntegrityDrift { .. }
+            )
+        }) {
             format!("{}", "WARN".yellow().bold())
         } else {
             format!("{}", "FAIL".red().bold())
@@ -165,6 +185,29 @@ fn format_check_section(out: &mut String, label: &str, issues: &[&DiagnosticKind
                         "    {} archive missing: {}\n",
                         "x".red(),
                         archive_path
+                    ));
+                }
+                DiagnosticKind::McpLocalMissing { name } => {
+                    out.push_str(&format!(
+                        "    {} {} — ~/.renkei/mcp/{}/ is missing\n",
+                        "x".red(),
+                        name,
+                        name
+                    ));
+                }
+                DiagnosticKind::McpLocalIntegrityDrift { name } => {
+                    out.push_str(&format!(
+                        "    {} {} — source content changed since install\n",
+                        "!".yellow(),
+                        name
+                    ));
+                }
+                DiagnosticKind::McpLocalEntrypointMissing { name, entrypoint } => {
+                    out.push_str(&format!(
+                        "    {} {} — entrypoint `{}` missing\n",
+                        "x".red(),
+                        name,
+                        entrypoint
                     ));
                 }
             }
