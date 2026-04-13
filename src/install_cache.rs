@@ -148,7 +148,6 @@ impl InstallCache {
         }
         let content = std::fs::read_to_string(&path)?;
 
-        // Peek at version to decide how to deserialize.
         let raw: serde_json::Value = serde_json::from_str(&content)?;
         let version = raw.get("version").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
 
@@ -237,14 +236,10 @@ impl InstallCache {
                 if new_ref.version != existing.version {
                     let previous_version = existing.version.clone();
                     existing.version = new_ref.version.clone();
-                    if !existing.referenced_by.iter().any(|r| r == &new_ref) {
-                        existing.referenced_by.push(new_ref);
-                    }
+                    upsert_ref(&mut existing.referenced_by, new_ref);
                     McpLocalOutcome::UpgradeRequired { previous_version }
                 } else {
-                    if !existing.referenced_by.iter().any(|r| r == &new_ref) {
-                        existing.referenced_by.push(new_ref);
-                    }
+                    upsert_ref(&mut existing.referenced_by, new_ref);
                     McpLocalOutcome::AddedRef
                 }
             }
@@ -261,11 +256,7 @@ impl InstallCache {
         match_ref: &McpLocalRef,
     ) -> Option<String> {
         let entry = self.mcp_local.get_mut(name)?;
-        entry.referenced_by.retain(|r| {
-            !(r.package == match_ref.package
-                && r.scope == match_ref.scope
-                && r.project_root == match_ref.project_root)
-        });
+        entry.referenced_by.retain(|r| !same_install(r, match_ref));
         if entry.referenced_by.is_empty() {
             self.mcp_local.remove(name);
             Some(name.to_string())
@@ -286,6 +277,21 @@ impl InstallCache {
 
     pub(crate) fn upsert_package(&mut self, full_name: &str, entry: PackageEntry) {
         self.packages.insert(full_name.to_string(), entry);
+    }
+}
+
+/// A `McpLocalRef`'s install identity is `(package, scope, project_root)`.
+/// Version is mutable in-place during upgrades, so it must not be part of
+/// identity — otherwise an upgrade would leave the old ref orphaned.
+fn same_install(a: &McpLocalRef, b: &McpLocalRef) -> bool {
+    a.package == b.package && a.scope == b.scope && a.project_root == b.project_root
+}
+
+fn upsert_ref(refs: &mut Vec<McpLocalRef>, new_ref: McpLocalRef) {
+    if let Some(slot) = refs.iter_mut().find(|r| same_install(r, &new_ref)) {
+        *slot = new_ref;
+    } else {
+        refs.push(new_ref);
     }
 }
 
@@ -835,6 +841,32 @@ mod tests {
             other => panic!("unexpected outcome: {:?}", other),
         }
         assert_eq!(cache.mcp_local["my-srv"].version, "1.1.0");
+    }
+
+    #[test]
+    fn test_add_mcp_local_ref_upgrade_in_same_install_replaces_ref() {
+        let mut cache = InstallCache {
+            version: CURRENT_VERSION,
+            packages: HashMap::new(),
+            mcp_local: HashMap::new(),
+        };
+        cache.add_mcp_local_ref(
+            "my-srv",
+            || local_entry("@acme/srv", "1.0.0", "sha-old"),
+            local_ref("@acme/srv", "1.0.0", "global", None),
+        );
+        cache.add_mcp_local_ref(
+            "my-srv",
+            || panic!("ctor must not run"),
+            local_ref("@acme/srv", "1.1.0", "global", None),
+        );
+        let entry = &cache.mcp_local["my-srv"];
+        assert_eq!(
+            entry.referenced_by.len(),
+            1,
+            "upgrade in the same install must not duplicate the ref"
+        );
+        assert_eq!(entry.referenced_by[0].version, "1.1.0");
     }
 
     #[test]
