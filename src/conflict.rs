@@ -85,6 +85,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         }
     }
 

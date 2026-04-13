@@ -108,6 +108,7 @@ mod tests {
             },
             resolved: None,
             tag: None,
+            member: None,
         }
     }
 

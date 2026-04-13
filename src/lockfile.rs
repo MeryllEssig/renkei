@@ -31,6 +31,8 @@ pub struct LockfileEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved: Option<String>,
     pub integrity: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
 }
 
 impl Lockfile {
@@ -86,6 +88,7 @@ impl LockfileEntry {
             tag: entry.tag.clone(),
             resolved: entry.resolved.clone(),
             integrity: format!("{INTEGRITY_PREFIX}{}", entry.integrity),
+            member: entry.member.clone(),
         }
     }
 }
@@ -200,6 +203,7 @@ fn build_source_info(entry: &LockfileEntry) -> install::SourceInfo {
                 source_url: entry.source.clone(),
                 resolved: entry.resolved.clone(),
                 tag: entry.tag.clone(),
+                member: entry.member.clone(),
             }
         }
         source::PackageSource::Local(_) => install::SourceInfo {
@@ -207,6 +211,7 @@ fn build_source_info(entry: &LockfileEntry) -> install::SourceInfo {
             source_url: entry.source.clone(),
             resolved: None,
             tag: None,
+            member: entry.member.clone(),
         },
     }
 }
@@ -226,9 +231,14 @@ fn install_from_source(
                 source_url: url,
                 resolved: Some(sha),
                 tag: entry.tag.clone(),
+                member: entry.member.clone(),
+            };
+            let install_root: PathBuf = match &entry.member {
+                Some(m) => tmp_dir.path().join(m),
+                None => tmp_dir.path().to_path_buf(),
             };
             install::install_from_lock_entry(
-                tmp_dir.path(),
+                &install_root,
                 config,
                 backends,
                 requested_scope,
@@ -236,14 +246,25 @@ fn install_from_source(
             )
         }
         source::PackageSource::Local(path_str) => {
-            let path = PathBuf::from(&path_str);
+            let base = PathBuf::from(&path_str);
+            let install_root = match &entry.member {
+                Some(m) => base.join(m),
+                None => base,
+            };
             let source = install::SourceInfo {
                 source_kind: install::SourceKind::Local,
                 source_url: path_str,
                 resolved: None,
                 tag: None,
+                member: entry.member.clone(),
             };
-            install::install_from_lock_entry(&path, config, backends, requested_scope, &source)
+            install::install_from_lock_entry(
+                &install_root,
+                config,
+                backends,
+                requested_scope,
+                &source,
+            )
         }
     }
 }
@@ -267,6 +288,7 @@ mod tests {
                 tag: Some("v1.0.0".to_string()),
                 resolved: Some("abc123".to_string()),
                 integrity: "sha256-deadbeef".to_string(),
+                member: None,
             },
         );
 
@@ -318,6 +340,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
+                member: None,
             },
         );
         lockfile.save(&path).unwrap();
@@ -342,6 +365,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-a".to_string(),
+                member: None,
             },
         );
         assert_eq!(lockfile.packages.len(), 1);
@@ -361,6 +385,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-a".to_string(),
+                member: None,
             },
         );
         lockfile.upsert(
@@ -371,6 +396,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-b".to_string(),
+                member: None,
             },
         );
         assert_eq!(lockfile.packages.len(), 1);
@@ -391,6 +417,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-a".to_string(),
+                member: None,
             },
         );
         lockfile.remove("@test/a");
@@ -428,6 +455,7 @@ mod tests {
             deployed: std::collections::HashMap::new(),
             resolved: Some("abc123".to_string()),
             tag: Some("v1.0.0".to_string()),
+            member: None,
         };
         let lockfile_entry = LockfileEntry::from_package_entry(&entry);
         assert_eq!(lockfile_entry.version, "1.0.0");
@@ -448,12 +476,115 @@ mod tests {
             deployed: std::collections::HashMap::new(),
             resolved: None,
             tag: None,
+            member: None,
         };
         let lockfile_entry = LockfileEntry::from_package_entry(&entry);
         assert_eq!(lockfile_entry.source, "/tmp/pkg");
         assert!(lockfile_entry.tag.is_none());
         assert!(lockfile_entry.resolved.is_none());
         assert_eq!(lockfile_entry.integrity, "sha256-aabbcc");
+    }
+
+    #[test]
+    fn test_from_package_entry_with_member() {
+        let entry = PackageEntry {
+            version: "1.0.0".to_string(),
+            source: "git".to_string(),
+            source_path: "git@github.com:user/repo".to_string(),
+            integrity: "abc".to_string(),
+            archive_path: "/tmp/a.tar.gz".to_string(),
+            deployed: std::collections::HashMap::new(),
+            resolved: Some("sha".to_string()),
+            tag: None,
+            member: Some("mr-review".to_string()),
+        };
+        let lf = LockfileEntry::from_package_entry(&entry);
+        assert_eq!(lf.member.as_deref(), Some("mr-review"));
+    }
+
+    #[test]
+    fn test_lockfile_member_field_omitted_when_none() {
+        let mut lockfile = Lockfile {
+            lockfile_version: 1,
+            packages: HashMap::new(),
+        };
+        lockfile.upsert(
+            "@test/p",
+            LockfileEntry {
+                version: "1.0.0".to_string(),
+                source: "/tmp".to_string(),
+                tag: None,
+                resolved: None,
+                integrity: "sha256-abc".to_string(),
+                member: None,
+            },
+        );
+        let json = serde_json::to_string_pretty(&lockfile).unwrap();
+        assert!(!json.contains("\"member\""));
+    }
+
+    #[test]
+    fn test_lockfile_member_field_serialized_when_some() {
+        let mut lockfile = Lockfile {
+            lockfile_version: 1,
+            packages: HashMap::new(),
+        };
+        lockfile.upsert(
+            "@test/p",
+            LockfileEntry {
+                version: "1.0.0".to_string(),
+                source: "/tmp".to_string(),
+                tag: None,
+                resolved: None,
+                integrity: "sha256-abc".to_string(),
+                member: Some("mr-review".to_string()),
+            },
+        );
+        let json = serde_json::to_string_pretty(&lockfile).unwrap();
+        assert!(json.contains("\"member\": \"mr-review\""));
+    }
+
+    #[test]
+    fn test_lockfile_member_roundtrip_via_disk() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("rk.lock");
+        let mut lockfile = Lockfile {
+            lockfile_version: 1,
+            packages: HashMap::new(),
+        };
+        lockfile.upsert(
+            "@test/p",
+            LockfileEntry {
+                version: "1.0.0".to_string(),
+                source: "git@github.com:u/r".to_string(),
+                tag: None,
+                resolved: Some("sha".to_string()),
+                integrity: "sha256-abc".to_string(),
+                member: Some("auto-test".to_string()),
+            },
+        );
+        lockfile.save(&path).unwrap();
+        let loaded = Lockfile::load(&path).unwrap();
+        assert_eq!(
+            loaded.packages["@test/p"].member.as_deref(),
+            Some("auto-test")
+        );
+    }
+
+    #[test]
+    fn test_lockfile_legacy_entry_without_member_deserializes_none() {
+        let json = r#"{
+            "lockfileVersion": 1,
+            "packages": {
+                "@x/y": {
+                    "version": "1.0.0",
+                    "source": "/tmp",
+                    "integrity": "sha256-abc"
+                }
+            }
+        }"#;
+        let lf: Lockfile = serde_json::from_str(json).unwrap();
+        assert!(lf.packages["@x/y"].member.is_none());
     }
 
     #[test]
@@ -470,6 +601,7 @@ mod tests {
                 tag: None,
                 resolved: None,
                 integrity: "sha256-abc".to_string(),
+                member: None,
             },
         );
         let json = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -658,6 +790,7 @@ mod tests {
             tag: None,
             resolved: None,
             integrity: "sha256-abc".to_string(),
+            member: None,
         };
         let path = archive_path_for_entry(&config, "@test/pkg", &entry).unwrap();
         assert_eq!(

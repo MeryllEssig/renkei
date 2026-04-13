@@ -44,6 +44,7 @@ pub fn make_cache_with_artifacts(artifacts: Vec<(ArtifactKind, &str, &str)>) -> 
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         },
     );
     InstallCache {

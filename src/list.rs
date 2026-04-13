@@ -172,6 +172,7 @@ mod tests {
                 None
             },
             tag: None,
+            member: None,
         }
     }
 
@@ -350,6 +351,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         };
         let cache = make_cache(vec![("@test/multi-backend", entry)]);
         let output = format_package_list(&cache, false);

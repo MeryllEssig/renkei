@@ -26,6 +26,8 @@ pub struct PackageEntry {
     pub resolved: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -136,6 +138,7 @@ impl InstallCache {
                     deployed,
                     resolved: v1_entry.resolved,
                     tag: v1_entry.tag,
+                    member: None,
                 },
             );
         }
@@ -183,6 +186,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         }
     }
 
@@ -261,6 +265,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         };
 
         // all_artifacts flattens across backends
@@ -507,6 +512,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         };
 
         let mut cache = InstallCache::load(&config).unwrap();
@@ -548,6 +554,7 @@ mod tests {
             deployed,
             resolved: None,
             tag: None,
+            member: None,
         };
 
         let mut cache = InstallCache::load(&config).unwrap();

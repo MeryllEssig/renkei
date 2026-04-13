@@ -23,6 +23,9 @@ pub struct InstallOptions {
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
+    /// Workspace member name when installing a single member of a workspace.
+    /// `None` for non-workspace installs.
+    pub member: Option<String>,
 }
 
 impl InstallOptions {
@@ -33,6 +36,7 @@ impl InstallOptions {
             source_url: source_path,
             resolved: None,
             tag: None,
+            member: None,
         }
     }
 
@@ -43,6 +47,7 @@ impl InstallOptions {
             source_url: url,
             resolved: Some(resolved),
             tag,
+            member: None,
         }
     }
 }
@@ -58,4 +63,5 @@ pub struct SourceInfo {
     pub source_url: String,
     pub resolved: Option<String>,
     pub tag: Option<String>,
+    pub member: Option<String>,
 }

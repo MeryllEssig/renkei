@@ -39,14 +39,14 @@ Today, `rk install <giturl>` on a workspace repo always installs **all** declare
 
 ## Phase 3: Lockfile member field
 
-- [ ] 3.1 Add `pub member: Option<String>` to `LockfileEntry` in `src/lockfile.rs` with `#[serde(default, skip_serializing_if = "Option::is_none")]`.
-- [ ] 3.2 Plumb `member` through `PackageEntry` → `LockfileEntry::from_package_entry` (or via a new constructor) so the member name reaches the lockfile.
-- [ ] 3.3 Set `member` when installing a workspace member (Git or local). Leave `None` for non-workspace installs.
-- [ ] 3.4 TDD: lockfile round-trip with and without `member`; serialization omits the field when `None`.
+- [x] 3.1 Add `pub member: Option<String>` to `LockfileEntry` in `src/lockfile.rs` with `#[serde(default, skip_serializing_if = "Option::is_none")]`.
+- [x] 3.2 Plumb `member` through `PackageEntry` → `LockfileEntry::from_package_entry` (or via a new constructor) so the member name reaches the lockfile.
+- [x] 3.3 Set `member` when installing a workspace member (Git or local). Leave `None` for non-workspace installs.
+- [x] 3.4 TDD: lockfile round-trip with and without `member`; serialization omits the field when `None`.
 
 ## Phase 4: Reinstall from lockfile honoring `member`
 
-- [ ] 4.1 In the no-arg lockfile install path, when an entry has `member: Some(name)`:
+- [x] 4.1 In the no-arg lockfile install path, when an entry has `member: Some(name)`:
   - Git source: clone the repo, then call `install_local(clone_dir.join(name), ...)`.
   - Local source: install from `<source>/<member>` directly.
 - [ ] 4.2 TDD: integration test — write a lockfile with two entries from the same Git source (`file://` local bare repo) each with a different `member`, run no-arg install, assert both deployed.

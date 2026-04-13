@@ -60,7 +60,7 @@ pub fn install_workspace(
 
     for member in &to_install {
         let member_dir = workspace_dir.join(member);
-        let member_options = build_member_options(&member_dir, options);
+        let member_options = build_member_options(&member_dir, member, options);
         install::install_local(
             &member_dir,
             config,
@@ -73,11 +73,16 @@ pub fn install_workspace(
     Ok(())
 }
 
-fn build_member_options(member_dir: &Path, base: &InstallOptions) -> InstallOptions {
+fn build_member_options(
+    member_dir: &Path,
+    member_name: &str,
+    base: &InstallOptions,
+) -> InstallOptions {
     let mut opts = base.clone();
     if opts.source_kind == SourceKind::Local {
         opts.source_url = member_dir.to_string_lossy().to_string();
     }
+    opts.member = Some(member_name.to_string());
     opts
 }
 
@@ -341,6 +346,41 @@ mod tests {
 
         let cache = crate::install_cache::InstallCache::load(&config).unwrap();
         assert!(cache.packages.contains_key("@test/member-a"));
+    }
+
+    #[test]
+    fn test_install_workspace_writes_member_into_lockfile() {
+        let home = tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".claude")).unwrap();
+        let config = Config::with_home_dir(home.path().to_path_buf());
+
+        let ws = make_workspace(&[
+            ("member-a", "@test/member-a", "review"),
+            ("member-b", "@test/member-b", "lint"),
+        ]);
+
+        let options = local_options(&ws.path().to_string_lossy());
+
+        install_workspace(
+            ws.path(),
+            &["member-a".to_string(), "member-b".to_string()],
+            &config,
+            &[&ClaudeBackend as &dyn Backend],
+            RequestedScope::Global,
+            &options,
+            None,
+        )
+        .unwrap();
+
+        let lockfile = crate::lockfile::Lockfile::load(&config.lockfile_path()).unwrap();
+        assert_eq!(
+            lockfile.packages["@test/member-a"].member.as_deref(),
+            Some("member-a")
+        );
+        assert_eq!(
+            lockfile.packages["@test/member-b"].member.as_deref(),
+            Some("member-b")
+        );
     }
 
     #[test]

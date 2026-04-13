@@ -182,6 +182,7 @@ fn test_pipeline_cleanup_removes_previous_install() {
             deployed: deployment.deployed_map,
             resolved: None,
             tag: None,
+            member: None,
         },
     );
     store.save(&config).unwrap();
@@ -216,6 +217,7 @@ fn test_install_from_lock_entry_deploys_skill() {
         source_url: pkg.path().to_string_lossy().to_string(),
         resolved: None,
         tag: None,
+        member: None,
     };
 
     install_from_lock_entry(
@@ -243,6 +245,7 @@ fn test_install_from_lock_entry_does_not_update_lockfile() {
         source_url: pkg.path().to_string_lossy().to_string(),
         resolved: None,
         tag: None,
+        member: None,
     };
 
     install_from_lock_entry(
@@ -287,6 +290,7 @@ fn test_install_from_lock_entry_force_overwrites_conflicts() {
         source_url: "/tmp/b".to_string(),
         resolved: None,
         tag: None,
+        member: None,
     };
 
     install_from_lock_entry(

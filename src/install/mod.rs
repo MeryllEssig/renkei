@@ -111,6 +111,7 @@ pub(crate) fn install_local_with_resolver(
             deployed: deployment.deployed_map,
             resolved: options.resolved.clone(),
             tag: options.tag.clone(),
+            member: options.member.clone(),
         },
     );
     store.save(config)?;
@@ -196,6 +197,7 @@ pub fn install_from_lock_entry(
             deployed: deployment.deployed_map,
             resolved: source.resolved.clone(),
             tag: source.tag.clone(),
+            member: source.member.clone(),
         },
     );
     store.save(config)?;

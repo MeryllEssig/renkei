@@ -30,6 +30,7 @@ pub fn make_entry(artifacts: Vec<DeployedArtifactEntry>) -> PackageEntry {
         deployed,
         resolved: None,
         tag: None,
+        member: None,
     }
 }
 
