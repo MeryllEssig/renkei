@@ -6,6 +6,8 @@
 ~/.renkei/
   archives/                    # immutable package archives (per version)
     @scope/name/<version>.tar.gz
+  mcp/                         # local-MCP source folders (always global)
+    <name>/                    # deployed source + build output (or symlink in --link mode)
   projects/                    # per-project install-caches (slugified path)
     Users-meryll-Projects-foo/install-cache.json
     Users-meryll-Projects-bar/install-cache.json
@@ -16,7 +18,8 @@
 
 - **`archives/`** — immutable `.tar.gz` archives, one per package version. Previously named `cache/`.
 - **`projects/`** — per-project install-caches, keyed by the slugified absolute path of the project root (e.g., `/Users/meryll/Projects/foo` → `Users-meryll-Projects-foo`). Stored centrally to avoid polluting project directories.
-- **`install-cache.json`** — global install-cache tracking packages installed with `-g`. Uses v2 format with deployed artifacts grouped by backend. See [Multi-Backend Configuration](./multi-backend.md) for the schema.
+- **`mcp/<name>/`** — local-MCP source folders deployed by `rk install` for any package shipping a `mcp/<name>/` source directory. Always global, even when the owning package is installed in project scope (backend MCP registration is itself global). See [MCP](./mcp.md).
+- **`install-cache.json`** — global install-cache tracking packages installed with `-g`. v3 format adds an `mcp_local: { <name>: McpLocalEntry }` section recording owner package, version, source SHA-256, and a list of `referenced_by` install refs `{ package, version, scope, project_root }`. The folder is GC'd on uninstall when the last ref disappears. See [Multi-Backend Configuration](./multi-backend.md) for the per-package schema and [MCP > Reference counting](./mcp.md#reference-counting) for the local-MCP rules.
 - **`rk.lock`** — global lockfile for packages installed with `-g`.
 - **`config.json`** — user configuration. Created only by explicit `rk config` command. Contains `defaults.backends` and future user preferences. See [Multi-Backend Configuration](./multi-backend.md).
 

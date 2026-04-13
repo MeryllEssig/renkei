@@ -100,6 +100,24 @@ Rules:
 - Notices are re-shown on every install — there is no "remember my answer" state.
 - Workspace and lockfile replay produce **one** prompt covering every package in the batch (no per-member prompt fatigue).
 
+## Local MCP builds
+
+When a package ships a local MCP (`mcp/<name>/` with `build` declared), `rk install` gathers all build commands across the install batch into a single yellow/bold framed block:
+
+```
+Build notice: the following commands will execute with a minimal environment:
+  @meryll/mr-review → my-server: bun install && bun run build
+Continue? [y/N]
+```
+
+Rules:
+
+- The block runs **after** the preinstall notice and **before** any artifact copy.
+- `--allow-build` skips the prompt and accepts every declared step. Required in non-interactive environments.
+- Builds run as argv (no shell), `cwd = staging dir`, with a filtered env (whitelist + prefixes, secrets/tokens stripped). See [MCP](./mcp.md#build-environment).
+- Per-MCP, sources are copied into `~/.renkei/mcp/<name>.new/`, built, then **atomically swapped** into `~/.renkei/mcp/<name>/`. Build failure removes the staging dir, leaves the previous version intact, and triggers the standard install rollback for the rest of the batch.
+- Lockfile replay re-runs the build and re-checks the source hash; drift errors out before any rebuild — see [MCP > `--allow-build` and lockfile replay](./mcp.md#--allow-build-and-lockfile-replay).
+
 ## Postinstall notice
 
 Packages may also declare a `messages.postinstall` string. After a successful install, the message renders in a yellow/bold framed block:

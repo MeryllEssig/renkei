@@ -60,6 +60,12 @@ Project install-caches are stored centrally in `~/.renkei/projects/` to avoid po
 ~/.renkei/projects/Users-meryll-Projects-bar/install-cache.json
 ```
 
+## Exception: local MCPs are always global
+
+A package's `scope` controls where its skills/agents/hooks are deployed. **Local MCP sources are always materialized to `~/.renkei/mcp/<name>/`**, regardless of the package scope. Backend MCP registration is global by nature (e.g. `~/.claude.json` is shared across projects), so the source folder follows the same constraint.
+
+The install-cache records the owning install's scope (`global` | `project`) and project root in `mcp_local.<name>.referenced_by`, purely for reference accounting: uninstalling the package in project X only decrements X's ref. The folder is removed only when the last ref disappears. See [MCP](./mcp.md#reference-counting).
+
 ## Uninstall behavior
 
 - `rk uninstall @scope/pkg` — looks up the project install-cache, removes all deployed artifacts from all backends recorded in the package entry, updates `./rk.lock`.

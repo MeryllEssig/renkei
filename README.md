@@ -105,6 +105,8 @@ Share via git or distribute the archive directly.
 | `rk install --tag v1.0` | Pin to a git tag |
 | `rk install <source> -m <member>` | Install only the named workspace member (repeatable, CSV-aware) |
 | `rk install <source> --yes` | Skip the preinstall confirmation prompt (required in CI / non-TTY) |
+| `rk install <source> --allow-build` | Skip the build confirmation for bundled local MCP servers (required in CI / non-TTY) |
+| `rk install --link <source>` | Symlink the source instead of copying (live dev mode); for local MCPs, also symlinks `~/.renkei/mcp/<name>/` |
 | `rk uninstall @scope/name` | Remove a package |
 | `rk list` | Show installed packages |
 | `rk doctor` | Run health diagnostics |
@@ -143,7 +145,13 @@ The `renkei.json` manifest supports these fields:
   "backends": ["claude", "cursor", "codex", "gemini"],
   "scope": "any",
   "keywords": [],
-  "mcp": { },
+  "mcp": {
+    "my-server": {
+      "command": "node",
+      "entrypoint": "dist/index.js",
+      "build": [["bun", "install"], ["bun", "run", "build"]]
+    }
+  },
   "requiredEnv": { },
   "workspace": ["packages/a", "packages/b"],
   "messages": {
@@ -162,7 +170,7 @@ The `renkei.json` manifest supports these fields:
 | `license` | Yes | License identifier |
 | `backends` | Yes | Target backends |
 | `scope` | No | `"any"` (default), `"global"`, or `"project"` |
-| `mcp` | No | MCP server configurations |
+| `mcp` | No | MCP server configurations. External servers use the native `command`/`args`/`env` block. **Local MCPs** add `entrypoint` (relative path inside `mcp/<name>/`) and `build` (array of argv steps). Renkei copies the source from `mcp/<name>/` to `~/.renkei/mcp/<name>/` (always global, regardless of the package scope), runs the build, and registers the absolute entrypoint with the backend. See [`doc/prd/mcp.md`](./doc/prd/mcp.md). |
 | `requiredEnv` | No | Required environment variables |
 | `workspace` | No | Monorepo member paths |
 | `messages` | No | `preinstall` / `postinstall` install-time notices (≤ 2000 chars each) |

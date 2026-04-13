@@ -41,6 +41,10 @@ Global vs project installation scope. Project scope (default) deploys skills/age
 
 Git and local installation flows, no-argument lockfile install, scope validation, fail-fast + rollback strategy, conflict management (TTY/non-TTY/force), and environment variable handling.
 
+## [MCP — External and Local Servers](./doc/prd/mcp.md)
+
+External MCP registration via the native `command`/`args`/`env` block, plus the local-MCP convention (`mcp/<name>/`, `entrypoint`, `build`) with global deployment to `~/.renkei/mcp/`, build consent (`--allow-build`), reference counting, `--link` mode, doctor checks, and packaging exclusions.
+
 ## [Hooks](./doc/prd/hooks.md)
 
 Abstract hook format with normalized events, Renkei → Claude Code event mapping table, and hook tracking strategy via `install-cache.json`.

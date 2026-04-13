@@ -113,6 +113,7 @@
   }
   ```
 - **Scope**: Always global.
+- **Local MCPs**: when a Renkei package ships its server source under `mcp/<name>/` and declares `entrypoint`, the merged `args` start with the absolute path under `~/.renkei/mcp/<name>/<entrypoint>` (followed by any author-declared `args`). Backends remain agnostic — they just see the resolved `command` + absolute `args`. See [`doc/prd/mcp.md`](./doc/prd/mcp.md).
 
 ### Scope Summary
 

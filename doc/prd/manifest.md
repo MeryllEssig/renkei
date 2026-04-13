@@ -22,7 +22,7 @@ By default, `rk install` deploys all declared members. Use `-m <member>` (repeat
 - Optional fields: `keywords`, `mcp`, `requiredEnv`, `workspace`, `scope`, `messages`.
 - `backends` declares which tools the package supports. Valid values: `"claude"`, `"cursor"`, `"codex"`, `"gemini"`, `"agents"`. At install time, the effective target is `manifest.backends ∩ user configured backends ∩ detected backends`. See [Multi-Backend Configuration](./multi-backend.md) for the full resolution pipeline.
 - **No `artifacts` field**: pure convention. The `skills/`, `hooks/`, `agents/` directories are the source of truth. Any file present in these directories is a deployed artifact.
-- `mcp` declares MCP configurations in the native `command`/`args`/`env` format (standard between Claude and Cursor, no extra abstraction).
+- `mcp` declares MCP configurations. By default, `mcp.<name>` is the native `command`/`args`/`env` block for an externally-installed server. Adding `entrypoint` (relative path inside `mcp/<name>/`) and `build` (array of argv steps) turns the entry into a **local MCP**: Renkei copies the source from `mcp/<name>/`, runs the build, and registers the absolute entrypoint with the backend. See [MCP — External and Local Servers](./mcp.md).
 - `requiredEnv` lists environment variables with their descriptions.
 - `scope` controls where the package can be installed: `"any"` (default, both global and project), `"global"` (only with `-g`), or `"project"` (only without `-g`). See [Scope](./scope.md).
 - `messages` declares optional install-time notices for the user:
@@ -62,7 +62,7 @@ All artifacts are written in a neutral Renkei format that each backend translate
 
 - **Skills and agents**: markdown + frontmatter format (Claude Code style). This format is the Renkei neutral format — other backends translate from it.
 - **Hooks**: abstract Renkei format with normalized events (see [Hooks](./hooks.md)).
-- **MCP**: native `command`/`args`/`env` format directly in the manifest (already portable across backends).
+- **MCP**: native `command`/`args`/`env` format directly in the manifest (portable across backends). Local MCPs additionally declare `entrypoint` + `build` and ship sources under `mcp/<name>/` — see [MCP — External and Local Servers](./mcp.md).
 
 ```markdown
 ---

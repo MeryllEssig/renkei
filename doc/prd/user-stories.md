@@ -57,6 +57,12 @@
 28. As a package creator, I want to auto-bump the version (patch / minor / major) via `--bump` to follow semver without manually editing the manifest.
 29. As a package creator, I want to see a summary of included files and archive size after `rk package` to verify the contents before distribution.
 
+29b. As a package author shipping a custom MCP server, I want to drop its source under `mcp/<name>/` and declare `entrypoint` + `build` in `renkei.json` so consumers no longer have to install my server separately — `rk install` copies the source, runs the build, and registers the absolute entrypoint with the backend.
+
+29c. As a developer installing a workflow that bundles a local MCP, I want a single explicit `[y/N]` prompt listing every build command before anything runs (and a `--allow-build` flag to accept everything in CI) so I am never surprised by code executing in my environment.
+
+29d. As a developer with the same local MCP referenced from multiple projects, I want `rk uninstall` in one project to only decrement that project's reference and never break the others — and I want the folder + backend entry to be GC'd cleanly when the last reference disappears.
+
 ## Lockfile
 
 30. As a developer, I want a `rk.lock` lockfile to be automatically generated at the project root after each installation to pin the exact installed versions in this project context.
