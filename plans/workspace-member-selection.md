@@ -49,7 +49,7 @@ Today, `rk install <giturl>` on a workspace repo always installs **all** declare
 - [x] 4.1 In the no-arg lockfile install path, when an entry has `member: Some(name)`:
   - Git source: clone the repo, then call `install_local(clone_dir.join(name), ...)`.
   - Local source: install from `<source>/<member>` directly.
-- [ ] 4.2 TDD: integration test — write a lockfile with two entries from the same Git source (`file://` local bare repo) each with a different `member`, run no-arg install, assert both deployed.
+- [x] 4.2 TDD: integration test — write a lockfile with two entries from the same Git source (`file://` local bare repo) each with a different `member`, run no-arg install, assert both deployed.
 
 ## Phase 5: CLI dispatch wiring
 
@@ -64,7 +64,7 @@ Today, `rk install <giturl>` on a workspace repo always installs **all** declare
 
 ## Phase 7: Integration tests
 
-- [ ] 7.1 Add `tests/integration_workspace_member_selection.rs`:
+- [x] 7.1 Add `tests/integration_workspace_member_selection.rs`:
   - Git workspace via `file://` bare repo, `-m mr-review` deploys only `mr-review`, lockfile has 1 entry with `member`.
   - Same with two members `-m a,b` and `-m a -m b`.
   - Member not in `workspace` → exit 1, error message lists available members, no deployment.
