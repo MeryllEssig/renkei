@@ -85,31 +85,37 @@ pub fn hash_directory(root: &Path, extra_patterns: &[String]) -> Result<String> 
     hash_with_patterns(root, &all_patterns)
 }
 
+/// Build a deterministic, ignore-filtered walker over `root`. Shared
+/// between source hashing and staging copies so both observe the same
+/// inclusion semantics.
+pub fn build_walker(root: &Path, patterns: &[String]) -> Result<ignore::Walk> {
+    let mut overrides = ignore::overrides::OverrideBuilder::new(root);
+    for pat in patterns {
+        // gitignore semantics: a bare pattern excludes; we invert to make it an
+        // explicit ignore in the override builder.
+        let inverted = format!("!{pat}");
+        overrides.add(&inverted).map_err(|e| {
+            crate::error::RenkeiError::CacheError(format!("rkignore pattern error: {e}"))
+        })?;
+    }
+    let overrides = overrides
+        .build()
+        .map_err(|e| crate::error::RenkeiError::CacheError(format!("rkignore build error: {e}")))?;
+    Ok(ignore::WalkBuilder::new(root)
+        .standard_filters(false)
+        .hidden(false)
+        .overrides(overrides)
+        .sort_by_file_path(|a, b| a.cmp(b))
+        .build())
+}
+
 /// Like [`hash_directory`] but uses exactly the given patterns — does
 /// not merge `DEFAULT_IGNORES` or read `.rkignore`. Callers (notably the
 /// local-MCP staging path) build their own pattern list to control which
 /// outputs are considered part of the source.
 #[allow(dead_code)]
 pub fn hash_with_patterns(root: &Path, all_patterns: &[String]) -> Result<String> {
-    let mut overrides = ignore::overrides::OverrideBuilder::new(root);
-    for pat in all_patterns {
-        // gitignore semantics: a bare pattern excludes; we invert to make it an
-        // explicit ignore in the override builder.
-        let inverted = format!("!{pat}");
-        overrides
-            .add(&inverted)
-            .map_err(|e| crate::error::RenkeiError::CacheError(format!("rkignore pattern error: {e}")))?;
-    }
-    let overrides = overrides
-        .build()
-        .map_err(|e| crate::error::RenkeiError::CacheError(format!("rkignore build error: {e}")))?;
-
-    let walker = ignore::WalkBuilder::new(root)
-        .standard_filters(false)
-        .hidden(false)
-        .overrides(overrides)
-        .sort_by_file_path(|a, b| a.cmp(b))
-        .build();
+    let walker = build_walker(root, all_patterns)?;
 
     let mut hasher = Sha256::new();
     for entry in walker {

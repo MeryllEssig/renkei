@@ -22,7 +22,7 @@ use crate::error::{RenkeiError, Result};
 use crate::install_cache::{McpLocalEntry, McpLocalRef};
 use crate::manifest::{Manifest, McpServer};
 use crate::package_store::PackageStore;
-use crate::rkignore::{hash_with_patterns, load_mcp_ignores};
+use crate::rkignore::{build_walker, hash_with_patterns, load_mcp_ignores};
 
 use super::build::{run_build, BuildStep};
 
@@ -33,8 +33,6 @@ use super::build::{run_build, BuildStep};
 #[derive(Debug)]
 pub(crate) struct StagedMcp {
     pub name: String,
-    #[allow(dead_code)] // surfaced through tests + future doctor checks
-    pub abs_entrypoint: PathBuf,
     pub source_sha256: String,
     pub new_ref: McpLocalRef,
     pub package_full_name: String,
@@ -67,10 +65,8 @@ pub(crate) struct StagedMcp {
 pub(crate) fn stage_local_mcps(
     raw_manifest: &Manifest,
     package_dir: &Path,
-    store: &PackageStore,
+    current_local: &std::collections::HashMap<String, McpLocalEntry>,
     config: &Config,
-    scope: &str,
-    project_root: Option<&Path>,
     force: bool,
     link_mode: bool,
     allow_build: bool,
@@ -82,6 +78,8 @@ pub(crate) fn stage_local_mcps(
     let mut staged: Vec<StagedMcp> = Vec::new();
     let mut effective_mcp = serde_json::Map::with_capacity(mcps.len());
 
+    let scope = config.scope_label();
+    let project_root = config.project_root.as_deref();
     let global_root = config.global_mcp_dir();
     let patterns = load_mcp_ignores(package_dir);
 
@@ -105,9 +103,21 @@ pub(crate) fn stage_local_mcps(
         let source_dir = package_dir.join("mcp").join(name);
         let target_dir = global_root.join(name);
 
-        // Hash source content (rkignore-filtered). Used as ref identity
-        // and persisted in the cache for doctor / lockfile drift checks.
-        let source_sha256 = hash_with_patterns(&source_dir, &patterns)?;
+        let outcome = peek_outcome(current_local, name, &raw_manifest.name, &raw_manifest.version);
+        let reuse_existing =
+            matches!(outcome, Outcome::AddedRef) && target_dir.exists() && !link_mode;
+
+        // Skip the rkignore walk when reusing an already-deployed folder:
+        // AddedRef guarantees same owner+version, so the cached source
+        // hash still applies.
+        let source_sha256 = if reuse_existing {
+            current_local
+                .get(name)
+                .map(|e| e.source_sha256.clone())
+                .unwrap_or_default()
+        } else {
+            hash_with_patterns(&source_dir, &patterns)?
+        };
 
         let new_ref = McpLocalRef {
             package: raw_manifest.name.clone(),
@@ -116,14 +126,8 @@ pub(crate) fn stage_local_mcps(
             project_root: project_root.map(|p| p.to_string_lossy().to_string()),
         };
 
-        // Decide swap strategy by peeking at the cache (no mutation here).
-        let outcome = peek_outcome(store, name, &raw_manifest.name, &raw_manifest.version);
-
         let force_transfer = matches!(outcome, Outcome::Conflict { .. }) && force;
         let (pending_swap, link_source) = if link_mode {
-            // --link path: validate the target slot, but defer creating
-            // the symlink to the commit phase so a backend failure can
-            // still leave the live state untouched.
             check_link_target(&target_dir, &source_dir, name)?;
             (None, Some(source_dir.clone()))
         } else {
@@ -135,49 +139,25 @@ pub(crate) fn stage_local_mcps(
                         attempted_by: raw_manifest.name.clone(),
                     });
                 }
-                Outcome::AddedRef => {
-                    if !target_dir.exists() {
-                        Some(build_into_staging(
-                            &source_dir,
-                            &global_root,
-                            name,
-                            &patterns,
-                            server,
-                            link_mode,
-                            allow_build,
-                        )?)
-                    } else {
-                        None
-                    }
-                }
+                Outcome::AddedRef if reuse_existing => None,
                 _ => Some(build_into_staging(
                     &source_dir,
                     &global_root,
                     name,
                     &patterns,
                     server,
-                    link_mode,
                     allow_build,
                 )?),
             };
             (swap, None)
         };
 
-        // Resolve the absolute entrypoint:
-        // - link mode → probe the live source directly.
-        // - staging  → probe the .new/ folder (verifies what was just produced).
-        // - reuse    → probe the existing target dir.
-        let probe_root: PathBuf = if let Some(ref src) = link_source {
-            src.clone()
-        } else if let Some(ref staging) = pending_swap {
-            staging.clone()
-        } else {
-            target_dir.clone()
-        };
+        let probe_root: &Path = link_source
+            .as_deref()
+            .or(pending_swap.as_deref())
+            .unwrap_or(&target_dir);
         let abs_entrypoint = probe_root.join(entrypoint);
         if !abs_entrypoint.exists() {
-            // Cleanup the staging dir we just created (if any) before
-            // surfacing the error so we don't leak it.
             if let Some(ref staging) = pending_swap {
                 let _ = std::fs::remove_dir_all(staging);
             }
@@ -186,8 +166,6 @@ pub(crate) fn stage_local_mcps(
                 entrypoint: abs_entrypoint.to_string_lossy().to_string(),
             });
         }
-        // After commit, the entrypoint lives under target_dir (whether
-        // that's a real dir from a swap or a symlink from --link).
         let final_abs = target_dir.join(entrypoint);
 
         effective_mcp.insert(
@@ -197,7 +175,6 @@ pub(crate) fn stage_local_mcps(
 
         staged.push(StagedMcp {
             name: name.clone(),
-            abs_entrypoint: final_abs,
             source_sha256,
             new_ref,
             package_full_name: raw_manifest.name.clone(),
@@ -264,14 +241,6 @@ pub(crate) fn rollback_staging(staged: &[StagedMcp]) {
     }
 }
 
-/// Names of every local MCP this resolution would swap into place.
-/// Useful for higher-level rollback that needs to remove freshly
-/// committed `mcp_local` refs without touching unrelated entries.
-#[allow(dead_code)]
-pub(crate) fn staged_names(staged: &[StagedMcp]) -> Vec<String> {
-    staged.iter().map(|s| s.name.clone()).collect()
-}
-
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
@@ -284,8 +253,13 @@ enum Outcome {
     Conflict { current_owner: String },
 }
 
-fn peek_outcome(store: &PackageStore, name: &str, package: &str, version: &str) -> Outcome {
-    match store.cache().mcp_local.get(name) {
+fn peek_outcome(
+    current_local: &std::collections::HashMap<String, McpLocalEntry>,
+    name: &str,
+    package: &str,
+    version: &str,
+) -> Outcome {
+    match current_local.get(name) {
         None => Outcome::Fresh,
         Some(e) if e.owner_package != package => Outcome::Conflict {
             current_owner: e.owner_package.clone(),
@@ -301,16 +275,8 @@ fn build_into_staging(
     name: &str,
     patterns: &[String],
     server: &McpServer,
-    link_mode: bool,
     allow_build: bool,
 ) -> Result<PathBuf> {
-    if link_mode {
-        // Live-link branch never lands in build_into_staging — callers
-        // route to materialize_link instead.
-        return Err(RenkeiError::DeploymentFailed(
-            "build_into_staging called in link mode".into(),
-        ));
-    }
     std::fs::create_dir_all(global_root)?;
     let staging = global_root.join(format!("{name}.new"));
     if staging.exists() {
@@ -343,27 +309,10 @@ fn build_into_staging(
 }
 
 /// Recursively copy `src` into `dst`, honouring rkignore patterns at the
-/// `src` root. Reuses the `ignore` crate so behaviour stays consistent
-/// with `hash_directory`.
+/// `src` root. Reuses [`build_walker`] so behaviour stays consistent
+/// with `hash_directory` / `hash_with_patterns`.
 fn copy_dir_filtered(src: &Path, dst: &Path, patterns: &[String]) -> Result<()> {
-    let mut overrides = ignore::overrides::OverrideBuilder::new(src);
-    for pat in patterns {
-        let inverted = format!("!{pat}");
-        overrides
-            .add(&inverted)
-            .map_err(|e| RenkeiError::CacheError(format!("rkignore pattern error: {e}")))?;
-    }
-    let overrides = overrides
-        .build()
-        .map_err(|e| RenkeiError::CacheError(format!("rkignore build error: {e}")))?;
-
-    let walker = ignore::WalkBuilder::new(src)
-        .standard_filters(false)
-        .hidden(false)
-        .overrides(overrides)
-        .sort_by_file_path(|a, b| a.cmp(b))
-        .build();
-
+    let walker = build_walker(src, patterns)?;
     std::fs::create_dir_all(dst)?;
 
     for entry in walker {
@@ -456,7 +405,7 @@ fn create_or_reuse_symlink(source: &Path, target: &Path) -> Result<()> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    if target.exists() || std::fs::symlink_metadata(target).is_ok() {
+    if std::fs::symlink_metadata(target).is_ok() {
         // check_link_target already verified this is a symlink to the
         // same source; treat as idempotent.
         return Ok(());
@@ -621,7 +570,7 @@ mod tests {
         let store = PackageStore::load(&cfg).unwrap();
 
         let (staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store, &cfg, "global", None, false, false, false)
+            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
                 .unwrap();
         assert!(staged.is_empty());
         // External entry is preserved verbatim.
@@ -649,7 +598,7 @@ mod tests {
         let mut store = PackageStore::load(&cfg).unwrap();
 
         let (staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store, &cfg, "global", None, false, false, false)
+            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
                 .unwrap();
         assert_eq!(staged.len(), 1);
         assert!(staged[0].pending_swap.is_some(), "fresh install should stage");
@@ -693,7 +642,7 @@ mod tests {
         let store = PackageStore::load(&cfg).unwrap();
 
         let (_staged, eff) =
-            stage_local_mcps(&m, pkg.path(), &store, &cfg, "global", None, false, false, false)
+            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
                 .unwrap();
         let srv = eff.unwrap()["srv"].clone();
         let args = srv["args"].as_array().unwrap();
@@ -722,10 +671,8 @@ mod tests {
         let err = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             false,
@@ -768,10 +715,8 @@ mod tests {
         let err = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             false,
@@ -811,10 +756,8 @@ mod tests {
         let (staged, _eff) = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             true, // force
             false,
             false,
@@ -841,19 +784,19 @@ mod tests {
         );
 
         let (staged1, _) =
-            stage_local_mcps(&m, pkg.path(), &store, &cfg, "global", None, false, false, false)
+            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
                 .unwrap();
         commit_local_mcps(staged1, &mut store).unwrap();
 
-        // Second install — different project_root simulates a second project.
+        // Second install — project-scoped config simulates a second project.
         let project_root = tempdir().unwrap();
+        let cfg_project =
+            Config::for_project(home.path().into(), project_root.path().into());
         let (staged2, _) = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
-            &cfg,
-            "project",
-            Some(project_root.path()),
+            &store.cache().mcp_local,
+            &cfg_project,
             false,
             false,
             false,
@@ -893,10 +836,8 @@ mod tests {
         let (staged, _) = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             true, // allow_build
@@ -935,10 +876,8 @@ mod tests {
         let (s1, _) = stage_local_mcps(
             &m_v1,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             false,
@@ -949,10 +888,8 @@ mod tests {
         let err = stage_local_mcps(
             &m_v2,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             true,
@@ -990,10 +927,8 @@ mod tests {
         let err = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             false,
             false,
@@ -1025,10 +960,8 @@ mod tests {
         let (staged, eff) = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             true, // link_mode
             false,
@@ -1073,10 +1006,8 @@ mod tests {
         let err = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             true, // link_mode
             false,
@@ -1111,10 +1042,8 @@ mod tests {
         let err = stage_local_mcps(
             &m,
             pkg_b.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             true, // link_mode
             false,
@@ -1148,10 +1077,8 @@ mod tests {
         let (staged, _) = stage_local_mcps(
             &m,
             pkg.path(),
-            &store,
+            &store.cache().mcp_local,
             &cfg,
-            "global",
-            None,
             false,
             true,
             false,
@@ -1175,7 +1102,7 @@ mod tests {
             vec![("srv", local_mcp(Some("dist/index.js"), None, vec![]))],
         );
         let (staged, _) =
-            stage_local_mcps(&m, pkg.path(), &store, &cfg, "global", None, false, false, false)
+            stage_local_mcps(&m, pkg.path(), &store.cache().mcp_local, &cfg, false, false, false)
                 .unwrap();
         let staging = staged[0].pending_swap.clone().unwrap();
         assert!(staging.exists());

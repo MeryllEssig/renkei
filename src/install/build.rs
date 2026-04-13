@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::IsTerminal;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -7,6 +6,8 @@ use owo_colors::OwoColorize;
 
 use crate::error::{RenkeiError, Result};
 use crate::manifest::Manifest;
+
+use super::messages::confirm_block;
 
 const PLAIN_WHITELIST: &[&str] = &[
     "PATH", "HOME", "USER", "LOGNAME", "LANG", "TMPDIR", "SHELL", "TERM",
@@ -80,12 +81,10 @@ fn should_keep(name: &str) -> bool {
 /// Build the minimal env that local-MCP build commands run with. Whitelist
 /// + tooling prefixes minus secret-shaped names. Reads the current process
 /// env once.
-#[allow(dead_code)]
 pub fn build_env() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| should_keep(k)).collect()
 }
 
-#[allow(dead_code)]
 pub struct BuildStep {
     pub argv: Vec<String>,
 }
@@ -94,7 +93,6 @@ pub struct BuildStep {
 /// shell — argv goes straight to the kernel via `execve`. Streams stdout
 /// and stderr live so the user sees progress; first non-zero exit aborts
 /// and surfaces `BuildFailed`.
-#[allow(dead_code)]
 pub fn run_build(steps: &[BuildStep], cwd: &Path) -> Result<()> {
     for step in steps {
         if step.argv.is_empty() {
@@ -196,27 +194,13 @@ pub fn render_build_block(notices: &[BuildNotice]) -> String {
 /// - `Ok(false)` → user declined at the prompt (caller should exit 0).
 /// - `Err(BuildRequiresConfirmation)` → there are notices but no TTY and `allow_build == false`.
 pub fn confirm_builds(notices: &[BuildNotice], allow_build: bool) -> Result<bool> {
-    if notices.is_empty() {
-        return Ok(true);
-    }
-    if allow_build {
-        return Ok(true);
-    }
-    if !std::io::stdin().is_terminal() {
-        return Err(RenkeiError::BuildRequiresConfirmation);
-    }
-
-    print!("{}", render_build_block(notices));
-
-    let answer = inquire::Confirm::new("Run all builds?")
-        .with_default(false)
-        .prompt()
-        .map_err(|e| RenkeiError::DeploymentFailed(format!("Build confirmation failed: {e}")))?;
-
-    if !answer {
-        println!("{}", "Installation cancelled.".yellow());
-    }
-    Ok(answer)
+    confirm_block(
+        notices.is_empty(),
+        allow_build,
+        RenkeiError::BuildRequiresConfirmation,
+        || render_build_block(notices),
+        "Run all builds?",
+    )
 }
 
 #[cfg(test)]

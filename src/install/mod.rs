@@ -104,15 +104,11 @@ pub(crate) fn install_local_with_resolver(
         cache::create_archive(&resolved.package_dir, &resolved.manifest, config)?
     };
 
-    let scope_label = if config.is_project() { "project" } else { "global" };
-    let project_root = config.project_root.as_deref();
     let (staged, mcp_json) = mcp_local::stage_local_mcps(
         &resolved.raw_manifest,
         &resolved.package_dir,
-        &store,
+        &store.cache().mcp_local,
         config,
-        scope_label,
-        project_root,
         options.force,
         link_mode,
         allow_build,
@@ -150,9 +146,8 @@ pub(crate) fn install_local_with_resolver(
         mcp_local_sources,
     };
     if link_mode {
-        // record only in the install cache; lockfile stays untouched so
-        // a teammate can't `rk install` from a lockfile that points at
-        // a personal workspace path.
+        // Skip the lockfile so a teammate can't `rk install` from a
+        // lockfile that points at someone else's workspace path.
         store.record_install_from_lockfile(&resolved.manifest.full_name, entry);
     } else {
         store.record_install(&resolved.manifest.full_name, entry);
@@ -251,15 +246,11 @@ pub fn install_from_lock_entry(
     );
     let integrity = cache::compute_sha256(&archive_path).unwrap_or_default();
 
-    let scope_label = if config.is_project() { "project" } else { "global" };
-    let project_root = config.project_root.as_deref();
     let (staged, mcp_json) = mcp_local::stage_local_mcps(
         &resolved.raw_manifest,
         &resolved.package_dir,
-        &store,
+        &store.cache().mcp_local,
         config,
-        scope_label,
-        project_root,
         true, // lockfile replay always force-overwrites
         false,
         allow_build,

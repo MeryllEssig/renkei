@@ -313,4 +313,4 @@ This plan adds a **local MCP** convention: an `mcp/<name>/` directory at the pac
 
 ## Phase 13: Update Skill
 
-- [ ] 13.1 Update Skill in skills/renkei/ in accordance with the changes
+- [ ] 13.1 Update Skill in skills/renkei/ in accordance with the changes if necessary

@@ -62,25 +62,38 @@ pub fn render_preinstall_block(notices: &[PreinstallNotice]) -> String {
 /// - `Ok(false)` → user declined at the prompt (caller should exit 0).
 /// - `Err(PreinstallRequiresConfirmation)` → there are notices but no TTY and `yes == false`.
 pub fn confirm_preinstall(notices: &[PreinstallNotice], yes: bool) -> Result<bool> {
-    if notices.is_empty() {
-        return Ok(true);
-    }
-    if yes {
+    confirm_block(
+        notices.is_empty(),
+        yes,
+        RenkeiError::PreinstallRequiresConfirmation,
+        || render_preinstall_block(notices),
+        "Install all?",
+    )
+}
+
+/// Shared scaffolding for the preinstall and build-notice prompts.
+/// Caller decides whether the block is empty (silent skip), whether the
+/// auto-accept flag is on, and which error to raise in non-TTY mode.
+pub(crate) fn confirm_block(
+    empty: bool,
+    auto_accept: bool,
+    no_tty_err: RenkeiError,
+    render: impl FnOnce() -> String,
+    prompt: &str,
+) -> Result<bool> {
+    if empty || auto_accept {
         return Ok(true);
     }
     if !std::io::stdin().is_terminal() {
-        return Err(RenkeiError::PreinstallRequiresConfirmation);
+        return Err(no_tty_err);
     }
-
-    print!("{}", render_preinstall_block(notices));
-
-    let answer = inquire::Confirm::new("Install all?")
+    print!("{}", render());
+    let answer = inquire::Confirm::new(prompt)
         .with_default(false)
         .prompt()
         .map_err(|e| {
-            RenkeiError::DeploymentFailed(format!("Preinstall confirmation failed: {e}"))
+            RenkeiError::DeploymentFailed(format!("{prompt} confirmation failed: {e}"))
         })?;
-
     if !answer {
         println!("{}", "Installation cancelled.".yellow());
     }
