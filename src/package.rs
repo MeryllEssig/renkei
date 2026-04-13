@@ -5,11 +5,12 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use owo_colors::OwoColorize;
 
-use crate::cache::compute_sha256;
+use crate::cache::{append_filtered_dir, compute_sha256};
 use crate::cli::BumpLevel;
 use crate::error::{RenkeiError, Result};
 use crate::json_file;
 use crate::manifest::{Manifest, ValidatedManifest};
+use crate::rkignore;
 
 const PACKAGE_DIRS: &[&str] = &["skills", "hooks", "agents", "scripts"];
 
@@ -96,32 +97,34 @@ fn create_package_archive(
     tar_builder.append_path_with_name(cwd.join("renkei.json"), "renkei.json")?;
     entries.push("renkei.json".to_string());
 
+    let pkg_patterns = rkignore::load_rkignore(cwd);
     for dir_name in PACKAGE_DIRS {
         let dir = cwd.join(dir_name);
         if dir.is_dir() {
-            collect_dir_entries(&dir, dir_name, &mut entries)?;
-            tar_builder.append_dir_all(*dir_name, &dir)?;
+            let added = append_filtered_dir(&mut tar_builder, &dir, dir_name, &pkg_patterns)?;
+            entries.extend(added);
+        }
+    }
+
+    let mcp_root = cwd.join("mcp");
+    if mcp_root.is_dir() {
+        let mcp_patterns = rkignore::load_mcp_ignores(cwd);
+        let mut subdirs: Vec<_> = fs::read_dir(&mcp_root)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .collect();
+        subdirs.sort_by_key(|e| e.file_name());
+        for entry in subdirs {
+            let dir = entry.path();
+            let prefix = format!("mcp/{}", entry.file_name().to_string_lossy());
+            let added = append_filtered_dir(&mut tar_builder, &dir, &prefix, &mcp_patterns)?;
+            entries.extend(added);
         }
     }
 
     tar_builder.into_inner()?.finish()?;
 
     Ok((output, entries))
-}
-
-fn collect_dir_entries(dir: &Path, prefix: &str, entries: &mut Vec<String>) -> Result<()> {
-    let mut dir_entries: Vec<_> = fs::read_dir(dir)?.collect::<std::result::Result<Vec<_>, _>>()?;
-    dir_entries.sort_by_key(|e| e.file_name());
-    for entry in dir_entries {
-        let path = entry.path();
-        let rel = format!("{}/{}", prefix, entry.file_name().to_string_lossy());
-        if path.is_file() {
-            entries.push(rel);
-        } else if path.is_dir() {
-            collect_dir_entries(&path, &rel, entries)?;
-        }
-    }
-    Ok(())
 }
 
 fn print_summary(
@@ -335,6 +338,46 @@ mod tests {
         let (path, entries) = create_package_archive(dir.path(), &manifest).unwrap();
         assert_eq!(entries, vec!["renkei.json"]);
         assert!(path.exists());
+    }
+
+    #[test]
+    fn test_archive_includes_mcp_filtered() {
+        let dir = tempdir().unwrap();
+        // Manifest declares mcp.foo with a prebuilt entrypoint, no build.
+        fs::write(
+            dir.path().join("renkei.json"),
+            r#"{"name":"@test/sample","version":"1.0.0","description":"t","author":"x","license":"MIT","backends":["claude"],"mcp":{"foo":{"command":"node","entrypoint":"dist/index.js"}}}"#,
+        )
+        .unwrap();
+        let mcp = dir.path().join("mcp/foo");
+        fs::create_dir_all(mcp.join("dist")).unwrap();
+        fs::write(mcp.join("dist/index.js"), "x").unwrap();
+        fs::create_dir_all(mcp.join("node_modules/junk")).unwrap();
+        fs::write(mcp.join("node_modules/junk/x.js"), "ignored").unwrap();
+
+        let manifest = Manifest::from_path(dir.path()).unwrap().validate().unwrap();
+        let (_, entries) = create_package_archive(dir.path(), &manifest).unwrap();
+        assert!(entries.iter().any(|e| e == "mcp/foo/dist/index.js"));
+        assert!(
+            !entries.iter().any(|e| e.contains("node_modules")),
+            "node_modules must be excluded: {:?}",
+            entries
+        );
+    }
+
+    #[test]
+    fn test_archive_honors_root_rkignore() {
+        let dir = tempdir().unwrap();
+        setup_full_package(dir.path());
+        fs::write(dir.path().join(".rkignore"), "agents/deploy.md\n").unwrap();
+
+        let manifest = Manifest::from_path(dir.path()).unwrap().validate().unwrap();
+        let (_, entries) = create_package_archive(dir.path(), &manifest).unwrap();
+        assert!(entries.contains(&"skills/review.md".to_string()));
+        assert!(
+            !entries.iter().any(|e| e.ends_with("deploy.md")),
+            ".rkignore must drop the file"
+        );
     }
 
     // --- format_size tests ---
