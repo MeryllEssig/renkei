@@ -4,5 +4,5 @@
   "description": "Package targeting agents and gemini backends",
   "author": "tester",
   "license": "MIT",
-  "backends": ["agents", "gemini"]
+  "backends": ["gemini"]
 }

@@ -125,6 +125,13 @@ impl Manifest {
             reason: e.to_string(),
         })?;
 
+        if self.backends.iter().any(|b| b == "agents") {
+            return Err(RenkeiError::InvalidManifest(
+                "\"agents\" cannot be declared in backends — it is always active implicitly"
+                    .into(),
+            ));
+        }
+
         if let Some(messages) = &self.messages {
             for (field, value) in [
                 ("messages.preinstall", &messages.preinstall),
@@ -423,6 +430,27 @@ mod tests {
         let m: Manifest = serde_json::from_str(valid_json()).unwrap();
         assert!(!m.is_skill_only());
         m.validate().unwrap();
+    }
+
+    #[test]
+    fn test_manifest_with_agents_backend_rejected() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["agents"]}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        let err = m.validate().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("\"agents\""), "error should quote agents: {msg}");
+        assert!(
+            msg.contains("implicitly"),
+            "error should explain implicit activation: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_manifest_with_claude_and_agents_also_rejected() {
+        let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude","agents"]}"#;
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        let err = m.validate().unwrap_err();
+        assert!(err.to_string().contains("\"agents\""));
     }
 
     #[test]

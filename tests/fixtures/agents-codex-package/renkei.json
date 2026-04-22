@@ -4,5 +4,5 @@
   "description": "Package targeting agents and codex backends",
   "author": "tester",
   "license": "MIT",
-  "backends": ["agents", "codex"]
+  "backends": ["codex"]
 }
