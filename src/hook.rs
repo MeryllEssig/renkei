@@ -962,7 +962,7 @@ mod tests {
         remove(&CURSOR, &path, &entries).unwrap();
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(content["hooks"].as_object().map_or(true, |m| m.is_empty()));
+        assert!(content["hooks"].as_object().is_none_or(|m| m.is_empty()));
     }
 
     #[test]

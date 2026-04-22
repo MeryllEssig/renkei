@@ -77,10 +77,10 @@ fn build_pkg(
     pkg
 }
 
+type WorkspaceMember<'a> = (&'a str, &'a str, &'a str, Option<&'a str>, Option<&'a str>);
+
 /// Build a workspace where each member has its own pre/post pair.
-fn build_workspace(
-    members: &[(&str, &str, &str, Option<&str>, Option<&str>)],
-) -> tempfile::TempDir {
+fn build_workspace(members: &[WorkspaceMember]) -> tempfile::TempDir {
     let ws = tempdir().unwrap();
     let dirs: Vec<String> = members
         .iter()
