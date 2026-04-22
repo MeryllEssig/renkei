@@ -127,8 +127,7 @@ impl Manifest {
 
         if self.backends.iter().any(|b| b == "agents") {
             return Err(RenkeiError::InvalidManifest(
-                "\"agents\" cannot be declared in backends — it is always active implicitly"
-                    .into(),
+                "\"agents\" cannot be declared in backends — it is always active implicitly".into(),
             ));
         }
 
@@ -438,7 +437,10 @@ mod tests {
         let m: Manifest = serde_json::from_str(json).unwrap();
         let err = m.validate().unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("\"agents\""), "error should quote agents: {msg}");
+        assert!(
+            msg.contains("\"agents\""),
+            "error should quote agents: {msg}"
+        );
         assert!(
             msg.contains("implicitly"),
             "error should explain implicit activation: {msg}"
@@ -450,7 +452,9 @@ mod tests {
         let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":["claude","agents"]}"#;
         let m: Manifest = serde_json::from_str(json).unwrap();
         let err = m.validate().unwrap_err();
-        assert!(err.to_string().contains("\"agents\""));
+        let msg = err.to_string();
+        assert!(msg.contains("\"agents\""));
+        assert!(msg.contains("implicitly"));
     }
 
     #[test]
