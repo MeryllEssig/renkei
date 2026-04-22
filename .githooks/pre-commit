@@ -10,7 +10,7 @@ cargo fmt --check 2>&1 || {
 }
 
 echo "  clippy..."
-cargo clippy -- -D warnings 2>&1 || {
+cargo clippy --all-targets -- -D warnings 2>&1 || {
     echo "ERROR: cargo clippy failed. Fix warnings before committing."
     exit 1
 }
