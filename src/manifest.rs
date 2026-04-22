@@ -69,6 +69,7 @@ pub struct Manifest {
     pub description: String,
     pub author: String,
     pub license: String,
+    #[serde(default)]
     pub backends: Vec<String>,
     #[allow(dead_code)]
     #[serde(default)]
@@ -124,12 +125,6 @@ impl Manifest {
             reason: e.to_string(),
         })?;
 
-        if self.backends.is_empty() {
-            return Err(RenkeiError::InvalidManifest(
-                "backends must contain at least one entry".into(),
-            ));
-        }
-
         if let Some(messages) = &self.messages {
             for (field, value) in [
                 ("messages.preinstall", &messages.preinstall),
@@ -156,6 +151,11 @@ impl Manifest {
             license: self.license.clone(),
             backends: self.backends.clone(),
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn is_skill_only(&self) -> bool {
+        self.backends.is_empty()
     }
 
     /// Validate local-MCP conventions against the package on disk.
@@ -359,11 +359,13 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_backends_fails() {
+    fn test_missing_backends_parses_as_skill_only() {
         let json =
             r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT"}"#;
-        let result: std::result::Result<Manifest, _> = serde_json::from_str(json);
-        assert!(result.is_err());
+        let m: Manifest = serde_json::from_str(json).unwrap();
+        assert!(m.backends.is_empty());
+        assert!(m.is_skill_only());
+        m.validate().unwrap();
     }
 
     #[test]
@@ -409,11 +411,18 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_backends_fails() {
+    fn test_empty_backends_passes_as_skill_only() {
         let json = r#"{"name":"@t/n","version":"1.0.0","description":"x","author":"a","license":"MIT","backends":[]}"#;
         let m: Manifest = serde_json::from_str(json).unwrap();
-        let err = m.validate().unwrap_err();
-        assert!(err.to_string().contains("backends"));
+        assert!(m.is_skill_only());
+        m.validate().unwrap();
+    }
+
+    #[test]
+    fn test_manifest_with_claude_only_is_not_skill_only() {
+        let m: Manifest = serde_json::from_str(valid_json()).unwrap();
+        assert!(!m.is_skill_only());
+        m.validate().unwrap();
     }
 
     #[test]
